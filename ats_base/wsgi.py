@@ -1,5 +1,5 @@
 """
-WSGI config for cfehome project.
+WSGI config for ats_base project.
 
 It exposes the WSGI callable as a module-level variable named ``application``.
 
@@ -11,6 +11,6 @@ import os
 
 from django.core.wsgi import get_wsgi_application
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'cfehome.settings')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ats_base.settings')
 
 application = get_wsgi_application()
