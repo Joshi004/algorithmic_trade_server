@@ -1,7 +1,7 @@
 from django.shortcuts import render
 from django.http import JsonResponse
 import json
-from  market.models.Stock import Stock
+from  trade_management_unit.models.Stock import Stock
 from django.forms.models import model_to_dict
 
 

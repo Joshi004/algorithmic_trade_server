@@ -18,5 +18,5 @@ from django.urls import path, include
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path ('market/',include('market.urls')) # Redirects To Market Microservice
+    path ('tmu/',include('trade_management_unit.urls')) # Redirects To trade_management_unit Microservice
 ]

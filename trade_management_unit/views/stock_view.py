@@ -1,8 +1,8 @@
 from django.shortcuts import HttpResponse, render
 from django.http import JsonResponse
 import json
-from market.models.Stock import Stock
-from market.lib.stock.update_stocks import UpdateStock
+from trade_management_unit.models.Stock import Stock
+from trade_management_unit.lib.stock.update_stocks import UpdateStock
 from django.forms.models import model_to_dict
 from django.db.models import Q
 from django.core import serializers
