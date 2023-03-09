@@ -5,7 +5,7 @@ class Stock(models.Model):
     class Meta:
         db_table = "stocks"
     
-    id = models.CharField(primary_key=True,blank=False,max_length=64,default="") 
+    id = models.CharField(auto_created=True,primary_key=True,blank=False,max_length=64,default="") 
     nse_symbol = models.CharField(unique=True, blank=False,max_length=128,default="") 
     name = models.CharField(blank=False,max_length=256,default="")
     series = models.CharField(blank=False,max_length=10,default="EQ")
