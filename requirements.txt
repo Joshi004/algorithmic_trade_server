@@ -3,3 +3,4 @@ djangorestframework==3.9.2
 mysqlclient
 django_mysql
 channels == 4.0.0
+channels-redis == 4.0.0
