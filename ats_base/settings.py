@@ -31,7 +31,7 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
-    # 'channels',
+    'channels',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -49,6 +49,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
+    'django.middleware.common.CommonMiddleware',
 ]
 
 ROOT_URLCONF = 'ats_base.urls'
@@ -69,7 +71,7 @@ TEMPLATES = [
     },
 ]
 
-# WSGI_APPLICATION = 'ats_base.wsgi.application'
+WSGI_APPLICATION = 'ats_base.wsgi.application'
 ASGI_APPLICATION = 'ats_base.wsgi.application'
 
 CHANNEL_LAYERS = {
@@ -90,8 +92,8 @@ DATABASES = {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': 'ats_db',
         'USER': 'root',
-        'PASSWORD': 'password01',
-        'HOST': 'db_container',
+        'HOST': 'localhost',
+        'PORT': '3306'
     }
 }
 
@@ -137,3 +139,8 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'trade_management_unit.UserProfile'
+
+CORS_ORIGIN_WHITELIST = [
+    'http://localhost:3000',
+    # ...
+]
