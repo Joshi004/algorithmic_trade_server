@@ -11,6 +11,6 @@ class Trade(models.Model):
     stock =   models.ForeignKey("Stock", verbose_name="Ordered Stock", on_delete=models.CASCADE)   
     trade_session =   models.ForeignKey("TradeSession", verbose_name="Trade Session", on_delete=models.CASCADE, default=None)   
     is_active = models.BooleanField(default=True)
-    trading_alog_id = models.IntegerField(blank=False,default=1)
-    net_profit = models.IntegerField(blank=True, null=True)
+    trading_alog_id = models.CharField(blank=False,max_length=64,default="")
+    net_profit = models.FloatField(blank=True, null=True)
 

@@ -8,3 +8,4 @@ urlpatterns = [
     path('update_stocks',stock_view.fetch_and_update_stocks), # http://localhost:8000/tmu/update_stocks
     path('get_all_stocks',stock_view.get_stocks_list)
 ] 
+
