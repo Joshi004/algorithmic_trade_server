@@ -15,10 +15,10 @@ Steps To Setup
 
  For The migrations to run make sure you have MySQL setup on your local
      Required version - Ver 8.0.32
-
+ 
 ---
 
-To Install MySQL on MAC you can use brew
+To Install MySQL on MAC you can use brew.
     brew update
     brew install mysql@8.0.32
     After the installation is complete, you can start the MySQL service:
