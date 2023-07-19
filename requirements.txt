@@ -1,8 +1,9 @@
 django==3.2
 djangorestframework==3.9.2
-mysqlclient
-django_mysql
+mysqlclient == 2.1.1
+django_mysql == 4.9.0
 channels == 4.0.0
+daphne == 4.0.0
 channels-redis == 4.0.0
-django-cors-headers
+django-cors-headers == 3.14.0
 

@@ -71,8 +71,8 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'ats_base.wsgi.application'
-ASGI_APPLICATION = 'ats_base.wsgi.application'
+# WSGI_APPLICATION = 'ats_base.wsgi.application'
+ASGI_APPLICATION = 'ats_base.asgi.application'
 
 CHANNEL_LAYERS = {
     "default": {
@@ -132,7 +132,11 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.0/howto/static-files/
 
-STATIC_URL = 'static/'
+# URL path for serving static files (CSS, JavaScript, images, etc.)
+STATIC_URL = '/static/'
+
+# URL path for serving media files (uploaded files, user-generated content, etc.)
+MEDIA_URL = '/media/'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.0/ref/settings/#default-auto-field
