@@ -104,3 +104,6 @@ else
     # Execute the git command as is
     git $command "${@:2}"
 fi
+
+# Put this file in /usr/local/bin/gitx
+# In .bashrc or .zshrc put this line -  alias git='gitx'
