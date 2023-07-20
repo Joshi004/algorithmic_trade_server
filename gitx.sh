@@ -34,8 +34,7 @@ fix_commit_message() {
         if [ -n "$raasng_number" ]; then
             commit_msg="RAASNG-$raasng_number-$commit_msg"
         else
-            echo "Error: Unable to extract RAASNG number from the branch name."
-            exit 1
+            commit_msg="$commit_msg"
         fi
     fi
     echo "$commit_msg"
@@ -81,6 +80,14 @@ else
         echo "Valid Non-Pramata user in a Non-Pramata repository: Proceeding with the git command."
 
         command="$1" # The first argument is the actual command
+        if [ "$command" == "commit" ]; then
+            echo "Processing The commit message to append branch tag"
+            # Process the commit message to ensure it starts with "RAASNG-"
+            commit_msg="$2" # The second argument is the commit message
+            if [ -n "$commit_msg" ]; then
+                fixed_msg=$(fix_commit_message "$commit_msg")
+            fi
+        fi
     fi
 fi
 
