@@ -18,7 +18,7 @@ class UpdateStock:
         existing_stocks = Stock.objects.all().values_list('id', flat=True)
         update_list = []
         create_list = []
-        print("Existin Stocks",existing_stocks)
+        print("Existing Stocks",existing_stocks)
         for row in csvreader:
             stock_obj = self.__get_stock_object(row)
             print("For ID",stock_obj.id," Presense ",stock_obj.id in existing_stocks)
