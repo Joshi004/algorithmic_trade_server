@@ -13,10 +13,10 @@ class Communicator:
         channel_layer = get_channel_layer()
         print("Sendiong now to group",group_name)
         async_to_sync(channel_layer.group_send)(group_name, {
-            "type": "send.number",
-            "price": data['price'],
+            "type": "send.data",
+            "data": data,
         })
-        # print("Message sent to group")
+        print("Message sent to group")
 
 
 

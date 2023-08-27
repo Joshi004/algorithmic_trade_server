@@ -6,6 +6,7 @@ from trade_management_unit.lib.stock.update_stocks import UpdateStock
 from django.forms.models import model_to_dict
 from django.db.models import Q
 from django.core import serializers
+from django.http import JsonResponse
 
 
 

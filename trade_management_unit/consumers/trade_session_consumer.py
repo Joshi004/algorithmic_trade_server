@@ -26,9 +26,9 @@ class TradeSession(AsyncWebsocketConsumer):
         pass
 
 
-    async def send_number(self, event):
+    async def send_data(self, event):
         print("in Send number Send event",event)
-        number = event["price"]
-        print("Actuly sending now ",number)
-        await self.send(text_data=json.dumps({"price": number}))
+        # number = event["price"]
+        # print("Actuly sending now ",number)
+        await self.send(text_data=json.dumps(event["data"]))
 
