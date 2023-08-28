@@ -21,7 +21,7 @@ class Order(models.Model):
     order_type = EnumField(choices=ORDER_TYPES)
     started_at = models.DateTimeField(default=datetime.now,blank=False)
     closed_at = models.DateTimeField(blank=True,default=datetime.now)
-    stock =   models.ForeignKey("Stock", verbose_name="stock_id", on_delete=models.CASCADE)
+    instrument =   models.ForeignKey("Instrument", verbose_name="instrument_id", on_delete=models.CASCADE)
     trade =   models.ForeignKey("Trade", verbose_name="trade_id", on_delete=models.CASCADE)
     
     
