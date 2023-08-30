@@ -2,6 +2,7 @@
 import logging
 from kiteconnect import KiteConnect
 from trade_management_unit.lib.common.EnvFile import EnvFile
+from trade_management_unit.lib.Kite.KiteUser import KiteUser
 import pandas as pd
 from trade_management_unit.models.Instrument import Instrument
 from django.utils.dateparse import parse_date
@@ -14,11 +15,8 @@ class Instruments:
     def __init__(self,params):
         self.env = EnvFile('.env')
         logging.basicConfig(level=logging.DEBUG)
-        self.api_key = self.env.read("api_key")
-        self.api_secret = self.env.read("api_secret")
-        self.access_token = self.env.read("access_token")
-        self.kite = KiteConnect(api_key=self.api_key)
-        self.kite.set_access_token(self.access_token)
+        self.kite = KiteUser().get_instance()
+
 
     def fetch_instruments(self, req_params):
         query = Q()

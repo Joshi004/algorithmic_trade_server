@@ -12,7 +12,11 @@ class KiteUser:
         self.api_secret = self.env.read("api_secret")
         self.access_token = self.env.read("access_token")
        
-    
+    def get_instance(self):
+        kite_obj = KiteConnect(api_key=self.api_key)
+        kite_obj.set_access_token(self.access_token)
+        return kite_obj
+
     def set_session(self,request_token):   
         print("Setting Session With Token : ",request_token)
         kite = KiteConnect(api_key=self.api_key)
