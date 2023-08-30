@@ -20,26 +20,20 @@ class Instruments:
         self.kite = KiteConnect(api_key=self.api_key)
         self.kite.set_access_token(self.access_token)
 
-    
     def fetch_instruments(self, req_params):
-        # Initialize an empty Q object
         query = Q()
-
-        # Fields to match with "starts with"
         starts_with_fields = ['trading_symbol', 'name']
-
-        # Pagination and ordering parameters
-        pagination_ordering_params = ['page_no', 'page_length', 'order_by']
+        pagination_ordering_params = ['page_no', 'page_length', 'order_by', 'sort_type']
 
         # Iterate over each parameter in req_params
         for field, value in req_params.items():
             if field not in pagination_ordering_params:
                 if field in starts_with_fields:
                     # If the field is in starts_with_fields, use the __startswith lookup
-                    query &= Q(**{f'{field}__startswith': value})
+                    query &= Q(**{f'{field}__istartswith': value})
                 else:
                     # Otherwise, do an exact match
-                    query &= Q(**{field: value})
+                    query &= Q(**{f'{field}__iexact': value})
 
         # Use the constructed Q object to filter the Instrument objects
         instruments = Instrument.objects.filter(query)
@@ -48,21 +42,16 @@ class Instruments:
         page_length = int(req_params.get('page_length', '50'))
         page_no = int(req_params.get('page_no', '1'))
         order_by = req_params.get('order_by', 'name')
+        sort_type = req_params.get('sort_type', 'asc')
 
-        # Order the queryset
+        if sort_type.lower() == 'desc':
+            order_by = '-' + order_by
         instruments = instruments.order_by(order_by)
-
-        # Create a Paginator object
         paginator = Paginator(instruments, page_length)
-
-        # Get the Page object
         page_obj = paginator.get_page(page_no)
 
-        # Return the page's object_list and some metadata
         data = json.loads(serializers.serialize('json', page_obj.object_list))
-        print("-----------------")
-        print(type (page_obj.object_list))
-        print(type(data))
+        
         return {
             'data': data,
             'meta': {
@@ -79,7 +68,6 @@ class Instruments:
         instrument_dump=self.kite.instruments()
         instrument_df = pd.DataFrame(instrument_dump)
 
-        # Convert DataFrame to list of dictionaries
         instrument_dict = instrument_df.to_dict('records')
 
         # Create Instrument instances
@@ -100,12 +88,4 @@ class Instruments:
             )
             for instrument in instrument_dict
         ]
-
-        # Save all instances in one go
         Instrument.objects.bulk_create(instrument_instances)
-
-        print("Instruments saved to database")
-
-        
-        
-
