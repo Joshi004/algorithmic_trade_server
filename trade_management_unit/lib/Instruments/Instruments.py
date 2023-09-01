@@ -1,8 +1,6 @@
 
 import logging
 from kiteconnect import KiteConnect
-from trade_management_unit.lib.common.EnvFile import EnvFile
-from trade_management_unit.lib.Kite.KiteUser import KiteUser
 import pandas as pd
 from trade_management_unit.models.Instrument import Instrument
 from django.utils.dateparse import parse_date
@@ -10,10 +8,10 @@ from django.db.models import Q
 from django.core.paginator import Paginator
 from django.core import serializers
 import json
+from trade_management_unit.lib.Kite.KiteUser import KiteUser
 
 class Instruments:
     def __init__(self,params):
-        self.env = EnvFile('.env')
         logging.basicConfig(level=logging.DEBUG)
         self.kite = KiteUser().get_instance()
 
@@ -49,7 +47,7 @@ class Instruments:
         page_obj = paginator.get_page(page_no)
 
         data = json.loads(serializers.serialize('json', page_obj.object_list))
-        
+
         return {
             'data': data,
             'meta': {

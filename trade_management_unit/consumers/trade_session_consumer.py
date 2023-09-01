@@ -1,6 +1,7 @@
 from channels.generic.websocket import WebsocketConsumer,AsyncWebsocketConsumer
 from channels.layers import get_channel_layer
 import json
+from trade_management_unit.lib.Kite.KiteTickerUser import KiteTickerUser
 
 class TradeSession(AsyncWebsocketConsumer):
     async def connect(self):
@@ -11,6 +12,9 @@ class TradeSession(AsyncWebsocketConsumer):
         print("Group Naem is ",self.room_group_name)
         await self.channel_layer.group_add(self.room_group_name, self.channel_name)
         await self.accept()
+        await self.send(text_data=json.dumps({"connected":True}))
+        ktu = KiteTickerUser().get_instance()
+        ktu.connect()
 
 
 
@@ -27,8 +31,9 @@ class TradeSession(AsyncWebsocketConsumer):
 
 
     async def send_data(self, event):
-        print("in Send number Send event",event)
-        # number = event["price"]
-        # print("Actuly sending now ",number)
-        await self.send(text_data=json.dumps(event["data"]))
+        try:
+            # print("in Send Data Send event for ticker",event)
+            await self.send(text_data=json.dumps(event["data"]))
+        except Exception as e:
+            print ("error Sending reposnse via socket".e)
 

@@ -10,15 +10,11 @@ from django.core.exceptions import FieldError
 from django.http import JsonResponse
 
 
-
-
-
 def update_instruments(request,*args,**kwvrgs):
     query_paramas  =  request.GET
     instruments = Instruments(query_paramas)
     instruments.update_instruments()
     return JsonResponse({},status=200, content_type='application/json')
-
 
 
 def get_instruments(request,*args,**kwvrgs):
