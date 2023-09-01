@@ -1,11 +1,10 @@
-# Define a class for real-time MACD calculation
 class RealTimeMACD:
     def __init__(self):
         # Initialize EMAs, MACD line, and Signal line as None
         self.ema12 = None
         self.ema26 = None
-        self.macd_line = None
-        self.signal_line = None
+        self.__macd_line = None
+        self.__signal_line = None
 
     # Function to calculate EMA
     def calculate_ema(self, previous_ema, close_price, n):
@@ -26,17 +25,21 @@ class RealTimeMACD:
         self.ema26 = self.calculate_ema(self.ema26, close_price, 26)
 
         # Update MACD line by subtracting 26-period EMA from 12-period EMA
-        self.macd_line = self.ema12 - self.ema26
+        self.__macd_line = self.ema12 - self.ema26
 
         # Update Signal line as a 9-period EMA of the MACD line
-        self.signal_line = self.calculate_ema(self.signal_line, self.macd_line, 9)
+        self.__signal_line = self.calculate_ema(self.__signal_line, self.__macd_line, 9)
 
-# Create an instance of RealTimeMACD class
-macd_calculator = RealTimeMACD()
+    # Getter method for macd_line
+    def get_macd_line(self):
+        return self.__macd_line
 
-# For each new trade tick (closing price), update the MACD values
-for close_price in trade_ticks:
-    macd_calculator.update(close_price)
+    # Getter method for signal_line
+    def get_signal_line(self):
+        return self.__signal_line
+
+
+
 
 
 

@@ -5,16 +5,15 @@ from trade_management_unit.lib.Kite.KiteTickerUser import KiteTickerUser
 
 class TradeSession(AsyncWebsocketConsumer):
     async def connect(self):
+        instrument_tokens = [738561]
+        communication_group = "trade_group"
         print("In Consumer Now")
-        self.room_name = "test_consumer"
-        self.room_group_name = "trade_group"
-        print("Connecting to ",self.channel_name)
-        print("Group Naem is ",self.room_group_name)
+        self.room_group_name = communication_group
         await self.channel_layer.group_add(self.room_group_name, self.channel_name)
-        await self.accept()
-        await self.send(text_data=json.dumps({"connected":True}))
-        ktu = KiteTickerUser().get_instance()
+        await self.accept()    
+        ktu = KiteTickerUser(instrument_tokens,communication_group).get_instance()
         ktu.connect()
+        await self.send(text_data=json.dumps({"connected":True}))
 
 
 

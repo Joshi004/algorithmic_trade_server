@@ -3,21 +3,22 @@ from kiteconnect import KiteConnect
 from kiteconnect import KiteTicker
 from django.core import serializers
 import json
-import requests
-import asyncio
 from trade_management_unit.lib.common.EnvFile import EnvFile
 from trade_management_unit.lib.common.Communicator import Communicator
 
 class KiteTickerUser:
    
-    def __init__(self):
+    def __init__(self,instrument_tokens,communication_group,fetch_mode="quote"):
         self.env = EnvFile('.env')
         logging.basicConfig(level=logging.DEBUG)
         self.api_key = self.env.read("api_key")
         self.api_secret = self.env.read("api_secret")
         self.access_token = self.env.read("access_token")
         self.communicator = Communicator()
-        self.loop = asyncio.get_event_loop()
+        self.instrument_tokens = instrument_tokens
+        self.fetch_mode = fetch_mode
+        self.communication_group = communication_group
+
     
     def get_instance(self):
         kto = KiteTicker(self.api_key,self.access_token)
@@ -47,21 +48,23 @@ class KiteTickerUser:
 
     def on_ticks(self, ws, ticks):
         try:
-            print("In OnTick >>>")
+            print("In OnTick")
             data = self.get_formated_ticks(ticks)
-            # print("Sending Tick to Communicator", data)
         except Exception as e:
-            print ("Error geting tocks",e)
+            print ("Error geting ticks",e)
             return {'status':500,'message':'Something Went Wrong'}
-        self.communicator.send_data_to_channel_layer(data, "trade_group")
+        self.communicator.send_data_to_channel_layer(data, self.communication_group)
 
 
     def on_connect(self,ws,response):
-        print("In On Coonect")
-        # ws.subscribe([738561,5633])
-        ws.subscribe([738561])
-        # ws.set_mode(ws.MODE_FULL,[738561,5633]) #Need to use Seriliser For full mode 
-
+        ws.subscribe(self.instrument_tokens)
+        if(self.fetch_mode == "full"):
+            ws.set_mode(ws.MODE_FULL,self.instrument_tokens) #Need to use Seriliser For full mode 
+        elif(self.fetch_mode == "ltp"):
+            ws.set_mode(ws.MODE_LTP,self.instrument_tokens) #Need to use Seriliser For full mode
+        else:
+            pass
+         
     def on_close(self,ws,code,reason):
         print("In On Closes")
         ws.stop()
