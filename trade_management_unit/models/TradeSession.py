@@ -11,5 +11,3 @@ class TradeSession(models.Model):
     net_profit = models.FloatField(blank=True,null=True)
     is_closed = models.BooleanField(default=False)
     scanning_alogo_id = models.CharField(blank=False,max_length=64,default="")
-
-
