@@ -26,13 +26,14 @@ class Instruments:
             if field not in pagination_ordering_params:
                 if field in starts_with_fields:
                     # If the field is in starts_with_fields, use the __startswith lookup
-                    query &= Q(**{f'{field}__istartswith': value})
+                    query &= (Q(**{f'{field}__istartswith': value}) | Q(**{f'{field}__iexact': value}))
                 else:
                     # Otherwise, do an exact match
                     query &= Q(**{f'{field}__iexact': value})
 
         # Use the constructed Q object to filter the Instrument objects
-        instruments = Instrument.objects.filter(query)
+        instruments = Instrument.objects.filter(query).values('instrument_token', 'exchange_token', 'trading_symbol', 'name', 'last_price', 'expiry', 'strike', 'tick_size', 'lot_size', 'instrument_type', 'segment', 'exchange').distinct()
+        print("Effective Query  - ",str(instruments.query))
 
         # Get pagination parameters from request
         page_length = int(req_params.get('page_length', '50'))
@@ -44,9 +45,9 @@ class Instruments:
             order_by = '-' + order_by
         instruments = instruments.order_by(order_by)
         paginator = Paginator(instruments, page_length)
-        page_obj = paginator.get_page(page_no)
-
-        data = json.loads(serializers.serialize('json', page_obj.object_list))
+        page_obj = paginator.get_page(page_no)  
+        data = list(page_obj.object_list)
+        # data = json.loads(serializers.serialize('json', page_obj.object_list))
 
         return {
             'data': data,
