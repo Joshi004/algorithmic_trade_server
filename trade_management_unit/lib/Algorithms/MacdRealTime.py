@@ -1,4 +1,4 @@
-class RealTimeMACD:
+class RealTimeMACD: 
     def __init__(self):
         # Initialize EMAs, MACD line, and Signal line as None
         self.ema12 = None
