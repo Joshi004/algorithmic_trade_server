@@ -21,7 +21,7 @@ class KiteTickerUser:
         self.indicators = indicators or []
 
     
-    def get_instance(self):
+    def get_kite_ticker_instance(self):
         kto = KiteTicker(self.api_key,self.access_token)
         kto.on_connect = self.on_connect
         kto.on_ticks = self.on_ticks

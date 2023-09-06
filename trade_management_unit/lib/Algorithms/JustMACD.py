@@ -3,7 +3,7 @@ class JustMACD:
     def __init__(self,*params):
         pass
 
-    def set_alogorithm(self,KiteTickerObj):
+    def set_algorithm(self,KiteTickerObj):
         KiteTickerObj.set_indicators([RealTimeMACD])
         print("Algorithm Set")
         return KiteTickerObj
