@@ -1,10 +1,15 @@
-class RealTimeMACD:
-    def __init__(self):
+from trade_management_unit.lib.Indicators.SingletonMeta import SingletonMeta
+
+class RealTimeMACD(metaclass=SingletonMeta): 
+    def __init__(self,symbol):
         # Initialize EMAs, MACD line, and Signal line as None
+        print("Initlising RealTimeMACD")
+        self.symbol = symbol
         self.ema12 = None
         self.ema26 = None
         self.__macd_line = None
         self.__signal_line = None
+
 
     # Function to calculate EMA
     def calculate_ema(self, previous_ema, close_price, n):
@@ -19,7 +24,7 @@ class RealTimeMACD:
             return close_price * k + previous_ema * (1 - k)
 
     # Function to update EMAs, MACD line, and Signal line with each new closing price
-    def update(self, close_price):
+    def update(self, close_price ):
         # Update 12-period and 26-period EMAs with the new closing price
         self.ema12 = self.calculate_ema(self.ema12, close_price, 12)
         self.ema26 = self.calculate_ema(self.ema26, close_price, 26)
@@ -29,14 +34,23 @@ class RealTimeMACD:
 
         # Update Signal line as a 9-period EMA of the MACD line
         self.__signal_line = self.calculate_ema(self.__signal_line, self.__macd_line, 9)
-
     # Getter method for macd_line
+    
     def get_macd_line(self):
         return self.__macd_line
 
     # Getter method for signal_line
     def get_signal_line(self):
         return self.__signal_line
+
+    def append_information(self,initial_data):
+        initial_data["macd"] = {}
+        initial_data["macd"]["signal_line"] = self.get_signal_line()
+        initial_data["macd"]["macd_line"] = self.get_macd_line()
+        self.__update_db(initial_data)
+    
+    def __update_db(self,tick_data):
+        print("Updating DB")
 
 
 
