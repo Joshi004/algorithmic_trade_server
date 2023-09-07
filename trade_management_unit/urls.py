@@ -1,7 +1,7 @@
 from django.urls import path
 # from django.urls import re_path
 
-from .views import instrument_view, trade_view,kite_view
+from .views import instrument_view, trade_view,kite_view, scanner_algo_view
 from .consumers import trade_session_consumer
 
 urlpatterns = [
@@ -10,7 +10,8 @@ urlpatterns = [
     path('get_quotes',trade_view.get_quotes),
     path('set_session',kite_view.set_session),    
     path('get_login_url',kite_view.get_login_url),    
-    path('get_profile_info',kite_view.get_profile_info)    
+    path('get_profile_info',kite_view.get_profile_info),    
+    path('get_eligible_instruments',scanner_algo_view.get_eligible_instruments)    
 ] 
 
 
