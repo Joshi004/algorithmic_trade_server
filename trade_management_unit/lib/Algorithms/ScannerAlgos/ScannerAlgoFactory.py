@@ -5,6 +5,6 @@ class ScannerAlgoFactory:
 
     def get_scanner(self,algo_name):
         if (algo_name == "udts"):
-            return UDTSScanner
+            return UDTSScanner()
         else:
             return None
