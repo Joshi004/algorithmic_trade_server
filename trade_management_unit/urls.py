@@ -7,6 +7,7 @@ from .consumers import trade_session_consumer
 urlpatterns = [
     path('get_instruments',instrument_view.get_instruments), # http://localhost:8000/tmu/update_instruments
     path('update_instruments',instrument_view.update_instruments),
+    path('fetch_historical_data',instrument_view.fetch_historical_data),
     path('get_quotes',trade_view.get_quotes),
     path('set_session',kite_view.set_session),    
     path('get_login_url',kite_view.get_login_url),    
