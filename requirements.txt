@@ -12,3 +12,4 @@ matplotlib
 statsmodels
 kiteconnect
 autobahn==22.4.2
+requests

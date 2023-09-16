@@ -30,7 +30,13 @@ class FetchData:
             data[col] = pd.to_datetime(data[col], format='%d-%b-%Y', errors='coerce')
 
         # Drop rows with invalid dates
-        data = data.dropna(subset=date_columns)
+        relevent_cols = ["date","high","low","open","close"]
+        data = data.dropna(subset=relevent_cols)
+        
+        # Remove commas from strings and convert to float
+        cols_to_convert = ['high', 'low', 'open', 'close']
+        for col in cols_to_convert:
+            data[col] = data[col].str.replace(',', '').astype(float) if type(data[col]) == "str" else data[col]
         return data
 
     def fetch_candle_data(self, symbol, start_date, end_date,interval=0):

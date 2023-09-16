@@ -1,9 +1,9 @@
 class Candle:
     def __init__(self, prop: dict) -> None:
-        self.open: float = prop["Open"]
-        self.close: float = prop["Close"]
-        self.high: float = prop["High"]
-        self.low: float = prop["Low"]
-        self.date: str = prop["Date"]
+        self.open: float = prop["open"]
+        self.close: float = prop["close"]
+        self.high: float = prop["high"]
+        self.low: float = prop["low"]
+        self.date: str = prop["date"]
         # Use the ternary operator to set the colour
-        self.colour: str = "green" if self.close > self.open else "red" if self.close < self.open else "white"
+        self.colour: str = "GREEN" if self.close > self.open else "RED" if self.close < self.open else "WHITE"

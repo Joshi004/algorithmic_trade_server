@@ -12,7 +12,8 @@ urlpatterns = [
     path('set_session',kite_view.set_session),    
     path('get_login_url',kite_view.get_login_url),    
     path('get_profile_info',kite_view.get_profile_info),    
-    path('get_eligible_instruments',scanner_algo_view.get_eligible_instruments)    
-] 
+    path('get_eligible_instruments',scanner_algo_view.get_eligible_instruments),    
+    path('get_udts_eligibility',scanner_algo_view.get_udts_eligibility)    
+]
 
 

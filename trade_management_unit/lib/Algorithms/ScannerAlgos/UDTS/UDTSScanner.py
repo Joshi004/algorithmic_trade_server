@@ -11,6 +11,7 @@ class UDTSScanner:
         "10minute" : ["10minute","60minute","day"],
         "5minute" : ["5minute","30minute","day"],
         "15minute" : ["15minute","60minute","day"],
+        "day" : ["day","day","day"],
     }
     def __init__(self):
         pass
@@ -19,48 +20,83 @@ class UDTSScanner:
         symbols = ["itc","cdsl","idfc","ongc"]
         eligible_instruments = []
         for symbol in symbols:
-            eligible  = is_eligible(symbol)
+            eligible  = self.is_eligible(symbol)
             if (eligible):
                 eligible_instruments.push(symbol)
         return eligible_instruments
 
 
-    def __fetch_hostorical_data(self, symbol, interval, number_of_candles):
+    def __fetch_hostorical_data(self, symbol, interval, number_of_candles,trade_date=None):
         #Check of 1 minute and 1 day and 15 min
-        end_date = datetime.now()
-
+        # fetch From NSE
+        end_date = trade_date if trade_date else datetime.today()
         if "minute" in interval:
             minutes = int(interval.replace("minute", ""))
             start_date = end_date - timedelta(minutes=minutes*number_of_candles)
         elif interval == "day":
             start_date = end_date - timedelta(days=number_of_candles)
-
-        hostorical_data = FetchData().fetch_candle_data(symbol, start_date, end_date, interval)
+        # hostorical_data = FetchData().fetch_from_nse(symbol, start_date, end_date)
+        hostorical_data = FetchData().fetch_candle_data(symbol, start_date, end_date)
         return hostorical_data
 
+    def __get_effective_trend(slef,eligibility_obj):
+        trends = set()
+        for frequency in eligibility_obj:
+            chart = eligibility_obj[frequency]["chart"]
+            trends.add(chart.trend)
+        effective_ternd = trends.pop() if len(trends) == 1 else None
+        return effective_ternd
 
     def is_eligible(self,symbol,trade_freq):
         frq_steps = UDTSScanner.FREQUENCY_STEPS[trade_freq]
         number_of_candles = UDTSScanner.NUM_CANDLES_FOR_TREND_ANALYSIS
-
-        level_2_data = self.__fetch_hostorical_data(symbol,frq_steps[2],number_of_candles)
-        level_1_data = self.__fetch_hostorical_data(symbol,frq_steps[1],number_of_candles)
-        level_0_data = self.__fetch_hostorical_data(symbol,frq_steps[0],number_of_candles)
-
-        level_2_chart = CandleChart(level_2_data)
-        level_1_chart = CandleChart(level_1_data)
-        level_0_chart = CandleChart(level_0_data)
         
-        level_2_chart.set_trend_and_deflection_points()
-        level_1_chart.set_trend_and_deflection_points()
-        level_0_chart.set_trend_and_deflection_points()
+        eligibility_obj = {}
+        for index in range(0,len(frq_steps)):
+            freq = frq_steps[index]
+            eligibility_obj[freq] = {}
+            eligibility_obj[freq]["data"] = self.__fetch_hostorical_data(symbol,frq_steps[index],number_of_candles)
+            eligibility_obj[freq]["chart"] = CandleChart(symbol,frq_steps[index],eligibility_obj[freq]["data"])
+            eligibility_obj[freq]["chart"].set_trend_and_deflection_points()
+            
+        eligibility_obj[trade_freq]["chart"].normalise_deflection_points()
+        eligibility_obj[trade_freq]["chart"].set_trading_levels_and_ratios()
+        effective_trend = self.__get_effective_trend(eligibility_obj)
+        eligibility_obj["effective_trend"] = effective_trend
+        
+        reward_risk_ratio = eligibility_obj[trade_freq]["chart"].trading_pair["reward_risk_ratio"] if "reward_risk_ratio" in eligibility_obj[trade_freq]["chart"].trading_pair else 0
+        if(effective_trend == "BULLISH"):
+            if(reward_risk_ratio > 2 ):
+                return True, eligibility_obj
+        elif(effective_trend == "BEARISH"):
+            if(reward_risk_ratio < 0.5 ):
+                return True, eligibility_obj
+        return False,eligibility_obj
+
+            
+            
 
 
-        target_trend = level_2_chart.trend
-        if(level_1_chart.trend == target_trend and level_0_chart.trend == target_trend):
-            level_0_chart.normalise_deflection_points()
-            level_0_chart.set_trading_levels_and_ratios()
-            if(level_0_chart.reward_risk_ratio > 2 ):
-                return True 
-        else:
-            return False
+    def get_udts_eligibility(self,symbol,trade_freq):
+        is_tradable,eligibility_obj =  self.is_eligible(symbol,trade_freq)
+        result = eligibility_obj[trade_freq]["chart"]
+        response_obj = {
+            "data":{
+            "price_list" : result.price_list,
+            "trend":result.trend,
+            "effective_trend" : eligibility_obj["effective_trend"],
+            "deflection_points":result.deflection_points,
+            "trading_pair":result.trading_pair,
+            "average_candle_span":result.average_candle_span,
+            "rounding_factor":result.rounding_factor,
+            "valid_pairs":result.valid_pairs,
+            "market_price":result.market_price,
+            "up_scope":result.up_scope,
+            "down_scope":result.down_scope,
+            },
+            "meta":{
+            "interval":result.interval,
+            "symbol":result.symbol,
+            }
+        }
+        return response_obj
