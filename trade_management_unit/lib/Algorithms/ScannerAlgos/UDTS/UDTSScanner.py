@@ -2,7 +2,7 @@ import json
 from django.core import serializers
 from trade_management_unit.lib.Algorithms.ScannerAlgos.UDTS.FetchData import FetchData
 from trade_management_unit.lib.Algorithms.ScannerAlgos.UDTS.CandleChart import CandleChart
-
+import pandas as pd
 from datetime import datetime, timedelta
 class UDTSScanner:
     FREQUENCY = ["minute","3minute","5minute","10minute","15minute","30minute","60minute","day"]
@@ -46,6 +46,14 @@ class UDTSScanner:
             trends.add(chart.trend)
         effective_ternd = trends.pop() if len(trends) == 1 else None
         return effective_ternd
+    
+    def __get_deflection_points_scope(self,base_chart):
+        price_list = base_chart.price_list
+        price_list_df = pd.DataFrame(price_list)
+        price_list_df["diff"] = price_list_df["high"] - price_list_df["low"]
+        average_candle_span = price_list_df["diff"].mean()
+        return float(average_candle_span)
+    # This is causing deflection point strength to go NAN check this 
 
     def is_eligible(self,symbol,trade_freq):
         frq_steps = UDTSScanner.FREQUENCY_STEPS[trade_freq]
@@ -58,8 +66,9 @@ class UDTSScanner:
             eligibility_obj[freq]["data"] = self.__fetch_hostorical_data(symbol,frq_steps[index],number_of_candles)
             eligibility_obj[freq]["chart"] = CandleChart(symbol,frq_steps[index],eligibility_obj[freq]["data"])
             eligibility_obj[freq]["chart"].set_trend_and_deflection_points()
-            
-        eligibility_obj[trade_freq]["chart"].normalise_deflection_points()
+    
+        deflection_points_scope =  self.__get_deflection_points_scope(eligibility_obj[frq_steps[-1]]["chart"])  
+        eligibility_obj[trade_freq]["chart"].normalise_deflection_points(deflection_points_scope)
         eligibility_obj[trade_freq]["chart"].set_trading_levels_and_ratios()
         effective_trend = self.__get_effective_trend(eligibility_obj)
         eligibility_obj["effective_trend"] = effective_trend
