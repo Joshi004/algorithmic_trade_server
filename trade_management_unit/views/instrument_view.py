@@ -8,6 +8,8 @@ from django.forms.models import model_to_dict
 from django.db.models import Q
 from django.core.exceptions import FieldError
 from django.http import JsonResponse
+from trade_management_unit.lib.Instruments.historical_data.historical_data import HistoricalData
+
 
 
 def update_instruments(request,*args,**kwvrgs):
@@ -23,3 +25,8 @@ def get_instruments(request,*args,**kwvrgs):
     response = instruments.fetch_instruments(query_paramas)
     return JsonResponse(response, content_type='application/json')
 
+
+def fetch_historical_data(request,*args,**kwvrgs):
+    query_paramas  =  request.GET
+    response = HistoricalData().fetch_data(query_paramas)
+    return JsonResponse(response, content_type='application/json')
