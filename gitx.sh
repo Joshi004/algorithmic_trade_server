@@ -17,22 +17,23 @@ is_pramata_repo() {
 }
 
 # Function to extract the RAASNG number from the branch name
-get_raasng_number() {
+get_number() {
+    echo "Appending Branch Prefix"
     local branch_name=$(git rev-parse --abbrev-ref HEAD)
-    local pattern="RAASNG-([0-9]+)"
+    local pattern="(RAASNG|ATS)-([0-9]+)"
     if [[ $branch_name =~ $pattern ]]; then
-        echo "${BASH_REMATCH[1]}"
+        echo "${BASH_REMATCH[1]}-${BASH_REMATCH[2]}"
     fi
 }
 
 # Function to fix commit message for Pramata user in Pramata repository
 fix_commit_message() {
     local commit_msg="$1"
-    local pattern="^RAASNG-[0-9]+"
+    local pattern="^(RAASNG|ATS)-[0-9]+"
     if ! [[ $commit_msg =~ $pattern ]]; then
-        local raasng_number=$(get_raasng_number)
-        if [ -n "$raasng_number" ]; then
-            commit_msg="RAASNG-$raasng_number-$commit_msg"
+        local number=$(get_number)
+        if [ -n "$number" ]; then
+            commit_msg="$number-$commit_msg"
         else
             commit_msg="$commit_msg"
         fi
