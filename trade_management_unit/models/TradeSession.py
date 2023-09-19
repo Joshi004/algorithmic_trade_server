@@ -1,13 +1,16 @@
-
 from django.db import models
+from trade_management_unit.models.Algorithm import Algorithm
+from trade_management_unit.models.Algorithm import AlgorithmType
 
 class TradeSession(models.Model):
     class Meta:
         db_table = "trade_sessions"
   
-    id = models.CharField(auto_created=True,primary_key=True,blank=False,max_length=64,default="") 
+    id = models.CharField(auto_created=True, primary_key=True, blank=False, max_length=64,) 
+    is_active = models.BooleanField(default=True)
     started_at = models.DateTimeField(blank=False)
-    closed_at =  models.DateTimeField(blank=True,null=True)
-    net_profit = models.FloatField(blank=True,null=True)
-    is_closed = models.BooleanField(default=False)
-    scanning_alogo_id = models.CharField(blank=False,max_length=64,default="")
+    closed_at = models.DateTimeField(blank=True, null=True)
+    scanning_algorithm = models.ForeignKey(Algorithm, on_delete=models.CASCADE, limit_choices_to={'type': AlgorithmType.SCANNING.value}, related_name='scanning_sessions',default=1)
+    tracking_algorithm = models.ForeignKey(Algorithm, on_delete=models.CASCADE, limit_choices_to={'type': AlgorithmType.TRACKING.value}, related_name='tracking_sessions',default=1)
+    user_id = models.CharField(max_length=64, blank=False, default="1")
+    dummy = models.BooleanField(default=False)
