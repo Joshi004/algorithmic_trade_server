@@ -20,17 +20,20 @@ class Instruments:
         query = Q()
         starts_with_fields = ['trading_symbol', 'name']
         pagination_ordering_params = ['page_no', 'page_length', 'order_by', 'sort_type']
-
+        starts_with_query = Q()
         # Iterate over each parameter in req_params
         for field, value in req_params.items():
             if field not in pagination_ordering_params:
                 if field in starts_with_fields:
                     # If the field is in starts_with_fields, use the __startswith lookup
-                    query &= (Q(**{f'{field}__istartswith': value}) | Q(**{f'{field}__iexact': value}))
+                    starts_with_query |= Q(**{f'{field}__istartswith': value})
+                    starts_with_query |= Q(**{f'{field}__iexact': value})
                 else:
                     # Otherwise, do an exact match
                     query &= Q(**{f'{field}__iexact': value})
 
+    # Combine the two Q objects
+        query &= starts_with_query
         # Use the constructed Q object to filter the Instrument objects
         instruments = Instrument.objects.filter(query).values('instrument_token', 'exchange_token', 'trading_symbol', 'name', 'last_price', 'expiry', 'strike', 'tick_size', 'lot_size', 'instrument_type', 'segment', 'exchange').distinct()
         print("Effective Query  - ",str(instruments.query))
