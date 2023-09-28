@@ -4,3 +4,6 @@ from . import Trade
 from . import Order
 from . import TradeSession
 from . import Instrument
+from . import Algorithm
+from . import AlgoSltoTrackRecord
+from . import AlgoUdtsScanRecord

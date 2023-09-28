@@ -1,13 +1,7 @@
-
 from enum import Enum
 from django.db import models
 from datetime import datetime
 from django_mysql.models import EnumField
-
-# class Status(Enum):
-#     Pending = "Pending"
-#     Exicuted = "Exicuted"
-#     Rejected = "Rejected"
 
 class Order(models.Model):
     class Meta:
@@ -23,5 +17,7 @@ class Order(models.Model):
     closed_at = models.DateTimeField(blank=True,default=datetime.now)
     instrument =   models.ForeignKey("Instrument", verbose_name="instrument_id", on_delete=models.CASCADE)
     trade =   models.ForeignKey("Trade", verbose_name="trade_id", on_delete=models.CASCADE)
-    
-    
+    dummy = models.BooleanField(default=False)
+    kite_order_id = models.CharField(max_length=64, blank=True, null=True)
+    frictional_losses = models.FloatField(blank=True, null=True)
+    user_id = models.CharField(max_length=64, blank=False,default="1")
