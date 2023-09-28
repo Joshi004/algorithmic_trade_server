@@ -17,5 +17,4 @@ class HistoricalData:
             "data":historical_data,
             "meta": {"size":len(historical_data)}
         }
-        print(type(historical_data))
         return res

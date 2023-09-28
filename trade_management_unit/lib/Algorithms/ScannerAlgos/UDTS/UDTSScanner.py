@@ -1,29 +1,90 @@
 import json
+import time
 from django.core import serializers
 from trade_management_unit.lib.Algorithms.ScannerAlgos.UDTS.FetchData import FetchData
 from trade_management_unit.lib.Algorithms.ScannerAlgos.UDTS.CandleChart import CandleChart
-import pandas as pd
-from datetime import datetime, timedelta
-class UDTSScanner:
-    FREQUENCY = ["minute","3minute","5minute","10minute","15minute","30minute","60minute","day"]
-    NUM_CANDLES_FOR_TREND_ANALYSIS = 200
-    FREQUENCY_STEPS = {
-        "10minute" : ["10minute","60minute","day"],
-        "5minute" : ["5minute","30minute","day"],
-        "15minute" : ["15minute","60minute","day"],
-        "day" : ["day","day","day"],
-    }
-    def __init__(self):
-        pass
+from trade_management_unit.lib.Algorithms.TrackerAlgos.TrackerAlgoFactory import TrackerAlgoFactory
+from trade_management_unit.lib.Algorithms.ScannerAlgos.ScannerSingletonMeta import ScannerSingletonMeta
+from trade_management_unit.lib.Instruments.Instruments import Instruments
+from trade_management_unit.Constants.TmuConstants import *
 
-    def get_eligible_instruments(self):
-        symbols = ["itc","cdsl","idfc","ongc"]
-        eligible_instruments = []
-        for symbol in symbols:
-            eligible  = self.is_eligible(symbol)
-            if (eligible):
-                eligible_instruments.push(symbol)
-        return eligible_instruments
+import pandas as pd
+import concurrent.futures
+import threading
+from datetime import datetime, timedelta
+class UDTSScanner(metaclass=ScannerSingletonMeta):
+
+    def __init__(self,trade_freq,tracking_algorithm):
+        self.trade_sessions = {} # Stores All the KiteUser instace refs
+        self.trade_freqency = trade_freq
+        self.tracking_algorithm = tracking_algorithm
+     
+    def __str__(self):
+        idintifier = self.trade_freqency+"__"+self.tracking_algorithm
+        return idintifier
+
+    def register_trade_session(self,trade_sesion):
+        self.trade_sessions[str(trade_sesion)] = trade_sesion
+
+    def scan_in_seperate_trhread(self,all_instruments):
+        counter = 0
+        while(True):
+            counter += 1
+            eligible_instruments = []
+            for instrument in all_instruments:
+                symbol = instrument["trading_symbol"]
+                token = instrument["instrument_token"]
+                is_eligible,eligibility_obj = self.is_eligible(symbol)
+                if ( 1 or is_eligible):
+                    symbol_data_points = eligibility_obj[self.trade_freqency]["chart"]
+                    instrument = {
+                        "trading_symbol":symbol,
+                        "instrument_token":token,
+                        "view" : eligibility_obj["effective_trend"],
+                        "support_price" : symbol_data_points.trading_pair["support"] or 1,
+                        "resistance_price" : symbol_data_points.trading_pair["resistance"] or 1000,
+                        "trade_freqency" : self.trade_freqency
+                        }
+                    print("Adding to eligible list",instrument)
+                    eligible_instruments.append(instrument)
+            # Reformat eligible_instruments first and send array of objects
+            self.add_tokens_to_subscribed_tracker_sessiosn(eligible_instruments)
+            time.sleep(10)
+            print("restrting Scan - ",counter)
+
+
+    def add_tokens_to_subscribed_tracker_sessiosn(self,eligible_instruments):
+        for identifier in self.trade_sessions:
+            trade_session = self.trade_sessions[identifier]
+            trade_session.add_tokens(eligible_instruments)  
+
+
+    def fetch_instruments_from_db(self):
+        search_params = {"exchange": "NSE", "segment": "NSE", "instrument_type": "EQ", "page_length": 5000}
+        all_instruments = Instruments().fetch_instruments(search_params)["data"]
+        downloaded = ["ITC", "ONGC", "PNB", "zomato"]
+        
+        filtered_instruments = [
+            instrument for instrument in all_instruments
+            if instrument.get('name', '') != '' and
+            instrument.get('trading_symbol', '') in downloaded
+        ]
+        return filtered_instruments
+
+
+    def fetch_instrument_tokens_and_start_tracking(self):
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(self.fetch_instruments_from_db)
+            result = future.result()
+        self.scan_and_add_instruments_for_tracking(result)
+
+
+    def scan_and_add_instruments_for_tracking(self,all_instruments):
+        scanner_thread = threading.Thread(target=self.scan_in_seperate_trhread,args=(all_instruments,))
+        scanner_thread.setDaemon(True)
+        scanner_thread.start()
+        # self.scan_in_seperate_trhread()
+        
 
 
     def __fetch_hostorical_data(self, symbol, interval, number_of_candles,trade_date=None):
@@ -55,9 +116,10 @@ class UDTSScanner:
         return float(average_candle_span)
     # This is causing deflection point strength to go NAN check this 
 
-    def is_eligible(self,symbol,trade_freq):
-        frq_steps = UDTSScanner.FREQUENCY_STEPS[trade_freq]
-        number_of_candles = UDTSScanner.NUM_CANDLES_FOR_TREND_ANALYSIS
+    def is_eligible(self,symbol):
+        trade_freq =  self.trade_freqency
+        frq_steps = FREQUENCY_STEPS[trade_freq]
+        number_of_candles = NUM_CANDLES_FOR_TREND_ANALYSIS
         
         eligibility_obj = {}
         for index in range(0,len(frq_steps)):
@@ -84,8 +146,6 @@ class UDTSScanner:
 
             
             
-
-
     def get_udts_eligibility(self,symbol,trade_freq):
         is_tradable,eligibility_obj =  self.is_eligible(symbol,trade_freq)
         result = eligibility_obj[trade_freq]["chart"]
