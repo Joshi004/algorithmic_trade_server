@@ -5,7 +5,4 @@ class JustMACD:
 
     def set_algorithm(self,KiteTickerObj):
         KiteTickerObj.set_indicators([RealTimeMACD])
-        print("Algorithm Set")
         return KiteTickerObj
-
-

@@ -18,10 +18,8 @@ class KiteUser:
         return kite_obj
 
     def set_session(self,request_token):   
-        print("Setting Session With Token : ",request_token)
         kite = KiteConnect(api_key=self.api_key)
         user_data = kite.generate_session(request_token, api_secret=self.api_secret)
-        print("Git Access Token Successfully",user_data)
         kite.set_access_token(user_data["access_token"])
         self.env.write("access_token",user_data["access_token"])
         self.access_token = user_data["access_token"]
@@ -41,13 +39,11 @@ class KiteUser:
         return public_data
     
     def get_login_url(self):
-        # print("In get login URL")
         kite = KiteConnect(api_key=self.api_key)
         login_url = kite.login_url()
         result = {
             "login_url" : login_url
         }
-        # print("returning",result)
         return result
     
     def get_profile_info(self): 
