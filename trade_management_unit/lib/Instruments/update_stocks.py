@@ -6,7 +6,6 @@ class UpdateStock:
         pass
 
     def update(self):
-        print("in update method")
         create_list,update_list = self.__fetch_stock_list()
         self.__update_stock_list(create_list,update_list)
 
@@ -18,10 +17,8 @@ class UpdateStock:
         existing_stocks = Stock.objects.all().values_list('id', flat=True)
         update_list = []
         create_list = []
-        print("Existing Stocks",existing_stocks)
         for row in csvreader:
             stock_obj = self.__get_stock_object(row)
-            print("For ID",stock_obj.id," Presense ",stock_obj.id in existing_stocks)
             if(stock_obj.id in existing_stocks):
                 update_list.append(stock_obj)
             else:
@@ -51,8 +48,6 @@ class UpdateStock:
     
 
     def __update_stock_list(self,create_list,update_list):       
-        print("Create List",len(create_list))
-        print("Update List",len(update_list))
         if(len(create_list)>0):
             Stock.objects.bulk_create(create_list)
         # Stock.objects.bulk_update(update_list)

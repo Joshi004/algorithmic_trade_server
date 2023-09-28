@@ -87,7 +87,7 @@ class CandleChart:
                 
                 if(is_bullish_trend): # this is a bearish candle in existing bullish trend 
                     if(candle.close < last_bullish_candle.open): # trend changed to bearish
-                        is_bullish_trend = False                
+                        is_bullish_trend = False             
                         last_deflection_point["progression_potential"] = candle.open - last_deflection_point["price"]
                         self.__add_deflection_point(
                             direction = "down",
@@ -126,8 +126,6 @@ class CandleChart:
             # !!!! Make this configurable   
         self.rounding_factor = round((self.average_candle_span / 10),1)
         self.rounding_factor = 0.5 if self.rounding_factor< 0.5 else self.rounding_factor
-        print("self.average_candle_span",self.average_candle_span)
-        print("self.rounding_factor",self.rounding_factor)
         def_list_df["price"] = custom_round(def_list_df["price"],self.rounding_factor)
         counts = def_list_df["price"].value_counts()
         def_list_df["frequency"] = def_list_df["price"].map(counts)
@@ -158,7 +156,6 @@ class CandleChart:
                 resist_points.append(point)
         if(not len(support_points) or not len(resist_points)):
             self.trading_pair=trading_pair
-            print("Not Enough Pairs Returning")
             return
 
         

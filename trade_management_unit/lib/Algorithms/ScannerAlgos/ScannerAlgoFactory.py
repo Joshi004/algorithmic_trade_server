@@ -3,8 +3,8 @@ class ScannerAlgoFactory:
     def __init__(slef):
         pass
 
-    def get_scanner(self,algo_name):
-        if (algo_name == "udts"):
-            return UDTSScanner()
+    def get_scanner(self,sanning_algo_name,tracking_algo_name,trade_freq):
+        if (sanning_algo_name == "udts"):
+            return UDTSScanner(trade_freq,tracking_algo_name)
         else:
             return None
