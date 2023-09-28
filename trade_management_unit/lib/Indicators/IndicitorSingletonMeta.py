@@ -1,4 +1,4 @@
-class SingletonMeta(type):
+class IndicitorSingletonMeta(type):
     # Create an empty dictionary to store the instances
     _instances = {}
 
@@ -14,12 +14,12 @@ class SingletonMeta(type):
     # Override the __call__ method to control the creation of instances
     def __call__(cls, *args, **kwargs):
         # Get the symbol from the arguments
-        symbol = args[0]
+        unique_class_identifier = args[0] + "__" + args[1]
 
         # Check if the symbol already exists in the dictionary
-        if symbol not in cls._instances:
+        if unique_class_identifier not in cls._instances:
             # If not, create a new instance and store it in the dictionary
-            cls._instances[symbol] = super(SingletonMeta, cls).__call__(*args, **kwargs)
+            cls._instances[unique_class_identifier] = super(IndicitorSingletonMeta, cls).__call__(*args, **kwargs)
 
         # Return the instance for the symbol
-        return cls._instances[symbol]
+        return cls._instances[unique_class_identifier]

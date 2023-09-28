@@ -1,9 +1,8 @@
-from trade_management_unit.lib.Indicators.SingletonMeta import SingletonMeta
+from trade_management_unit.lib.Indicators.IndicitorSingletonMeta import IndicitorSingletonMeta
 
-class RealTimeMACD(metaclass=SingletonMeta): 
+class RealTimeMACD(metaclass=IndicitorSingletonMeta): 
     def __init__(self,symbol):
         # Initialize EMAs, MACD line, and Signal line as None
-        print("Initlising RealTimeMACD")
         self.symbol = symbol
         self.ema12 = None
         self.ema26 = None

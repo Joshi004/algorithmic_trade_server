@@ -8,7 +8,6 @@ class FetchData:
 
     def sanitize_data(self, data):
          # Remove leading and trailing spaces from column names
-        print(data.columns)
         data.columns = data.columns.str.strip()
         # Convert column names to snake case
         data = data.rename(columns={
@@ -23,7 +22,6 @@ class FetchData:
         string_columns = data.select_dtypes(include='object').columns
         for col in string_columns:
             data[col] = data[col].str.upper()
-        print(data.columns)
         # Sanitize date columns
         date_columns = ['date']
         for col in date_columns:
@@ -46,7 +44,8 @@ class FetchData:
             end_date = datetime.strptime(end_date, '%Y-%m-%d')
 
         # Read data from CSV file
-        file_path = f'/Users/nareshjoshi/Documents/personal_workspace/ats_aplication/ats_server/data/{symbol}.csv'
+        file_path = f'/Users/nareshjoshi/Documents/personal_workspace/ats_aplication/algorithmic_trade_server/data/{symbol}.csv'
+        
         data = pd.read_csv(file_path)
 
         # Sanitize the data
@@ -69,9 +68,7 @@ class FetchData:
         url = f"https://www.nseindia.com/api/historical/securityArchives?from={start_date}&to={end_date}&symbol={symbol}&dataType=priceVolumeDeliverable&series=ALL"
         
         # Fetch data from NSE
-        print("Gettinh historical data now")
         response =  requests.get(url)
-        print("response",response)
 
         if response.status_code == 200:
             data = response.json()

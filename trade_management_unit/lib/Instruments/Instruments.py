@@ -7,11 +7,13 @@ from django.utils.dateparse import parse_date
 from django.db.models import Q
 from django.core.paginator import Paginator
 from django.core import serializers
+from django.db import transaction
 import json
+
 from trade_management_unit.lib.Kite.KiteUser import KiteUser
 
 class Instruments:
-    def __init__(self,params):
+    def __init__(self):
         logging.basicConfig(level=logging.DEBUG)
         self.kite = KiteUser().get_instance()
 
@@ -36,13 +38,12 @@ class Instruments:
         query &= starts_with_query
         # Use the constructed Q object to filter the Instrument objects
         instruments = Instrument.objects.filter(query).values('instrument_token', 'exchange_token', 'trading_symbol', 'name', 'last_price', 'expiry', 'strike', 'tick_size', 'lot_size', 'instrument_type', 'segment', 'exchange').distinct()
-        print("Effective Query  - ",str(instruments.query))
 
         # Get pagination parameters from request
         page_length = int(req_params.get('page_length', '50'))
         page_no = int(req_params.get('page_no', '1'))
         order_by = req_params.get('order_by', 'name')
-        sort_type = req_params.get('sort_type', 'asc')
+        sort_type = req_params.get('sort_type', 'desc')
 
         if sort_type.lower() == 'desc':
             order_by = '-' + order_by
@@ -64,7 +65,6 @@ class Instruments:
         }
 
     def update_instruments(self):     
-        print("In update_instruments with params")
         instrument_dump=self.kite.instruments()
         instrument_df = pd.DataFrame(instrument_dump)
 
@@ -88,4 +88,7 @@ class Instruments:
             )
             for instrument in instrument_dict
         ]
-        Instrument.objects.bulk_create(instrument_instances)
+        with transaction.atomic():
+            # This code executes inside a transaction.
+            Instrument.objects.all().delete()  # Clear the table
+            Instrument.objects.bulk_create(instrument_instances)  # Add new data
