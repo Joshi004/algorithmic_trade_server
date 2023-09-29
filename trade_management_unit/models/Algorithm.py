@@ -12,7 +12,7 @@ class AlgorithmType(Enum):
 
 class Algorithm(models.Model):
     id = models.AutoField(primary_key=True)
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=255, db_index=True)  # Added db_index=True here
     table_name = models.CharField(max_length=255)
     type = models.CharField(
         max_length=20,

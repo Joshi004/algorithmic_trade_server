@@ -60,9 +60,3 @@ This is a project that allows you to perform algorithmic trading using a web-bas
         redis-cli ping
         ```
       If Redis is running properly, you will see the response `PONG`.
-8. Start the server using Daphne, which is an asynchronous HTTP, HTTP2 and WebSocket protocol server for Django and ASGI applications. You need Daphne to work with WebSocket connections and channels. To start the server using Daphne, run the following command:
-    ```
-    daphne ats_base.asgi:application
-    ```
-
-That's it! You have successfully set up the algorithmic trade server project on your local system. You can now access it from your browser and start trading with your preferred strategies and indicators. Happy trading! 😊
