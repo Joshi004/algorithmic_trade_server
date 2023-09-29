@@ -16,3 +16,5 @@ class Trade(models.Model):
     VIEW_CHOICES=[("long","long"),("short","short")]
     view = EnumField(choices=VIEW_CHOICES,default = "long")
     user_id = models.CharField(max_length=64,default="1")
+    max_price = models.FloatField(blank=True, null=True)
+    min_price = models.FloatField(blank=True, null=True)
