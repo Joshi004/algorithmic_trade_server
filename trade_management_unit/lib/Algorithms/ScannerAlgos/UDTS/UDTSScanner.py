@@ -83,7 +83,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
         scanner_thread = threading.Thread(target=self.scan_in_seperate_trhread,args=(all_instruments,))
         scanner_thread.setDaemon(True)
         scanner_thread.start()
-        # self.scan_in_seperate_trhread()
+
         
 
 

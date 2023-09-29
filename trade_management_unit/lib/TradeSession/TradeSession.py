@@ -12,6 +12,7 @@ from trade_management_unit.lib.Algorithms.TrackerAlgos.TrackerAlgoFactory import
 from trade_management_unit.lib.TradeSession.TradeSessionMeta import TradeSessionMeta
 from  trade_management_unit.Constants.TmuConstants import *
 import concurrent.futures
+from datetime import datetime
 
 class TradeSession(metaclass=TradeSessionMeta):
    
@@ -39,22 +40,34 @@ class TradeSession(metaclass=TradeSessionMeta):
 
     def get_trade_session_id(self):
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            future = executor.submit(self.fetch_trade_session())
+            future = executor.submit(self.fetch_or_create_trade_session())
             result = future.result()
         self.scan_and_add_instruments_for_tracking(result)
     
 
-    def fetch_trade_session(user_id, scanning_algo_name, tracking_algo_name, trading_freq):
-        try:
-            trade_session = TradeSessionDB.objects.get(
-                user_id=user_id,
-                scanning_algorithm__name=scanning_algo_name,
-                tracking_algorithm__name=tracking_algo_name,
-                trading_frequency=trading_freq
-            )
+    def fetch_or_create_trade_session(user_id, scanning_algo_name, tracking_algo_name, trading_freq, dummy=False):
+            try:
+                trade_session = TradeSessionDB.objects.get(
+                    user_id=user_id,
+                    scanning_algorithm__name=scanning_algo_name,
+                    tracking_algorithm__name=tracking_algo_name,
+                    trading_frequency=trading_freq
+                )
+            except TradeSessionDB.DoesNotExist:
+                # If no matching trade session is found, create a new one
+                trade_session = TradeSessionDB(
+                    user_id=user_id,
+                    scanning_algorithm__name=scanning_algo_name,
+                    tracking_algorithm__name=tracking_algo_name,
+                    trading_frequency=trading_freq,
+                    is_active=True,  # Set is_active to True
+                    started_at=datetime.now(),  # Set started_at to current timestamp
+                    closed_at=None,  # Set closed_at to None
+                    dummy=dummy  # Set dummy based on the parameter
+                )
+                trade_session.save()  # Save the new trade session to the database
+
             return trade_session.id
-        except TradeSessionDB.DoesNotExist:
-            return None  # Return None if no matching trade session is found
 
 
         
