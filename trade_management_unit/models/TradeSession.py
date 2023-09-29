@@ -7,6 +7,12 @@ from trade_management_unit.Constants.TmuConstants import FREQUENCY  # assuming c
 class TradeSession(models.Model):
     class Meta:
         db_table = "trade_sessions"
+        indexes = [
+            models.Index(fields=['user_id']),
+            models.Index(fields=['scanning_algorithm']),
+            models.Index(fields=['tracking_algorithm']),
+            models.Index(fields=['trading_frequency']),
+        ]
   
     id = models.CharField(auto_created=True, primary_key=True, blank=False, max_length=64,) 
     is_active = models.BooleanField(default=True)

@@ -6,10 +6,12 @@ import json
 import asyncio
 from channels.db import database_sync_to_async
 from trade_management_unit.lib.common.Communicator import Communicator
+from trade_management_unit.models.TradeSession import TradeSession as TradeSessionDB
 from trade_management_unit.lib.Algorithms.ScannerAlgos.ScannerAlgoFactory import ScannerAlgoFactory
 from trade_management_unit.lib.Algorithms.TrackerAlgos.TrackerAlgoFactory import TrackerAlgoFactory
 from trade_management_unit.lib.TradeSession.TradeSessionMeta import TradeSessionMeta
 from  trade_management_unit.Constants.TmuConstants import *
+import concurrent.futures
 
 class TradeSession(metaclass=TradeSessionMeta):
    
@@ -29,10 +31,33 @@ class TradeSession(metaclass=TradeSessionMeta):
         self.scanning_algo_instance = None
         self.tracking_algo_instance = None
         self.__instanciate_scanning_algo__()
+        self.trade_session_id = self.trade_session_id or self.get_trade_session_id()
     
     def __str__(self):
         identifier =  self.user_id + "__" + self.scanning_algo_name + "__" + self.tracking_algo_name + "__" + self.trading_freq
         return identifier
+
+    def get_trade_session_id(self):
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(self.fetch_trade_session())
+            result = future.result()
+        self.scan_and_add_instruments_for_tracking(result)
+    
+
+    def fetch_trade_session(user_id, scanning_algo_name, tracking_algo_name, trading_freq):
+        try:
+            trade_session = TradeSessionDB.objects.get(
+                user_id=user_id,
+                scanning_algorithm__name=scanning_algo_name,
+                tracking_algorithm__name=tracking_algo_name,
+                trading_frequency=trading_freq
+            )
+            return trade_session.id
+        except TradeSessionDB.DoesNotExist:
+            return None  # Return None if no matching trade session is found
+
+
+        
     
     def __instanciate_scanning_algo__(self):
         scanning_algo_instance = ScannerAlgoFactory().get_scanner(self.scanning_algo_name,self.tracking_algo_name,self.trading_freq)
@@ -126,6 +151,7 @@ class TradeSession(metaclass=TradeSessionMeta):
 
         # Extract instrument tokens for the WebSocket subscription
         instrument_tokens = [instrument['instrument_token'] for instrument in new_instruments]
+        breakpoint()
         self.ws.subscribe(instrument_tokens)
         self.ws.set_mode(self.ws.MODE_FULL, instrument_tokens)
 
