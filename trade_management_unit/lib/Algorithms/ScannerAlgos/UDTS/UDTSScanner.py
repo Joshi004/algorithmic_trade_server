@@ -7,6 +7,7 @@ from trade_management_unit.lib.Algorithms.TrackerAlgos.TrackerAlgoFactory import
 from trade_management_unit.lib.Algorithms.ScannerAlgos.ScannerSingletonMeta import ScannerSingletonMeta
 from trade_management_unit.lib.Instruments.Instruments import Instruments
 from trade_management_unit.Constants.TmuConstants import *
+from channels.db import database_sync_to_async
 
 import pandas as pd
 import concurrent.futures
@@ -31,6 +32,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
         while(True):
             counter += 1
             eligible_instruments = []
+            print("------TYoe OF All Instruments",type(all_instruments))
             for instrument in all_instruments:
                 symbol = instrument["trading_symbol"]
                 token = instrument["instrument_token"]
@@ -49,7 +51,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
                     eligible_instruments.append(instrument)
             # Reformat eligible_instruments first and send array of objects
             self.add_tokens_to_subscribed_tracker_sessiosn(eligible_instruments)
-            time.sleep(10)
+            time.sleep(30)
             print("restrting Scan - ",counter)
 
 
@@ -74,7 +76,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
 
     def fetch_instrument_tokens_and_start_tracking(self):
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            future = executor.submit(self.fetch_instruments_from_db)
+            future = executor.submit((self.fetch_instruments_from_db))
             result = future.result()
         self.scan_and_add_instruments_for_tracking(result)
 

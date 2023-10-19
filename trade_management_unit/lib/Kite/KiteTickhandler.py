@@ -85,22 +85,3 @@ class KiteTickhandler(metaclass=SingletonMeta):
 
     def on_close(self,ws,code,reason):
         ws.stop()
-
-    def get_formated_ticks(self,ticks):
-        
-        try: 
-            # You might see that if mode is chnged to full there is no reposnse on UI wth no eror this might be coz of datetime.dateime obect that is not serlisable directly 
-            # for tick in ticks:
-                # if (tick["mode"] == "full"):
-                #     tick = json.loads(serializers.serialize('json', tick))
-            
-            formated_obj = {
-                'data':ticks,
-                'meta':{
-                'number_of_ticks' : len(ticks),
-                'algorithm' : self.communication_group
-                # Attach Indicators also with metadata
-                }}
-            return formated_obj
-        except Exception as e:
-            print ("Error in Formating ticks",e)

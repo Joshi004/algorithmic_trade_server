@@ -4,9 +4,9 @@ from datetime import datetime
 
 class SLTO(): 
 
-    def __init__(self,trade_session_identifier:str,trading_symbol:str,other_params:dict):
+    def __init__(self,trade_session_identifier:str,trading_symbol:str,trading_frequency:str,other_params:dict):
         self.symbol = trading_symbol
-        self.trading_frequency = other_params["trading_frequency"]
+        self.trading_frequency = trading_frequency
         self.view = other_params["view"]
         self.support_price = other_params["support_price"]
         self.resistance_price = other_params["resistance_price"]
@@ -64,19 +64,20 @@ class SLTO():
 
     
     def append_information(self,initial_data:dict):
-        initial_data["slto"] = {}
-        initial_data["slto"]["support_price"] = self.support_price
-        initial_data["slto"]["resistance_price"] = self.resistance_price
-        initial_data["slto"]["tracking_start_time"] = self.tracking_start_time
-        initial_data["slto"]["zone_in_time"] = self.zone_in_time
-        initial_data["slto"]["timeout_period"] = self.timeout_period
-        initial_data["slto"]["view"] = str(self.view)
-        initial_data["slto"]["price_zone"] = (self.price_zone).value
-        initial_data["slto"]["prev_price_zone"] = (self.prev_price_zone).value
-        initial_data["slto"]["price_zone_changed"] = self.price_zone_changed
-        initial_data["slto"]["required_action"] = self.required_action
-        initial_data["slto"]["tracking_end_time"] = self.tracking_end_time
-        initial_data["slto"]["mark_time"] = datetime.now()
+        initial_data["indicator_data"] = initial_data["indicator_data"]  if( "indicator_data" in  initial_data)  else {}
+        initial_data["indicator_data"]["slto"] = {}
+        initial_data["indicator_data"]["slto"]["support_price"] = self.support_price
+        initial_data["indicator_data"]["slto"]["resistance_price"] = self.resistance_price
+        initial_data["indicator_data"]["slto"]["tracking_start_time"] = self.tracking_start_time
+        initial_data["indicator_data"]["slto"]["zone_in_time"] = self.zone_in_time
+        initial_data["indicator_data"]["slto"]["timeout_period"] = self.timeout_period
+        initial_data["indicator_data"]["slto"]["view"] = str(self.view)
+        initial_data["indicator_data"]["slto"]["price_zone"] = (self.price_zone).value
+        initial_data["indicator_data"]["slto"]["prev_price_zone"] = (self.prev_price_zone).value
+        initial_data["indicator_data"]["slto"]["price_zone_changed"] = self.price_zone_changed
+        initial_data["indicator_data"]["slto"]["required_action"] = self.required_action
+        initial_data["indicator_data"]["slto"]["tracking_end_time"] = self.tracking_end_time
+        initial_data["indicator_data"]["slto"]["mark_time"] = datetime.now()
 
     def __set_place_order_action__(self,current_price_zone:PriceZone,time_delta:int)-> None:
         self.required_action = None

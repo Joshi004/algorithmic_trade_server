@@ -31,7 +31,7 @@ class TradeSessionConsumer(AsyncWebsocketConsumer):
         kite_tick_handler =  KiteTickhandler()
         kit_connect_object = kite_tick_handler.get_kite_ticker_instance()
         kit_connect_object.connect(threaded=True)
-        trade_session = TradeSession(user_id,scanning_algorithm_name,tracking_algorithm_name,trading_freq,kite_tick_handler,kit_connect_object)
+        trade_session = TradeSession(user_id,scanning_algorithm_name,tracking_algorithm_name,trading_freq,kite_tick_handler,kit_connect_object,True)
 
         self.room_group_name = str(trade_session)
         await self._add_to_group_and_accept()
