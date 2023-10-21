@@ -1,11 +1,12 @@
 from trade_management_unit.models.DummyUser import DummyUser
 from trade_management_unit.models.UserConfiguration import UserConfiguration
 from trade_management_unit.lib.Portfolio.Portfolio import Portfolio
+from  trade_management_unit.Constants.TmuConstants import *
 class RiskManager:
     def __init__(self):
         pass
 
-    def get_quantity(self,action,market_price,support_price,resistance_price,user_id):
+    def get_quantity_and_frictional_losses(self,action,market_price,support_price,resistance_price,user_id):
         unit_loss_potential =( market_price - support_price) if action == "buy" else (resistance_price-market_price) 
         balance_amount = self.get_balance_amount(user_id)
         risk_appetite  = self.get_risk_appetite(user_id)
@@ -17,7 +18,8 @@ class RiskManager:
                  break
              else:
                  quantity -= 1
-        return quantity
+                 frictional_losses = self.get_frictional_losses("equity_intraday",market_price,quantity,action=="buy")
+        return quantity,frictional_losses
     
     def get_balance_amount(self, user_id):
         if str(user_id).startswith("dummy"):
@@ -29,7 +31,7 @@ class RiskManager:
         UserConfiguration.get_attribute(user_id,"risk_appetite")
     
 
-    def get_frictional_losses(trade_type, price, quantity, is_buy):
+    def get_frictional_losses(price, quantity, is_buy, trade_type = TradeType.EQUITY_INTRADAY ):
         brokerage = {
             "equity_delivery": 0,
             "equity_intraday": min(20, 0.0003 * price * quantity),

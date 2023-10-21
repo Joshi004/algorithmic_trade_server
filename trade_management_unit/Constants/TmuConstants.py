@@ -16,10 +16,22 @@ class OrderType(Enum):
     BUY = "buy"
     SELL = "sell"
 
+class TradeType(Enum):
+    EQUITY_DELIVERY = "equity_delivery"
+    EQUITY_INTRADAY = "equity_intraday"
+    EQUITY_FUTURES = "equity_futures"
+    EQUITY_OPTIONS = "equity_options"
+    CURRENCY_FUTURES = "currency_futures"
+    CURRENCY_OPTIONS = "currency_options"
+    COMMODITY_FUTURES = "commodity_futures"
+    COMMODITY_OPTIONS = "commodity_options"
+
+
 
 # Other constants
 PI = 3.14
 GREETING = "Hello, world!"
+TRADE_TYPE = {"intraday":"equity_intraday"}
 FREQUENCY = ["minute","3minute","5minute","10minute","15minute","30minute","60minute","day"]
 NUM_CANDLES_FOR_TREND_ANALYSIS = 200
 FREQUENCY_STEPS = {

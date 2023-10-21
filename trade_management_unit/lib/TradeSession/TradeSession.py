@@ -162,10 +162,9 @@ class TradeSession(metaclass=TradeSessionMeta):
             risk_manager = RiskManager()
             # !!!! Change implementtaion of teh following
             print("!!! Change Implimentation here !!!!")
-            quantity = risk_manager.get_quantity(action,market_price,instrument["support_price"],instrument["resistance_price"])
-            frictional_losses = risk_manager.get_frictional_losses(self.kite_tick_handlertrade_type, price, quantity, is_buy)
+            quantity,frictional_losses = risk_manager.get_quantity_and_frictional_losses(action,market_price,instrument["support_price"],instrument["resistance_price"],self.user_id)
             print("!!! Order from Zerodha",trading_symbol,action)
-            kite_order_id = self.place_order_on_kite(trading_symbol,qunatity,action,instrument["support_price"],instrument["resistance_price"],instrument["market_price"])
+            kite_order_id = self.place_order_on_kite(trading_symbol,quantity,action,instrument["support_price"],instrument["resistance_price"],instrument["market_price"])
             order_id = Order.initiate_order( action, instrument["id"], trade_id, self.dummy, kite_order_id, frictional_losses, self.user_id, qunatity)
             return trade_id
         return None
