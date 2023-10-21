@@ -48,13 +48,24 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
                         "trade_freqency" : self.trade_freqency
                         }
                     print("Adding to eligible list",instrument)
+                    instrument["required_action"] = self.__get_required_actions__(instrument)
                     eligible_instruments.append(instrument)
             # Reformat eligible_instruments first and send array of objects
             self.add_tokens_to_subscribed_tracker_sessiosn(eligible_instruments)
             time.sleep(30)
             print("restrting Scan - ",counter)
 
-
+    def __get_required_actions__(self,instrument):
+        print("Check Volume COnstraints and also min ratio if needed ")
+        required_action =None
+        if (instrument["view"] == View.LONG):
+            required_action = OrderType.BUY.value
+        elif(instrument["view"] == View.SHORT):
+            required_action = OrderType.SELL.value
+        else:
+            required_action = None
+        return required_action
+    
     def add_tokens_to_subscribed_tracker_sessiosn(self,eligible_instruments):
         for identifier in self.trade_sessions:
             trade_session = self.trade_sessions[identifier]

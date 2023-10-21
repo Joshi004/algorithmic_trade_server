@@ -1,13 +1,35 @@
+from trade_management_unit.models.DummyUser import DummyUser
+from trade_management_unit.models.UserConfiguration import UserConfiguration
+from trade_management_unit.lib.Portfolio.Portfolio import Portfolio
 class RiskManager:
     def __init__(self):
         pass
 
-    def get_quantity(self,price):
-        return 1
+    def get_quantity(self,action,market_price,support_price,resistance_price,user_id):
+        unit_loss_potential =( market_price - support_price) if action == "buy" else (resistance_price-market_price) 
+        balance_amount = self.get_balance_amount(user_id)
+        risk_appetite  = self.get_risk_appetite(user_id)
+        risk_amount = risk_appetite/100 * balance_amount
+        quantity = risk_amount // unit_loss_potential
+        frictional_losses = self.get_frictional_losses("equity_intraday",market_price,quantity,action=="buy")
+        while(quantity>0):
+             if ((unit_loss_potential*quantity + frictional_losses) < risk_amount):
+                 break
+             else:
+                 quantity -= 1
+        return quantity
     
- 
+    def get_balance_amount(self, user_id):
+        if str(user_id).startswith("dummy"):
+            return DummyUser.get_attribute(user_id, "current_balance")
+        else:
+            return Portfolio().get_available_margin(user_id)
+
+    def get_risk_appetite(self,user_id):
+        UserConfiguration.get_attribute(user_id,"risk_appetite")
+    
+
     def get_frictional_losses(trade_type, price, quantity, is_buy):
-        # Define the brokerage charges for different types of trades
         brokerage = {
             "equity_delivery": 0,
             "equity_intraday": min(20, 0.0003 * price * quantity),

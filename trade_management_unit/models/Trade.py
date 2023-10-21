@@ -22,7 +22,7 @@ class Trade(models.Model):
 
 
     @classmethod
-    def create_and_initiate_trade(cls, trading_symbol, action, trade_session_id, user_id, dummy):
+    def fetch_or_initiate_trade(cls, trading_symbol, action, trade_session_id, user_id, dummy):
         try:
             # Try to find an existing active trade with the same parameters
             trade = cls.objects.get(

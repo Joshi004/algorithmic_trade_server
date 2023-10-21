@@ -158,11 +158,11 @@ class TradeSession(metaclass=TradeSessionMeta):
         action = instrument["required_action"]
         if action:
             market_price = instrument["market_price"]
-            trade_id = Trade.initiate_trade(trading_symbol, action, self.trade_session_id, self.user_id, self.dummy)
+            trade_id = Trade.fetch_or_initiate_trade(trading_symbol, action, self.trade_session_id, self.user_id, self.dummy)
             risk_manager = RiskManager()
             # !!!! Change implementtaion of teh following
             print("!!! Change Implimentation here !!!!")
-            quantity = risk_manager.get_quantity(market_price)
+            quantity = risk_manager.get_quantity(action,market_price,instrument["support_price"],instrument["resistance_price"])
             frictional_losses = risk_manager.get_frictional_losses(self.kite_tick_handlertrade_type, price, quantity, is_buy)
             print("!!! Order from Zerodha",trading_symbol,action)
             kite_order_id = self.place_order_on_kite(trading_symbol,qunatity,action,instrument["support_price"],instrument["resistance_price"],instrument["market_price"])
@@ -186,6 +186,8 @@ class TradeSession(metaclass=TradeSessionMeta):
                       }
             resposne  = Portfolio().place_order(params)
             return resposne.trade_id
+        else:
+            return self.user_id+"__"+str(datetime.now)
 
 
     def __add_instrument_actions__(self,instrument):
@@ -218,8 +220,7 @@ class TradeSession(metaclass=TradeSessionMeta):
             token = instrument["instrument_token"]
             symbol = instrument["trading_symbol"]
 
-            self.__add_instrument_actions__(instrument)
-            self.__process__instrument_actions__(instrument)
+            trade_id = self.__process__instrument_actions__(instrument)
             
             self.instruments[instrument['trading_symbol']] = instrument
             self.token_to_symbol_map[token] = symbol
