@@ -1,10 +1,11 @@
 import pandas as pd
 from datetime import datetime, timedelta
+from trade_management_unit.lib.Kite.KiteUser import KiteUser
 import requests
 
 class FetchData:
     def __init__(self):
-        pass
+        self.kite = KiteUser().get_instance()   
 
     def sanitize_data(self, data):
          # Remove leading and trailing spaces from column names
@@ -76,3 +77,8 @@ class FetchData:
         else:
             print(f"Failed to fetch data from NSE. Status code: {response.status_code}")
             return None
+
+
+    def fetch_data_from_zerodha(self,instrument_token,from_date,to_date,interval):
+        historical_data  = self.kite.historical_data(instrument_token,from_date,to_date,interval)
+        return historical_data

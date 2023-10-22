@@ -160,8 +160,6 @@ class TradeSession(metaclass=TradeSessionMeta):
             market_price = instrument["market_price"]
             trade_id = Trade.fetch_or_initiate_trade(trading_symbol, action, self.trade_session_id, self.user_id, self.dummy)
             risk_manager = RiskManager()
-            # !!!! Change implementtaion of teh following
-            print("!!! Change Implimentation here !!!!")
             quantity,frictional_losses = risk_manager.get_quantity_and_frictional_losses(action,market_price,instrument["support_price"],instrument["resistance_price"],self.user_id)
             print("!!! Order from Zerodha",trading_symbol,action)
             kite_order_id = self.place_order_on_kite(trading_symbol,quantity,action,instrument["support_price"],instrument["resistance_price"],instrument["market_price"])
@@ -220,6 +218,7 @@ class TradeSession(metaclass=TradeSessionMeta):
             symbol = instrument["trading_symbol"]
 
             trade_id = self.__process__instrument_actions__(instrument)
+            self.scanning_algo_instance.mark_into_scan_records(trade_id,instrument)
             
             self.instruments[instrument['trading_symbol']] = instrument
             self.token_to_symbol_map[token] = symbol
@@ -229,7 +228,6 @@ class TradeSession(metaclass=TradeSessionMeta):
         instrument_tokens = [instrument['instrument_token'] for instrument in new_instruments]
         self.ws.subscribe(instrument_tokens)
         # self.ws.set_mode(self.ws.MODE_LTP, instrument_tokens)
-
 
 
     def remove_tokens(self, old_instruments):

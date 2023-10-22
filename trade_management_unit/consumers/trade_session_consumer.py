@@ -25,7 +25,7 @@ class TradeSessionConsumer(AsyncWebsocketConsumer):
 
         
         # Connect tO Clent established 
-        trading_freq = "day"
+        trading_freq = "15minute"
         user_id = "joshi004"
         
         kite_tick_handler =  KiteTickhandler()

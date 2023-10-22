@@ -7,12 +7,13 @@ from trade_management_unit.lib.Algorithms.TrackerAlgos.TrackerAlgoFactory import
 from trade_management_unit.lib.Algorithms.ScannerAlgos.ScannerSingletonMeta import ScannerSingletonMeta
 from trade_management_unit.lib.Instruments.Instruments import Instruments
 from trade_management_unit.Constants.TmuConstants import *
+from trade_management_unit.models.AlgoUdtsScanRecord import AlgoUdtsScanRecord
 from channels.db import database_sync_to_async
 
 import pandas as pd
 import concurrent.futures
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 class UDTSScanner(metaclass=ScannerSingletonMeta):
 
     def __init__(self,trade_freq,tracking_algorithm):
@@ -36,7 +37,9 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
             for instrument in all_instruments:
                 symbol = instrument["trading_symbol"]
                 token = instrument["instrument_token"]
-                is_eligible,eligibility_obj = self.is_eligible(symbol)
+                is_eligible,eligibility_obj = self.is_eligible(symbol,token)
+                # !!! Use proper logic here
+                print("!!!! Use proper logic here")
                 if ( 1 or is_eligible):
                     symbol_data_points = eligibility_obj[self.trade_freqency]["chart"]
                     instrument = {
@@ -45,7 +48,12 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
                         "view" : eligibility_obj["effective_trend"],
                         "support_price" : symbol_data_points.trading_pair["support"] or 1,
                         "resistance_price" : symbol_data_points.trading_pair["resistance"] or 1000,
-                        "trade_freqency" : self.trade_freqency
+                        "support_strength" : symbol_data_points.trading_pair["support_strength"] or 0,
+                        "resistance_strength" : symbol_data_points.trading_pair["resistance_strength"] or 0,
+                        "trade_freqency" : self.trade_freqency,
+                        "movement_potential" : symbol_data_points.average_candle_span,
+                        "volume" : symbol_data_points.volume
+
                         }
                     print("Adding to eligible list",instrument)
                     instrument["required_action"] = self.__get_required_actions__(instrument)
@@ -54,6 +62,20 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
             self.add_tokens_to_subscribed_tracker_sessiosn(eligible_instruments)
             time.sleep(30)
             print("restrting Scan - ",counter)
+
+    def mark_into_scan_records(self,trade_id,instrument):
+    #    breakpoint()
+       AlgoUdtsScanRecord.add_entry(
+            market_price='123.45',
+            support_price=instrument["support_price"],
+            resistence_price=instrument["resistence_price"],
+            support_strength=instrument["support_strength"],
+            resistence_strength=instrument["resistence_strength"],
+            effective_trend=instrument["view"],
+            trade_candle_interval=instrument["trade_freqency"],
+            movement_potential=instrument["movement_potential"],
+            trade=trade_id
+        )
 
     def __get_required_actions__(self,instrument):
         print("Check Volume COnstraints and also min ratio if needed ")
@@ -99,19 +121,47 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
 
         
 
+    def __fetch_hostorical_data(self, symbol, interval, number_of_candles, trade_date=None):
+        # Initialize end_date and historical_data
+        end_date = trade_date if trade_date else datetime.now()
+        historical_data = []
 
-    def __fetch_hostorical_data(self, symbol, interval, number_of_candles,trade_date=None):
-        #Check of 1 minute and 1 day and 15 min
-        # fetch From NSE
-        end_date = trade_date if trade_date else datetime.today()
-        if "minute" in interval:
-            minutes = int(interval.replace("minute", ""))
-            start_date = end_date - timedelta(minutes=minutes*number_of_candles)
-        elif interval == "day":
-            start_date = end_date - timedelta(days=number_of_candles)
-        # hostorical_data = FetchData().fetch_from_nse(symbol, start_date, end_date)
-        hostorical_data = FetchData().fetch_candle_data(symbol, start_date, end_date)
-        return hostorical_data
+        while len(historical_data) < number_of_candles:
+            # Skip non-trading hours (before 9:15 or after 15:30)
+            if end_date.time() < time(9, 15) or end_date.time() > time(15, 30):
+                # Move to the previous trading day
+                end_date = end_date.replace(hour=15, minute=30) - timedelta(days=1)
+
+            # Skip weekends (Saturday and Sunday)
+            while end_date.weekday() >= 5:
+                # Move to the previous day
+                end_date -= timedelta(days=1)
+
+            # Calculate start_date based on the current length of historical_data
+            if "minute" in interval:
+                minutes = int(interval.replace("minute", ""))
+                start_date = end_date - timedelta(minutes=minutes*(number_of_candles))
+            elif interval == "day":
+                start_date = end_date - timedelta(days=number_of_candles)
+
+            print("----- Getting Historical data Symbol: ", symbol, " Total CAndles : ",len(historical_data),"  Time Diff: ",end_date-start_date," From: ",end_date," To: ",start_date)
+            new_data = FetchData().fetch_data_from_zerodha(symbol, start_date, end_date,interval)
+
+            # Prepend new_data to historical_data
+            historical_data = new_data + historical_data
+
+            # Update end_date for the next iteration
+            if historical_data:
+                end_date = start_date
+            else:
+                print("No data fetched. Moving to the previous trading period.")
+                end_date -= timedelta(minutes=minutes) if "minute" in interval else timedelta(days=1)
+
+        # If we fetched more data than needed, trim the excess
+        if len(historical_data) > number_of_candles:
+            historical_data = historical_data[:number_of_candles]
+        return historical_data
+
 
     def __get_effective_trend(slef,eligibility_obj):
         trends = set()
@@ -129,7 +179,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
         return float(average_candle_span)
     # This is causing deflection point strength to go NAN check this 
 
-    def is_eligible(self,symbol):
+    def is_eligible(self,symbol,token):
         trade_freq =  self.trade_freqency
         frq_steps = FREQUENCY_STEPS[trade_freq]
         number_of_candles = NUM_CANDLES_FOR_TREND_ANALYSIS
@@ -138,7 +188,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
         for index in range(0,len(frq_steps)):
             freq = frq_steps[index]
             eligibility_obj[freq] = {}
-            eligibility_obj[freq]["data"] = self.__fetch_hostorical_data(symbol,frq_steps[index],number_of_candles)
+            eligibility_obj[freq]["data"] = self.__fetch_hostorical_data(token,frq_steps[index],number_of_candles)
             eligibility_obj[freq]["chart"] = CandleChart(symbol,frq_steps[index],eligibility_obj[freq]["data"])
             eligibility_obj[freq]["chart"].set_trend_and_deflection_points()
     
@@ -160,7 +210,8 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
             
             
     def get_udts_eligibility(self,symbol,trade_freq):
-        is_tradable,eligibility_obj =  self.is_eligible(symbol,trade_freq)
+        print("get token and send hereh !!! nOt Working !!!!")
+        # is_tradable,eligibility_obj =  self.is_eligible(symbol,trade_freq)
         result = eligibility_obj[trade_freq]["chart"]
         response_obj = {
             "data":{

@@ -1,5 +1,6 @@
 from trade_management_unit.lib.Algorithms.ScannerAlgos.UDTS.Candle import Candle
 import pandas as pd
+from trade_management_unit.lib.Trade.trade import Trade
 class CandleChart:
     def __init__(self,symbol,trade_freq,price_list):
         self.price_list = price_list
@@ -11,8 +12,22 @@ class CandleChart:
         self.symbol = symbol
         self.trading_pair= {}
         self.valid_pairs=None
-        self.market_price = price_list[-1]["open"]
-        
+        self.market_price = None
+        self.volume = None
+        self.instrument_token = None
+        self.set_market_price_and_volume(symbol,"nse")
+    
+    def set_market_price_and_volume(self,symbol,exchange):
+        params = {
+            "symbol" : symbol,
+            "exchange" : exchange
+        }
+        result  = Trade().get_quotes(params)   
+        self.market_price = result["data"]["NSE:"+(self.symbol).upper()]["last_price"]
+        self.volume = result["data"]["NSE:"+(self.symbol).upper()]["volume"]
+        self.instrument_token = result["data"]["NSE:"+(self.symbol).upper()]["instrument_token"]
+
+
     def __add_deflection_point(self,direction, price, stoping_potential, distance, frequency, progression_potential,deflection_index,reversal_index):
         self.deflection_points.append({
             "direction" : direction, # direction: up or down, indicating the direction of the new trend
@@ -27,7 +42,6 @@ class CandleChart:
         })
 
     def set_trend_and_deflection_points(self):
-
         # This function returns the trend and the deflection points of a price list based on candlestick charting
         candle = Candle(self.price_list[0])
         swing_max = candle.high
@@ -143,7 +157,15 @@ class CandleChart:
     
 
     def set_trading_levels_and_ratios(self,min_reward = 2):
-        trading_pair = {"support":None,"resistance":None,"reward_risk_ratio":0,"strength":0}
+        trading_pair = {"support":None,
+                        "resistance":None,
+                        "reward_risk_ratio":0,
+                        "support":None,
+                        "resistance":None,
+                        "resistance_strength":None,
+                        "support_strength":None,
+                        "strength":0}
+        
         def_list = self.deflection_points
         price = self.market_price
         valid_pairs = []
@@ -165,6 +187,8 @@ class CandleChart:
                     eq_strength = resist["strength"] + support["strength"]
                     valid_pairs.append({"support":support["price"],
                                         "resistance":resist["price"],
+                                        "resistance_strength":resist["strength"],
+                                        "support_strength":support["strength"],
                                         "strength" : eq_strength})
                 
         
