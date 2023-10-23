@@ -3,6 +3,7 @@ from enum import Enum
 from decimal import Decimal, ROUND_DOWN
 from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from trade_management_unit.models.Trade import Trade
+from trade_management_unit.Constants.TmuConstants import *
 
 class Trend(Enum):
     BULLISH = "bullish"
@@ -23,10 +24,11 @@ class AlgoUdtsScanRecord(models.Model):
     resistance_price = models.DecimalField(max_digits=10, decimal_places=2)
     support_strength = models.DecimalField(max_digits=10, decimal_places=4)
     resistance_strength = models.DecimalField(max_digits=10, decimal_places=4)
+    TREND_CHOICES = [(trend, trend) for trend in Trends]
     effective_trend = models.CharField(
         max_length=20,
-        choices=Trend.choices(),
-        default=Trend.BULLISH.value,
+        choices=Trends.choices(),
+        default=Trends.UPTREND,
     )
     trade_candle_interval = models.CharField(max_length=255)
     movement_potential = models.DecimalField(max_digits=10, decimal_places=2)
@@ -43,8 +45,8 @@ class AlgoUdtsScanRecord(models.Model):
         movement_potential = Decimal(movement_potential).quantize(Decimal('.01'), rounding=ROUND_DOWN)
 
         # Validate the trend value
-        if effective_trend not in Trend._value2member_map_:
-            raise ValidationError(f"Invalid trend value: {effective_trend}. Expected one of: {', '.join(Trend._value2member_map_.keys())}")
+        if effective_trend not in Trends._value2member_map_:
+            raise ValidationError(f"Invalid trend value: {effective_trend}. Expected one of: {', '.join(Trends._value2member_map_.keys())}")
 
         # Get the Trade instance
         try:
