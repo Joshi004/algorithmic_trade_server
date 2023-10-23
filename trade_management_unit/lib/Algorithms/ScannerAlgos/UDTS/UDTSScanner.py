@@ -45,14 +45,15 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
                     instrument = {
                         "trading_symbol":symbol,
                         "instrument_token":token,
-                        "view" : eligibility_obj["effective_trend"],
+                        "effective_trend" : eligibility_obj["effective_trend"],
                         "support_price" : symbol_data_points.trading_pair["support"] or 1,
                         "resistance_price" : symbol_data_points.trading_pair["resistance"] or 1000,
                         "support_strength" : symbol_data_points.trading_pair["support_strength"] or 0,
                         "resistance_strength" : symbol_data_points.trading_pair["resistance_strength"] or 0,
                         "trade_freqency" : self.trade_freqency,
                         "movement_potential" : symbol_data_points.average_candle_span,
-                        "volume" : symbol_data_points.volume
+                        "volume" : symbol_data_points.volume,
+                        "market_price" : symbol_data_points.market_price
 
                         }
                     print("Adding to eligible list",instrument)
@@ -64,25 +65,25 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
             print("restrting Scan - ",counter)
 
     def mark_into_scan_records(self,trade_id,instrument):
-    #    breakpoint()
+       breakpoint()
        AlgoUdtsScanRecord.add_entry(
-            market_price='123.45',
+            market_price=instrument["market_price"],
             support_price=instrument["support_price"],
-            resistence_price=instrument["resistence_price"],
+            resistance_price=instrument["resistance_price"],
             support_strength=instrument["support_strength"],
-            resistence_strength=instrument["resistence_strength"],
-            effective_trend=instrument["view"],
+            resistance_strength=instrument["resistance_strength"],
+            effective_trend=instrument["effective_trend"].value,
             trade_candle_interval=instrument["trade_freqency"],
             movement_potential=instrument["movement_potential"],
-            trade=trade_id
+            trade_id=trade_id
         )
 
     def __get_required_actions__(self,instrument):
         print("Check Volume COnstraints and also min ratio if needed ")
         required_action =None
-        if (instrument["view"] == View.LONG):
+        if (instrument["effective_trend"] == Trends.UPTREND):
             required_action = OrderType.BUY.value
-        elif(instrument["view"] == View.SHORT):
+        elif(instrument["effective_trend"] == Trends.DOWNTREND):
             required_action = OrderType.SELL.value
         else:
             required_action = None
@@ -168,7 +169,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
         for frequency in eligibility_obj:
             chart = eligibility_obj[frequency]["chart"]
             trends.add(chart.trend)
-        effective_ternd = trends.pop() if len(trends) == 1 else None
+        effective_ternd = trends.pop() if len(trends) == 1 else Trends.SIDETREND
         return effective_ternd
     
     def __get_deflection_points_scope(self,base_chart):
@@ -199,10 +200,10 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
         eligibility_obj["effective_trend"] = effective_trend
         
         reward_risk_ratio = eligibility_obj[trade_freq]["chart"].trading_pair["reward_risk_ratio"] if "reward_risk_ratio" in eligibility_obj[trade_freq]["chart"].trading_pair else 0
-        if(effective_trend == "BULLISH"):
+        if(effective_trend == Trends.UPTREND):
             if(reward_risk_ratio > 2 ):
                 return True, eligibility_obj
-        elif(effective_trend == "BEARISH"):
+        elif(effective_trend == Trends.DOWNTREND):
             if(reward_risk_ratio < 0.5 ):
                 return True, eligibility_obj
         return False,eligibility_obj

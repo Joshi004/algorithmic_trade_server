@@ -1,6 +1,7 @@
 from trade_management_unit.lib.Algorithms.ScannerAlgos.UDTS.Candle import Candle
 import pandas as pd
 from trade_management_unit.lib.Trade.trade import Trade
+from trade_management_unit.Constants.TmuConstants import *
 class CandleChart:
     def __init__(self,symbol,trade_freq,price_list):
         self.price_list = price_list
@@ -118,7 +119,7 @@ class CandleChart:
         #Set last progression Potential and trend
         self.deflection_points[-1]["progression_potential"] = self.market_price - self.deflection_points[-1]["price"]        
         # Use Constants File for this 
-        self.trend = "BULLISH" if is_bullish_trend else "BEARISH"
+        self.trend = Trends.UPTREND if is_bullish_trend else Trends.DOWNTREND
 
     
     def normalise_deflection_points(self,scope_range):
@@ -206,9 +207,9 @@ class CandleChart:
         product_of_strengts = resist["strength"] * support["strength"]
         if (product_of_strengts == 0):
             return False
-        if (trend == "BULLISH" and min_reward < top/bottom < 5 * min_reward ):
+        if (trend == Trends.UPTREND and min_reward < top/bottom < 5 * min_reward ):
             return True
-        if (trend == "BEARISH"  and min_reward < bottom/top < 5 * min_reward):
+        if (trend == Trends.DOWNTREND  and min_reward < bottom/top < 5 * min_reward):
             return True
         return False
                     

@@ -11,6 +11,16 @@ class View(Enum):
     LONG = "long"
     SHORT = "short"
 
+class Trends(Enum):
+    """An enum to represent the trend of a stock."""
+    UPTREND = "uptrend"
+    DOWNTREND = "downtrend"
+    SIDETREND = "sidetrend"
+    
+    @classmethod
+    def choices(cls):
+        return [(member.value, member.value) for member in cls]
+
 class OrderType(Enum):
     """An enum to represent the order type of the trade."""
     BUY = "buy"
