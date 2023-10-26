@@ -12,6 +12,7 @@ class RiskManager:
         risk_appetite  = self.get_risk_appetite(user_id)
         risk_amount = risk_appetite/100 * balance_amount
         quantity = risk_amount // unit_loss_potential
+        
         frictional_losses = self.get_frictional_losses("equity_intraday",market_price,quantity,action=="buy")
         while(quantity>0):
              if ((unit_loss_potential*quantity + frictional_losses) < risk_amount):

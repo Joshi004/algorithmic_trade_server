@@ -1,33 +1,22 @@
 from trade_management_unit.lib.Algorithms.ScannerAlgos.UDTS.Candle import Candle
 import pandas as pd
-from trade_management_unit.lib.Trade.trade import Trade
 from trade_management_unit.Constants.TmuConstants import *
 class CandleChart:
-    def __init__(self,symbol,trade_freq,price_list):
+    def __init__(self,token,symbol,market_price,trade_volume,last_quantity,trade_freq,price_list):
         self.price_list = price_list
-        self.trend = None
+        self.market_price = market_price
+        self.last_quantity = last_quantity
+        self.volume = trade_volume
+        self.instrument_token = token
         self.interval = trade_freq
         self.deflection_points = []
+        self.trading_pair= {}
+        self.trend = None
         self.average_candle_span = None
         self.rounding_factor = None
         self.symbol = symbol
-        self.trading_pair= {}
         self.valid_pairs=None
-        self.market_price = None
-        self.volume = None
-        self.instrument_token = None
-        self.set_market_price_and_volume(symbol,"nse")
     
-    def set_market_price_and_volume(self,symbol,exchange):
-        params = {
-            "symbol" : symbol,
-            "exchange" : exchange
-        }
-        result  = Trade().get_quotes(params)   
-        self.market_price = result["data"]["NSE:"+(self.symbol).upper()]["last_price"]
-        self.volume = result["data"]["NSE:"+(self.symbol).upper()]["volume"]
-        self.instrument_token = result["data"]["NSE:"+(self.symbol).upper()]["instrument_token"]
-
 
     def __add_deflection_point(self,direction, price, stoping_potential, distance, frequency, progression_potential,deflection_index,reversal_index):
         self.deflection_points.append({

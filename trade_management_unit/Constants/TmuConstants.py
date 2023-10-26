@@ -42,6 +42,8 @@ class TradeType(Enum):
 PI = 3.14
 GREETING = "Hello, world!"
 TRADE_TYPE = {"intraday":"equity_intraday"}
+DEFAULT_EXCHANGE = "NSE"
+TRADE_THRESHHOLD_PER_MINUTE = 100000 
 FREQUENCY = ["minute","3minute","5minute","10minute","15minute","30minute","60minute","day"]
 NUM_CANDLES_FOR_TREND_ANALYSIS = 200
 FREQUENCY_STEPS = {

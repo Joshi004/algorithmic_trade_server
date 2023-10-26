@@ -2,9 +2,11 @@ import pandas as pd
 from datetime import datetime, timedelta
 from trade_management_unit.lib.Kite.KiteUser import KiteUser
 import requests
+import logging
 
 class FetchData:
     def __init__(self):
+        logging.getLogger("urllib3").setLevel(logging.WARNING)
         self.kite = KiteUser().get_instance()   
 
     def sanitize_data(self, data):

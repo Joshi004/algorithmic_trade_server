@@ -39,53 +39,19 @@ class TradeSession(metaclass=TradeSessionMeta):
         self.scanning_algo_instance = None
         self.tracking_algo_instance = None
         self.dummy = dummy
+        self.trade_session_id =  self.get_trade_session_id()
         self.__instanciate_tracking_algo__()
         self.__instanciate_scanning_algo__()
-        self.trade_session_id = self.get_trade_session_id()
     
     def __str__(self):
         identifier =  self.user_id + "__" + self.scanning_algo_name + "__" + self.tracking_algo_name + "__" + self.trading_freq
         return identifier
 
+
     def get_trade_session_id(self):
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            future = executor.submit(database_sync_to_async(self.fetch_or_create_trade_session))
-            result = future.result()
-        self.scanning_algo_instance.scan_and_add_instruments_for_tracking(result)
-    
-
-    def fetch_or_create_trade_session(self):
-            scanning_algo_name = self.scanning_algo_name
-            tracking_algo_name = self.tracking_algo_name
-            trading_freq = self.trading_freq
-            dummy = self.dummy
-            user_id = self.user_id
-
-            try:
-                trade_session = TradeSessionDB.objects.get(
-                    user_id=user_id,
-                    scanning_algorithm__name=scanning_algo_name,
-                    tracking_algorithm__name=tracking_algo_name,
-                    trading_frequency=trading_freq
-                )
-            except TradeSessionDB.DoesNotExist:
-                # If no matching trade session is found, create a new one
-                trade_session = TradeSessionDB(
-                    user_id=user_id,
-                    scanning_algorithm__name=scanning_algo_name,
-                    tracking_algorithm__name=tracking_algo_name,
-                    trading_frequency=trading_freq,
-                    is_active=True,  # Set is_active to True
-                    started_at=datetime.now(),  # Set started_at to current timestamp
-                    closed_at=None,  # Set closed_at to None
-                    dummy=dummy  # Set dummy based on the parameter
-                )
-                trade_session.save()  # Save the new trade session to the database
-
-
-            return trade_session.id
-
-
+        trade_session_id = TradeSessionDB.fetch_or_create_trade_session(self.scanning_algo_name,self.tracking_algo_name,self.trading_freq,self.dummy,self.user_id)
+        breakpoint()
+        return trade_session_id
         
     
     def __instanciate_scanning_algo__(self):
@@ -111,12 +77,9 @@ class TradeSession(metaclass=TradeSessionMeta):
             "trade_freqency" : self.instruments[symbol]["trade_freqency"],
             "indicator_data" : tick["indicator_data"],
             "market_data" : {
-                "last_price" : tick["last_price"],
+                "market_price" : tick["last_price"],
                 "last_quantity" : tick["last_quantity"],
-                "average_price" : tick["average_price"],
                 "volume" : tick["volume"],
-                "buy_quantity" : tick["buy_quantity"],
-                "sell_quantity" : tick["sell_quantity"],
             }
         }
         instrument_obj["required_action"] = self.tracking_algo_instance.get_required_action(instrument_obj)
@@ -157,7 +120,7 @@ class TradeSession(metaclass=TradeSessionMeta):
         trading_symbol = instrument["trading_symbol"]
         action = instrument["required_action"]
         if action:
-            market_price = instrument["market_price"]
+            market_price = instrument["market_data"]["market_price"]
             trade_id = Trade.fetch_or_initiate_trade(trading_symbol, action, self.trade_session_id, self.user_id, self.dummy)
             risk_manager = RiskManager()
             quantity,frictional_losses = risk_manager.get_quantity_and_frictional_losses(action,market_price,instrument["support_price"],instrument["resistance_price"],self.user_id)
@@ -218,7 +181,9 @@ class TradeSession(metaclass=TradeSessionMeta):
             symbol = instrument["trading_symbol"]
 
             trade_id = self.__process__instrument_actions__(instrument)
-            self.scanning_algo_instance.mark_into_scan_records(trade_id,instrument)
+            
+            if(trade_id):
+                self.scanning_algo_instance.mark_into_scan_records(trade_id,instrument)
             
             self.instruments[instrument['trading_symbol']] = instrument
             self.token_to_symbol_map[token] = symbol

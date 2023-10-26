@@ -14,7 +14,7 @@ from trade_management_unit.lib.Instruments.historical_data.historical_data impor
 
 def update_instruments(request,*args,**kwvrgs):
     query_paramas  =  request.GET
-    instruments = Instruments(query_paramas)
+    instruments = Instruments()
     instruments.update_instruments()
     return JsonResponse({},status=200, content_type='application/json')
 

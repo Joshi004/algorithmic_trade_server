@@ -11,7 +11,9 @@ from enum import Enum
 class Communicator:
     def __init__(self):
         logging.basicConfig(level=logging.DEBUG)
-        self.loop = asyncio.get_event_loop()
+        # self.loop = asyncio.get_event_loop()
+        self.loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self.loop)
         pass
     
     def make_json_serializable(self,data):

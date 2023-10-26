@@ -28,3 +28,11 @@ class Algorithm(models.Model):
 
     def __str__(self):
         return self.name
+    
+
+    @classmethod
+    def get_id_by_name(cls, name):
+        try:
+            return cls.objects.get(name=name).id
+        except cls.DoesNotExist:
+            return None

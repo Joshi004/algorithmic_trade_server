@@ -3,7 +3,7 @@ from django_mysql.models import EnumField
 from trade_management_unit.models.Algorithm import Algorithm
 from trade_management_unit.models.Algorithm import AlgorithmType
 from trade_management_unit.Constants.TmuConstants import FREQUENCY  # assuming constants.py is in the same directory
-
+from datetime import datetime
 class TradeSession(models.Model):
     class Meta:
         db_table = "trade_sessions"
@@ -14,7 +14,7 @@ class TradeSession(models.Model):
             models.Index(fields=['trading_frequency']),
         ]
   
-    id = models.CharField(auto_created=True, primary_key=True, blank=False, max_length=64,) 
+    id = models.BigAutoField(auto_created=True, primary_key=True, blank=False, max_length=64,) 
     is_active = models.BooleanField(default=True)
     started_at = models.DateTimeField(blank=False)
     closed_at = models.DateTimeField(blank=True, null=True)
@@ -25,3 +25,37 @@ class TradeSession(models.Model):
 
     TRADING_FREQUENCY_CHOICES = [(freq, freq) for freq in FREQUENCY]
     trading_frequency = EnumField(choices=TRADING_FREQUENCY_CHOICES, default="10minute")
+
+    @classmethod
+    def fetch_or_create_trade_session(cls, scanning_algo_name, tracking_algo_name, trading_freq, dummy, user_id):
+        scanning_algo_id = Algorithm.get_id_by_name(scanning_algo_name)
+        tracking_algo_id = Algorithm.get_id_by_name(tracking_algo_name)
+
+        if scanning_algo_id is None or tracking_algo_id is None:
+            # Handle the case when the algorithm name does not exist
+            return None
+
+        try:
+            trade_session = cls.objects.get(
+                user_id=user_id,
+                scanning_algorithm_id=scanning_algo_id,
+                tracking_algorithm_id=tracking_algo_id,
+                trading_frequency=trading_freq
+            )
+        except cls.DoesNotExist:
+            # If no matching trade session is found, create a new one
+            trade_session = cls(
+                user_id=user_id,
+                scanning_algorithm_id=scanning_algo_id,
+                tracking_algorithm_id=tracking_algo_id,
+                trading_frequency=trading_freq,
+                is_active=True,  # Set is_active to True
+                started_at=datetime.now(),  # Set started_at to current timestamp
+                closed_at=None,  # Set closed_at to None
+                dummy=dummy  # Set dummy based on the parameter
+            )
+            trade_session.save()  # Save the new trade session to the database
+
+        return trade_session.id
+
+

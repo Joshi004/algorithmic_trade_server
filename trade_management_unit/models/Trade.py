@@ -8,7 +8,7 @@ class Trade(models.Model):
     class Meta:
         db_table = "trades"
   
-    id = models.CharField(auto_created=True, primary_key=True, blank=False, max_length=64, default="") 
+    id = models.BigAutoField(auto_created=True, primary_key=True, blank=False, max_length=64, default="") 
     is_active = models.BooleanField(default=True)
     started_at = models.DateTimeField(blank=False)
     closed_at = models.DateTimeField(blank=True, null=True)

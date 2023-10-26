@@ -8,6 +8,7 @@ from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 from trade_management_unit.models.Instrument import Instrument
 from trade_management_unit.lib.Kite.KiteTickhandler import KiteTickhandler
+import threading
 
 from trade_management_unit.lib.Algorithms.TrackerAlgos.TrackerAlgoFactory import TrackerAlgoFactory
 from trade_management_unit.lib.Algorithms.ScannerAlgos.ScannerAlgoFactory import ScannerAlgoFactory
@@ -27,26 +28,25 @@ class TradeSessionConsumer(AsyncWebsocketConsumer):
         # Connect tO Clent established 
         trading_freq = "15minute"
         user_id = "joshi004"
+        dummy = True
         
         kite_tick_handler =  KiteTickhandler()
         kit_connect_object = kite_tick_handler.get_kite_ticker_instance()
         kit_connect_object.connect(threaded=True)
-        trade_session = TradeSession(user_id,scanning_algorithm_name,tracking_algorithm_name,trading_freq,kite_tick_handler,kit_connect_object,True)
+        
+        trade_session_identifier =  user_id + "__" + scanning_algorithm_name + "__" + tracking_algorithm_name + "__" + trading_freq
+        
+        thread = threading.Thread(target=self.start_threaded_trade_session, args=(user_id,scanning_algorithm_name,tracking_algorithm_name,trading_freq,kite_tick_handler,kit_connect_object,dummy))
+        thread.start()
 
-        self.room_group_name = str(trade_session)
+        self.room_group_name = str(trade_session_identifier)
         await self._add_to_group_and_accept()
         
-        # tracker_algo_object = TrackerAlgoFactory().get_instance(self.room_group_name)
-        # tracker_algo_object.set_algorithm(tracker_object) #This will add indicators to the tracker_object
-        # tracker_object.get_kite_ticker_instance().connect()
-        
-        # scanner_object = ScannerAlgoFactory().get_scanner(scanning_algorithm_name)
-        # scanner_object.set_trade_frequency("day")
-        # scanner_object.set_tracker_session(tracker_object)
-        # scanner_object.scan_and_add_instruments_for_tracking()
-        # Call Sacnner FRom here with instrumnet list and ktU_object
         await self.send(text_data=json.dumps({"connected": True}))
 
+    def start_threaded_trade_session(self,user_id,scanning_algorithm_name,tracking_algorithm_name,trading_freq,kite_tick_handler,kit_connect_object,dummy):
+        TradeSession(user_id,scanning_algorithm_name,tracking_algorithm_name,trading_freq,kite_tick_handler,kit_connect_object,dummy)
+        
     async def disconnect(self, close_code):
         await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
 
