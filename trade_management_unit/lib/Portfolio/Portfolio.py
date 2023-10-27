@@ -21,7 +21,7 @@ class Portfolio:
             response = {"data":None, "status":"failure", "message":str(e)}
         return response
     
-    def get_available_margin(self):
+    def get_available_margin(self,user_id):
         try:
             margins = self.kite.margins()
             # Below response hirarchy might have issue please checkthe response first

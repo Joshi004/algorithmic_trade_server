@@ -50,7 +50,6 @@ class TradeSession(metaclass=TradeSessionMeta):
 
     def get_trade_session_id(self):
         trade_session_id = TradeSessionDB.fetch_or_create_trade_session(self.scanning_algo_name,self.tracking_algo_name,self.trading_freq,self.dummy,self.user_id)
-        breakpoint()
         return trade_session_id
         
     
@@ -123,10 +122,10 @@ class TradeSession(metaclass=TradeSessionMeta):
             market_price = instrument["market_data"]["market_price"]
             trade_id = Trade.fetch_or_initiate_trade(trading_symbol, action, self.trade_session_id, self.user_id, self.dummy)
             risk_manager = RiskManager()
-            quantity,frictional_losses = risk_manager.get_quantity_and_frictional_losses(action,market_price,instrument["support_price"],instrument["resistance_price"],self.user_id)
+            quantity,frictional_losses = risk_manager.get_quantity_and_frictional_losses(action,market_price,instrument["support_price"],instrument["resistance_price"],self.user_id,self.dummy)
             print("!!! Order from Zerodha",trading_symbol,action)
             kite_order_id = self.place_order_on_kite(trading_symbol,quantity,action,instrument["support_price"],instrument["resistance_price"],instrument["market_price"])
-            order_id = Order.initiate_order( action, instrument["id"], trade_id, self.dummy, kite_order_id, frictional_losses, self.user_id, qunatity)
+            order_id = Order.initiate_order( action, instrument["id"], trade_id, self.dummy, kite_order_id, frictional_losses, self.user_id, quantity)
             return trade_id
         return None
 

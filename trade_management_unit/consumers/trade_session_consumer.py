@@ -27,8 +27,9 @@ class TradeSessionConsumer(AsyncWebsocketConsumer):
         
         # Connect tO Clent established 
         trading_freq = "15minute"
-        user_id = "joshi004"
+        user_id = 1
         dummy = True
+        print("!!! Add UserS PRofile And also add cotracint in all tables using user id ")
         
         kite_tick_handler =  KiteTickhandler()
         kit_connect_object = kite_tick_handler.get_kite_ticker_instance()

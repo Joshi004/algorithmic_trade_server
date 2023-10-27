@@ -1,7 +1,7 @@
 from django.db import models
 from django.utils import timezone
 
-class DummyUser(models.Model):    
+class DummyAccount(models.Model):    
     id = models.AutoField(primary_key=True)
     user_id = models.CharField(max_length=200, db_index=True)  # Index added
     initial_balance = models.DecimalField(max_digits=10, decimal_places=2)
@@ -11,7 +11,7 @@ class DummyUser(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        db_table = "dummy_users"
+        db_table = "dummy_accounts"
 
     @classmethod
     def get_attribute(cls, username, attribute):

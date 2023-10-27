@@ -8,7 +8,7 @@ class Trade(models.Model):
     class Meta:
         db_table = "trades"
   
-    id = models.BigAutoField(auto_created=True, primary_key=True, blank=False, max_length=64) 
+    id = models.BigAutoField(auto_created=True, primary_key=True, blank=False) 
     is_active = models.BooleanField(default=True)
     started_at = models.DateTimeField(blank=False)
     closed_at = models.DateTimeField(blank=True, null=True)
@@ -24,7 +24,6 @@ class Trade(models.Model):
 
     @classmethod
     def __get_instrument_id__(cls, symbol):
-        breakpoint()
         instrument = Instrument.objects.get(trading_symbol=symbol,exchange=DEFAULT_EXCHANGE)
         return instrument.id
      
@@ -33,7 +32,6 @@ class Trade(models.Model):
     @classmethod
     def fetch_or_initiate_trade(cls, trading_symbol, action, trade_session_id, user_id, dummy):
         instrument_id = cls.__get_instrument_id__(trading_symbol)
-        breakpoint()
         try:
             # Try to find an existing active trade with the same parameters
             trade = cls.objects.get(
