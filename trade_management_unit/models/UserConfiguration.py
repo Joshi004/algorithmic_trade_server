@@ -5,7 +5,7 @@ class UserConfiguration(models.Model):
     id = models.AutoField(primary_key=True)
     user_id = models.IntegerField(unique=True)
     risk_appetite = models.FloatField(default=5, validators=[MinValueValidator(0), MaxValueValidator(100)])
-    risk_reward_ratio = models.FloatField(default=0.5)
+    reward_risk_ratio = models.FloatField(default=2)
 
     class Meta:
         db_table = "user_configurations"

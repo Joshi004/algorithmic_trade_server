@@ -13,27 +13,26 @@ class RiskManager:
         risk_amount = risk_appetite/100 * balance_amount
         quantity = risk_amount // unit_loss_potential
         
-        frictional_losses = self.get_frictional_losses("equity_intraday",market_price,quantity,action=="buy")
+        frictional_losses = self.get_frictional_losses(TRADE_TYPE["intraday"],market_price,quantity,action=="buy")
         while(quantity>0):
              if ((unit_loss_potential*quantity + frictional_losses) < risk_amount):
                  break
              else:
                  quantity -= 1
-                 frictional_losses = self.get_frictional_losses("equity_intraday",market_price,quantity,action=="buy")
+                 frictional_losses = self.get_frictional_losses(TRADE_TYPE["intraday"],market_price,quantity,action=="buy")
         return quantity,frictional_losses
     
     def get_balance_amount(self, user_id,dummy):
-        if str(user_id).startswith("dummy"):
-            breakpoint()
-            return DummyAccount.get_attribute(user_id, "current_balance")
+        if dummy:
+            return float(DummyAccount.get_attribute(user_id, "current_balance"))
         else:
             return Portfolio().get_available_margin()
 
     def get_risk_appetite(self,user_id):
-        UserConfiguration.get_attribute(user_id,"risk_appetite")
+        return UserConfiguration.get_attribute(user_id,"risk_appetite")
     
 
-    def get_frictional_losses(price, quantity, is_buy, trade_type = TradeType.EQUITY_INTRADAY ):
+    def get_frictional_losses(self,trade_type,price, quantity, is_buy):
         brokerage = {
             "equity_delivery": 0,
             "equity_intraday": min(20, 0.0003 * price * quantity),

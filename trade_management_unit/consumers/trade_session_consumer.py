@@ -27,7 +27,7 @@ class TradeSessionConsumer(AsyncWebsocketConsumer):
         
         # Connect tO Clent established 
         trading_freq = "15minute"
-        user_id = 1
+        user_id = "1"
         dummy = True
         print("!!! Add UserS PRofile And also add cotracint in all tables using user id ")
         

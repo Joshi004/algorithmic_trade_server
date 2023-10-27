@@ -3,6 +3,7 @@ from enum import Enum
 from decimal import Decimal, ROUND_DOWN
 from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from trade_management_unit.models.Trade import Trade
+from trade_management_unit.models.Instrument import Instrument  # Import the Instrument model
 from trade_management_unit.Constants.TmuConstants import *
 
 class Trend(Enum):
@@ -33,9 +34,12 @@ class AlgoUdtsScanRecord(models.Model):
     trade_candle_interval = models.CharField(max_length=255)
     movement_potential = models.DecimalField(max_digits=10, decimal_places=2)
     trade = models.ForeignKey('Trade', on_delete=models.CASCADE)
+    
+    # Add the instrument_id field as a foreign key to the Instrument model
+    instrument_id = models.ForeignKey('Instrument', on_delete=models.CASCADE)
 
     @classmethod
-    def add_entry(cls, *, market_price, support_price, resistance_price, support_strength, resistance_strength, effective_trend, trade_candle_interval, movement_potential, trade_id):
+    def add_entry(cls, *, market_price, support_price, resistance_price, support_strength, resistance_strength, effective_trend, trade_candle_interval, movement_potential, trade_id, instrument_id):  # Add instrument_id parameter
         # Round off the values to the desired format
         market_price = Decimal(market_price).quantize(Decimal('.01'), rounding=ROUND_DOWN)
         support_price = Decimal(support_price).quantize(Decimal('.01'), rounding=ROUND_DOWN)
@@ -53,6 +57,12 @@ class AlgoUdtsScanRecord(models.Model):
             trade = Trade.objects.get(pk=trade_id)
         except ObjectDoesNotExist:
             raise ValidationError(f"Trade with id {trade_id} does not exist.")
+        
+        # Get the Instrument instance
+        try:
+            instrument = Instrument.objects.get(pk=instrument_id)  # Get the Instrument instance using instrument_id
+        except ObjectDoesNotExist:
+            raise ValidationError(f"Instrument with id {instrument_id} does not exist.")
 
         # Create and save the new record
         record = cls(
@@ -64,7 +74,8 @@ class AlgoUdtsScanRecord(models.Model):
             effective_trend=effective_trend,
             trade_candle_interval=trade_candle_interval,
             movement_potential=movement_potential,
-            trade=trade
+            trade=trade,
+            instrument_id=instrument  # Add instrument to the record
         )
         
         record.full_clean()  # This will validate all fields and raise a ValidationError if any field is invalid

@@ -6,6 +6,7 @@ from trade_management_unit.lib.Algorithms.ScannerAlgos.UDTS.CandleChart import C
 from trade_management_unit.lib.Algorithms.TrackerAlgos.TrackerAlgoFactory import TrackerAlgoFactory
 from trade_management_unit.lib.Algorithms.ScannerAlgos.ScannerSingletonMeta import ScannerSingletonMeta
 from trade_management_unit.lib.Instruments.Instruments import Instruments
+from  trade_management_unit.models.Instrument import Instrument
 from trade_management_unit.lib.Trade.trade import Trade
 from trade_management_unit.Constants.TmuConstants import *
 from trade_management_unit.models.AlgoUdtsScanRecord import AlgoUdtsScanRecord
@@ -50,10 +51,12 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
                 is_eligible,eligibility_obj = self.is_eligible(symbol,token)
                 print("Instrument Number",instrument_counter)
                 if (is_eligible):
+                    instrument_id = Instrument.objects.get(trading_symbol=symbol,exchange=DEFAULT_EXCHANGE).id
                     eligible_instrument_counter += 1
                     print("FOUND NEXT ELIGIBLE -- - ",eligible_instrument_counter,symbol)
                     symbol_data_points = eligibility_obj[self.trade_freqency]["chart"]
                     instrument = {
+                        "instrument_id":instrument_id,
                         "trading_symbol":symbol,
                         "instrument_token":token,
                         "trade_freqency" : self.trade_freqency,
@@ -79,9 +82,11 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
             tm.sleep(30)
             print("restrting Scan - ",counter,"Last Scan Time",(scan_end_time - scan_start_time))
 
-    def mark_into_scan_records(self,trade_id,instrument):       
+    def mark_into_scan_records(self,trade_id,instrument):  
+  
        AlgoUdtsScanRecord.add_entry(
-            market_price=instrument["market_price"],
+            instrument_id = instrument["instrument_id"],
+            market_price=instrument["market_data"]["market_price"],
             support_price=instrument["support_price"],
             resistance_price=instrument["resistance_price"],
             support_strength=instrument["support_strength"],

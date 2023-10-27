@@ -15,7 +15,7 @@ class Order(models.Model):
     status = EnumField(choices=STATUS_CHOICES,default="pending")
     order_type = EnumField(choices=ORDER_TYPES)
     started_at = models.DateTimeField(default=datetime.now,blank=False)
-    closed_at = models.DateTimeField(blank=True,default=datetime.now)
+    closed_at = models.DateTimeField(blank=True,null=True,default=datetime.now)
     instrument =   models.ForeignKey("Instrument", verbose_name="instrument_id", on_delete=models.CASCADE)
     trade =   models.ForeignKey("Trade", verbose_name="trade_id", on_delete=models.CASCADE)
     dummy = models.BooleanField(default=False)
@@ -31,13 +31,13 @@ class Order(models.Model):
             raise ValidationError("kite_order_id can't be null unless it's a dummy order.")
 
     @classmethod
-    def initiate_order(cls, order_type, instrument, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity):
+    def initiate_order(cls, order_type, instrument_id, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity):
         order = cls(
             status='pending',
             order_type=order_type,
             started_at=datetime.now(),
             closed_at=None,
-            instrument_id=instrument,
+            instrument_id=instrument_id,
             trade_id=trade_id,
             dummy=dummy,
             kite_order_id=kite_order_id if not dummy else None,

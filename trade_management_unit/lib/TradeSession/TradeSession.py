@@ -14,6 +14,7 @@ from trade_management_unit.lib.TradeSession.TradeSessionMeta import TradeSession
 from  trade_management_unit.Constants.TmuConstants import *
 from  trade_management_unit.models.Trade import Trade
 from  trade_management_unit.models.Order import Order
+from  trade_management_unit.models.Instrument import Instrument
 from  trade_management_unit.lib.TradeSession.RiskManager import RiskManager
 from  trade_management_unit.lib.Portfolio.Portfolio import Portfolio
 
@@ -119,21 +120,23 @@ class TradeSession(metaclass=TradeSessionMeta):
         trading_symbol = instrument["trading_symbol"]
         action = instrument["required_action"]
         if action:
+            instrument_id = instrument["instrument_id"]
             market_price = instrument["market_data"]["market_price"]
-            trade_id = Trade.fetch_or_initiate_trade(trading_symbol, action, self.trade_session_id, self.user_id, self.dummy)
+            trade_id = Trade.fetch_or_initiate_trade(instrument_id, action, self.trade_session_id, self.user_id, self.dummy)
             risk_manager = RiskManager()
             quantity,frictional_losses = risk_manager.get_quantity_and_frictional_losses(action,market_price,instrument["support_price"],instrument["resistance_price"],self.user_id,self.dummy)
             print("!!! Order from Zerodha",trading_symbol,action)
-            kite_order_id = self.place_order_on_kite(trading_symbol,quantity,action,instrument["support_price"],instrument["resistance_price"],instrument["market_price"])
-            order_id = Order.initiate_order( action, instrument["id"], trade_id, self.dummy, kite_order_id, frictional_losses, self.user_id, quantity)
+            kite_order_id = self.place_order_on_kite(trading_symbol,quantity,action,instrument["support_price"],instrument["resistance_price"],instrument["market_data"]["market_price"])
+            order_id = Order.initiate_order( action, instrument_id, trade_id, self.dummy, kite_order_id, frictional_losses, self.user_id, quantity)
             return trade_id
         return None
 
 
     def place_order_on_kite(self,trading_symbol,qunatity,action,support_price,resistance_price,market_price):
-        stoploss = market_price - 0.99*support_price if action == OrderType.BUY else  - 1.01*support_price - market_price
+        stoploss = market_price - 0.99*support_price if action == OrderType.BUY else  1.01*support_price - market_price
         squareoff = 1.01*resistance_price - market_price if action == OrderType.BUY else market_price - 0.99*support_price
-        if (not self.dummy):   
+        if (not self.dummy): 
+            print("!!! Check Stoploss and squareoff values properly before this ")
             params = {"trading_symbol":trading_symbol,
                       "qunatity":qunatity,
                       "order_type":action,

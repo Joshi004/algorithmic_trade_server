@@ -22,16 +22,10 @@ class Trade(models.Model):
     max_price = models.FloatField(blank=True, null=True)
     min_price = models.FloatField(blank=True, null=True)
 
-    @classmethod
-    def __get_instrument_id__(cls, symbol):
-        instrument = Instrument.objects.get(trading_symbol=symbol,exchange=DEFAULT_EXCHANGE)
-        return instrument.id
-     
-    
+         
 
     @classmethod
-    def fetch_or_initiate_trade(cls, trading_symbol, action, trade_session_id, user_id, dummy):
-        instrument_id = cls.__get_instrument_id__(trading_symbol)
+    def fetch_or_initiate_trade(cls, instrument_id, action, trade_session_id, user_id, dummy):
         try:
             # Try to find an existing active trade with the same parameters
             trade = cls.objects.get(
@@ -55,7 +49,7 @@ class Trade(models.Model):
                 min_price=None
             )
             trade.save()
-        return trade
+        return trade.id
 
 
     @classmethod
@@ -70,6 +64,7 @@ class Trade(models.Model):
         if 'closed_at' in kwargs:
             trade.closed_at = kwargs['closed_at']
         trade.save()
+        return trade.id
 
 
     @classmethod
