@@ -98,7 +98,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
             movement_potential=instrument["movement_potential"],
             trade_id=trade_id,
             tracking_algo_name=tracking_algo_name,
-            volume=instrument["volume"]
+            volume=instrument["market_data"]["volume"]
         )
 
     def __get_required_actions__(self,instrument):
