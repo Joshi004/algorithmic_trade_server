@@ -51,6 +51,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
                 is_eligible,eligibility_obj = self.is_eligible(symbol,token)
                 print("Instrument Number",instrument_counter)
                 if (is_eligible):
+
                     instrument_id = Instrument.objects.get(trading_symbol=symbol,exchange=DEFAULT_EXCHANGE).id
                     eligible_instrument_counter += 1
                     print("FOUND NEXT ELIGIBLE -- - ",eligible_instrument_counter,symbol)
@@ -78,6 +79,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
                     self.add_tokens_to_subscribed_tracker_sessiosn([instrument])
                 else:
                     print(eligibility_obj["message"])
+                    print(f"Active Threads {threading.active_count()}")
             scan_end_time = datetime.now()
             tm.sleep(30)
             print("restrting Scan - ",counter,"Last Scan Time",(scan_end_time - scan_start_time))
@@ -165,7 +167,9 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
 
         print("History from data",len(stored_data))
 
-        while (len(historical_data) < number_of_candles+1 and end_date.year > 2019):
+        iteration_count = 1
+        while (len(historical_data) < number_of_candles+1 and iteration_count < 10 and end_date.year > 2019):
+            iteration_count += 1
             # Skip non-trading hours (before 9:15 or after 15:30)
             if end_date.time() < time(9, 15) or end_date.time() > time(15, 30):
                 # Move to the previous trading day
@@ -224,15 +228,18 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
 
     def is_eligible(self,symbol,token):
         eligibility_obj = {"message": str(symbol) + " : Eligible"}
-        trade_freq =  self.trade_freqency
-        frq_steps = FREQUENCY_STEPS[trade_freq]
-        number_of_candles = NUM_CANDLES_FOR_TREND_ANALYSIS
         quote  = Trade().get_quotes({"symbol" : symbol, "exchange" : DEFAULT_EXCHANGE})
         key = DEFAULT_EXCHANGE+":"+symbol.upper()
         if key not in quote["data"]:
             eligibility_obj["message"] = symbol + " : No Da ta Fetched from quotes"
             return False, eligibility_obj
+        token = quote["data"][key]["instrument_token"]
         quote_data = quote["data"][key]
+        trade_freq =  self.trade_freqency
+        frq_steps = FREQUENCY_STEPS[trade_freq]
+        number_of_candles = NUM_CANDLES_FOR_TREND_ANALYSIS
+
+
 
         # is_volume_eligible = self.get_volume_eligibility(quote_data)
         # if (not is_volume_eligible):
@@ -244,8 +251,8 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
             freq = frq_steps[index]
             eligibility_obj[freq] = {}
             eligibility_obj[freq]["data"] = self.__fetch_hostorical_data(symbol,token,frq_steps[index],number_of_candles)
-            if(len(eligibility_obj[freq]["data"]) == 0): #For This frequency no data was fetched
-                eligibility_obj["message"] = symbol + " : Empty Price List For " + str(freq)
+            if(len(eligibility_obj[freq]["data"]) < 200): #For This frequency no data was fetched
+                eligibility_obj["message"] = symbol + " : Not Enough Candles For " + str(freq)
                 return False , eligibility_obj
             eligibility_obj[freq]["chart"] = CandleChart(symbol,token,quote_data["last_price"],quote_data["volume"],quote_data["last_quantity"],frq_steps[index],eligibility_obj[freq]["data"])
             eligibility_obj[freq]["chart"].set_trend_and_deflection_points()

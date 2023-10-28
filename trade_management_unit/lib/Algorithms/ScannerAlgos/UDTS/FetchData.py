@@ -4,6 +4,7 @@ from trade_management_unit.lib.Kite.KiteUser import KiteUser
 import requests
 import logging
 
+import time
 class FetchData:
     def __init__(self):
         logging.getLogger("urllib3").setLevel(logging.WARNING)
@@ -81,6 +82,15 @@ class FetchData:
             return None
 
 
-    def fetch_data_from_zerodha(self,instrument_token,from_date,to_date,interval):
-        historical_data  = self.kite.historical_data(instrument_token,from_date,to_date,interval)
-        return historical_data
+    def fetch_data_from_zerodha(self, instrument_token, from_date, to_date, interval):
+        print("instrument_token", instrument_token)
+        attempts = 0
+        while attempts < 2:
+            try:
+                historical_data = self.kite.historical_data(instrument_token, from_date, to_date, interval)
+                return historical_data
+            except Exception as e:
+                print(f"An error occurred while fetching data: {e}. Attempt: {attempts+1}")
+                attempts += 1
+                time.sleep(1)  # wait for 1 second before next attempt
+        return []

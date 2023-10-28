@@ -11,7 +11,7 @@ class Order(models.Model):
 
     STATUS_CHOICES=[("pending","pending"),("rejected","rejected"),("exicuted","exicuted")]
     ORDER_TYPES=[("buy","buy"),("sell","sell")]
-    id = models.CharField(auto_created=True,primary_key=True,blank=False,max_length=64,default="")
+    id = models.BigAutoField(auto_created=True, primary_key=True, blank=False)
     status = EnumField(choices=STATUS_CHOICES,default="pending")
     order_type = EnumField(choices=ORDER_TYPES)
     started_at = models.DateTimeField(default=datetime.now,blank=False)
@@ -25,27 +25,22 @@ class Order(models.Model):
     quantity = models.IntegerField(default=1)
 
 
-    def clean(self):
-        # If it's not a dummy order, kite_order_id must not be null
-        if not self.dummy and self.kite_order_id is None:
-            raise ValidationError("kite_order_id can't be null unless it's a dummy order.")
-
     @classmethod
     def initiate_order(cls, order_type, instrument_id, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity):
+        kite_order_id = None if dummy else kite_order_id
         order = cls(
-            status='pending',
+            status='exicuted',
             order_type=order_type,
             started_at=datetime.now(),
-            closed_at=None,
+            closed_at=datetime.now(),
             instrument_id=instrument_id,
             trade_id=trade_id,
             dummy=dummy,
-            kite_order_id=kite_order_id if not dummy else None,
+            kite_order_id=kite_order_id,
             frictional_losses=frictional_losses,
             user_id=user_id,
             quantity=quantity
         )
-        order.clean()
         order.save()
         return order.id
 
