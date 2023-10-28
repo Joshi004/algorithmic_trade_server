@@ -84,7 +84,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
             tm.sleep(30)
             print("restrting Scan - ",counter,"Last Scan Time",(scan_end_time - scan_start_time))
 
-    def mark_into_scan_records(self,trade_id,instrument):  
+    def mark_into_scan_records(self,trade_id,tracking_algo_name,instrument):
   
        AlgoUdtsScanRecord.add_entry(
             instrument_id = instrument["instrument_id"],
@@ -96,7 +96,9 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
             effective_trend=instrument["effective_trend"].value,
             trade_candle_interval=instrument["trade_freqency"],
             movement_potential=instrument["movement_potential"],
-            trade_id=trade_id
+            trade_id=trade_id,
+            tracking_algo_name=tracking_algo_name,
+            volume=instrument["volume"]
         )
 
     def __get_required_actions__(self,instrument):
