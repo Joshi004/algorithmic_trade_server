@@ -14,7 +14,7 @@ class TradeSession(models.Model):
             models.Index(fields=['trading_frequency']),
         ]
   
-    id = models.BigAutoField(auto_created=True, primary_key=True, blank=False, max_length=64,) 
+    id = models.BigAutoField(auto_created=True, primary_key=True, blank=False,)
     is_active = models.BooleanField(default=True)
     started_at = models.DateTimeField(blank=False)
     closed_at = models.DateTimeField(blank=True, null=True)

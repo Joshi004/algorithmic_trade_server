@@ -77,7 +77,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
                     # eligible_instruments.append(instrument)
                     self.add_tokens_to_subscribed_tracker_sessiosn([instrument])
                 else:
-                    print(instrument["trading_symbol"], "is Not Eliggible")
+                    print(eligibility_obj["message"])
             scan_end_time = datetime.now()
             tm.sleep(30)
             print("restrting Scan - ",counter,"Last Scan Time",(scan_end_time - scan_start_time))
@@ -206,6 +206,9 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
     def __get_effective_trend(slef,eligibility_obj):
         trends = set()
         for frequency in eligibility_obj:
+
+            if frequency == "message":
+                continue
             chart = eligibility_obj[frequency]["chart"]
             trends.add(chart.trend)
         effective_ternd = trends.pop() if len(trends) == 1 else Trends.SIDETREND
@@ -220,22 +223,30 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
     # This is causing deflection point strength to go NAN check this 
 
     def is_eligible(self,symbol,token):
+        eligibility_obj = {"message": str(symbol) + " : Eligible"}
         trade_freq =  self.trade_freqency
         frq_steps = FREQUENCY_STEPS[trade_freq]
         number_of_candles = NUM_CANDLES_FOR_TREND_ANALYSIS
         quote  = Trade().get_quotes({"symbol" : symbol, "exchange" : DEFAULT_EXCHANGE})
-        quote_data = quote["data"][DEFAULT_EXCHANGE+":"+symbol.upper()] 
-        is_volume_eligible = self.get_volume_eligibility(quote_data)        
-        eligibility_obj = {}
-        
-        if (not is_volume_eligible):
-            print("Volume Not Eligible For",symbol)
-            return False , eligibility_obj
+        key = DEFAULT_EXCHANGE+":"+symbol.upper()
+        if key not in quote["data"]:
+            eligibility_obj["message"] = symbol + " : No Da ta Fetched from quotes"
+            return False, eligibility_obj
+        quote_data = quote["data"][key]
+
+        # is_volume_eligible = self.get_volume_eligibility(quote_data)
+        # if (not is_volume_eligible):
+        #     print("Volume Not Eligible For",symbol)
+        #     eligibility_obj["message"] = symbol + " : Volume not eligible"
+        #     return False, eligibility_obj
         
         for index in range(0,len(frq_steps)):
             freq = frq_steps[index]
             eligibility_obj[freq] = {}
             eligibility_obj[freq]["data"] = self.__fetch_hostorical_data(symbol,token,frq_steps[index],number_of_candles)
+            if(len(eligibility_obj[freq]["data"]) == 0): #For This frequency no data was fetched
+                eligibility_obj["message"] = symbol + " : Empty Price List For " + str(freq)
+                return False , eligibility_obj
             eligibility_obj[freq]["chart"] = CandleChart(symbol,token,quote_data["last_price"],quote_data["volume"],quote_data["last_quantity"],frq_steps[index],eligibility_obj[freq]["data"])
             eligibility_obj[freq]["chart"].set_trend_and_deflection_points()
     
@@ -246,12 +257,14 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
         eligibility_obj["effective_trend"] = effective_trend
         
         reward_risk_ratio = eligibility_obj[trade_freq]["chart"].trading_pair["reward_risk_ratio"] if "reward_risk_ratio" in eligibility_obj[trade_freq]["chart"].trading_pair else 0
+        eligibility_obj["message"] = f"{symbol} : {effective_trend.value} , Reward:Risk - {reward_risk_ratio}"
         if(effective_trend == Trends.UPTREND):
             if(reward_risk_ratio > 2 ):
                 return True, eligibility_obj
         elif(effective_trend == Trends.DOWNTREND):
             if(reward_risk_ratio < 0.5 ):
                 return True, eligibility_obj
+
         return False,eligibility_obj
 
     def get_volume_eligibility(self, quote):

@@ -33,6 +33,8 @@ class CandleChart:
 
     def set_trend_and_deflection_points(self):
         # This function returns the trend and the deflection points of a price list based on candlestick charting
+        if(len(self.price_list) == 0):
+            breakpoint()
         candle = Candle(self.price_list[0])
         swing_max = candle.high
         swing_min = candle.low

@@ -90,18 +90,19 @@ class TradeSession(metaclass=TradeSessionMeta):
             token = tick['instrument_token']
             symbol = self.token_to_symbol_map[token]
             last_price = tick["last_price"]
-            print("Got Tick For ",symbol,token)
+            print("Got Tick For ",symbol,token,self.instruments[symbol])
             for IndicatorClass in self.tracking_algo_instance.indicators:
+
                 other_params = {
                     "support_price":self.instruments[symbol]["support_price"],
                     "resistance_price":self.instruments[symbol]["resistance_price"],
-                    "view":self.instruments[symbol]["view"],
+                    "view": View.LONG if self.instruments[symbol]["effective_trend"] == Trends.UPTREND else View.SHORT if self.instruments[symbol]["effective_trend"] == Trends.DOWNTREND else None
                                 }
                 indicator_obj = IndicatorClass(str(self),symbol,self.trading_freq,other_params)
                 indicator_obj.update(last_price)
                 indicator_obj.append_information(tick)
             data = self.get_formated_tick(tick,symbol)
-            
+
         except Exception as e:
             raise("Error in on_ticks: ",e)
             # return {'status':500,'message':'Something Went Wrong'}
