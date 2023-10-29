@@ -85,7 +85,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
             print("restrting Scan - ",counter,"Last Scan Time",(scan_end_time - scan_start_time))
 
     def mark_into_scan_records(self,trade_id,tracking_algo_name,instrument):
-  
+
        AlgoUdtsScanRecord.add_entry(
             instrument_id = instrument["instrument_id"],
             market_price=instrument["market_data"]["market_price"],

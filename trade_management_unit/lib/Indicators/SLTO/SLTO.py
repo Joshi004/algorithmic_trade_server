@@ -1,5 +1,6 @@
 from trade_management_unit.lib.Indicators.IndicitorSingletonMeta import IndicitorSingletonMeta
 from trade_management_unit.Constants.TmuConstants import *
+from trade_management_unit.models.AlgoSltoTrackRecord import AlgoSltoTrackRecord
 from datetime import datetime
 
 class SLTO(): 
@@ -62,7 +63,9 @@ class SLTO():
         else:
             return PriceZone.RANGE
 
-    
+    def mark_into_indicator_records(self,tick,symbol):
+        AlgoSltoTrackRecord.add_indicator_entry()
+
     def append_information(self,initial_data:dict):
         initial_data["indicator_data"] = initial_data["indicator_data"]  if( "indicator_data" in  initial_data)  else {}
         initial_data["indicator_data"]["slto"] = {}

@@ -92,3 +92,4 @@ class AlgoUdtsScanRecord(models.Model):
         )
 
         record.full_clean()  # This will validate all fields and raise a ValidationError if any field is invalid.
+        record.save()
