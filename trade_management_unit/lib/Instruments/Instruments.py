@@ -73,6 +73,7 @@ class Instruments:
         # Create Instrument instances
         instrument_instances = [
             Instrument(
+                id=instrument['instrument_token'],
                 instrument_token=instrument['instrument_token'],
                 exchange_token=instrument['exchange_token'],
                 trading_symbol=instrument['tradingsymbol'],

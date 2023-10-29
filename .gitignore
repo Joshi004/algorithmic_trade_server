@@ -18,3 +18,10 @@ ats_env
 
 # Backup files # 
 
+/.idea/inspectionProfiles/profiles_settings.xml
+/.idea/inspectionProfiles/Project_Default.xml
+/.idea/.gitignore
+/.idea/algorithmic_trade_server.iml
+/.idea/misc.xml
+/.idea/modules.xml
+/.idea/vcs.xml

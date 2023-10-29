@@ -1,6 +1,7 @@
 from django.db import models
 
 class Instrument(models.Model):    
+    id = models.BigIntegerField(primary_key=True)
     instrument_token = models.BigIntegerField()
     exchange_token = models.BigIntegerField()
     trading_symbol = models.CharField(max_length=200, db_index=True)

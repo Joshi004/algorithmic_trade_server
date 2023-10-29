@@ -64,7 +64,16 @@ class SLTO():
             return PriceZone.RANGE
 
     def mark_into_indicator_records(self,tick,symbol):
-        AlgoSltoTrackRecord.add_indicator_entry()
+        print("break here")
+        AlgoSltoTrackRecord.add_indicator_entry(
+            market_price=tick["last_price"],
+            trade_id = trade_id,
+            instrument_symbol = symbol,
+            existing_price_zone=tick["indicator_data"]["slto"]["prev_price_zone"],
+            next_price_zone=["indicator_data"]["slto"]["price_zone"],
+            existing_price_zone_time=tick["indicator_data"]["slto"]["price_zone"],
+
+        )
 
     def append_information(self,initial_data:dict):
         initial_data["indicator_data"] = initial_data["indicator_data"]  if( "indicator_data" in  initial_data)  else {}
