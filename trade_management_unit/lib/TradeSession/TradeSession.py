@@ -101,13 +101,17 @@ class TradeSession(metaclass=TradeSessionMeta):
                 indicator_obj = IndicatorClass(str(self),symbol,self.trading_freq,other_params)
                 indicator_obj.update(last_price)
                 indicator_obj.append_information(tick)
-                indicator_obj.mark_into_indicator_records(tick,symbol,token,self.trade_session_id)
-            data = self.get_formated_tick(tick,symbol)
+                data = self.get_formated_tick(tick,symbol)
+                if(indicator_obj.price_zone_changed or data["required_action"]):
+                    indicator_obj.mark_into_indicator_records(data,self.trade_session_id)
+                if(data["required_action"]):
+                   self.__process__instrument_actions__(data)
+
 
         except Exception as e:
             raise("Error in on_ticks: ",e)
             # return {'status':500,'message':'Something Went Wrong'}
-        self.__process__instrument_actions__(data)
+
         self.communicator.send_data_to_channel_layer(data, self.communication_group)
         
 
@@ -118,18 +122,19 @@ class TradeSession(metaclass=TradeSessionMeta):
         tick_handler_thread.start()
             
 
+
     def __process__instrument_actions__(self,instrument):
         trading_symbol = instrument["trading_symbol"]
         action = instrument["required_action"]
         if action:
             instrument_id = instrument["instrument_id"]
             market_price = instrument["market_data"]["market_price"]
-            trade_id = Trade.fetch_or_initiate_trade(instrument_id, action, self.trade_session_id, self.user_id, self.dummy)
+            trade_id = Trade.fetch_or_initiate_trade(instrument_id, action, self.trade_session_id, self.user_id, self.dummy).id
             risk_manager = RiskManager()
             quantity,frictional_losses = risk_manager.get_quantity_and_frictional_losses(action,market_price,instrument["support_price"],instrument["resistance_price"],self.user_id,self.dummy)
             print("!!! Order from Zerodha",trading_symbol,action)
             kite_order_id = self.place_order_on_kite(trading_symbol,quantity,action,instrument["support_price"],instrument["resistance_price"],instrument["market_data"]["market_price"])
-            order_id = Order.initiate_order( action, instrument_id, trade_id, self.dummy, kite_order_id, frictional_losses, self.user_id, quantity)
+            order_id = Order.initiate_order(action, instrument_id, trade_id, self.dummy, kite_order_id, frictional_losses, self.user_id, quantity).id
             return trade_id
         return None
 
