@@ -45,6 +45,7 @@ class SLTO():
         return timeout_period
 
     def update(self, ltp:float )-> None:
+        self.price_zone_changed =  False
         current_price_zone = self.__get_price_zone(ltp)
         current_time = datetime.now()
         self.price_zone_changed = (self.price_zone != current_price_zone)
@@ -63,10 +64,10 @@ class SLTO():
         else:
             return PriceZone.RANGE
 
-    def mark_into_indicator_records(self,tick,symbol,instrument_id,trade_session_id):
-        print("break here")
+    def mark_into_indicator_records(self,tick,trade_session_id):
+        instrument_id = tick["instrument_token"]
         AlgoSltoTrackRecord.add_indicator_entry(
-            market_price=tick["last_price"],
+            market_price=tick["market_data"]["market_price"],
             trade_session_id = trade_session_id,
             instrument_id = instrument_id,
             existing_price_zone=tick["indicator_data"]["slto"]["prev_price_zone"],
