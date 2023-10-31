@@ -87,7 +87,7 @@ class AlgoUdtsScanRecord(models.Model):
             movement_potential=movement_potential,
             volume=volume,  # Add volume to the record
             trade=trade,
-            instrument_id=instrument,
+            instrument=instrument,
             tracking_algo_id=tracking_algo  # Add tracking_algo to the record
         )
 

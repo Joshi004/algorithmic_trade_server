@@ -6,7 +6,7 @@ class DummyAccount(models.Model):
     user_id = models.CharField(max_length=200, db_index=True)  # Index added
     initial_balance = models.DecimalField(max_digits=10, decimal_places=2)
     current_balance = models.DecimalField(max_digits=10, decimal_places=2)
-    last_balance_refreshed_at = models.DateTimeField(auto_now_add=True,default=timezone.now)
+    last_balance_refreshed_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
