@@ -62,10 +62,10 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
                         "instrument_token":token,
                         "trade_freqency" : self.trade_freqency,
                         "effective_trend" : eligibility_obj["effective_trend"],
-                        "support_price" : symbol_data_points.trading_pair["support"] or 1,
-                        "resistance_price" : symbol_data_points.trading_pair["resistance"] or 1000,
-                        "support_strength" : symbol_data_points.trading_pair["support_strength"] or 0,
-                        "resistance_strength" : symbol_data_points.trading_pair["resistance_strength"] or 0,
+                        "support_price" : symbol_data_points.trading_pair["support"],
+                        "resistance_price" : symbol_data_points.trading_pair["resistance"],
+                        "support_strength" : symbol_data_points.trading_pair["support_strength"],
+                        "resistance_strength" : symbol_data_points.trading_pair["resistance_strength"],
                         "movement_potential" : symbol_data_points.average_candle_span,
                         "market_data" : {
                             "volume" : symbol_data_points.volume,
@@ -243,11 +243,11 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
 
 
 
-        # is_volume_eligible = self.get_volume_eligibility(quote_data)
-        # if (not is_volume_eligible):
-        #     print("Volume Not Eligible For",symbol)
-        #     eligibility_obj["message"] = symbol + " : Volume not eligible"
-        #     return False, eligibility_obj
+        is_volume_eligible = self.get_volume_eligibility(quote_data)
+        if (not is_volume_eligible):
+            print("Volume Not Eligible For",symbol)
+            eligibility_obj["message"] = symbol + " : Volume not eligible"
+            return False, eligibility_obj
         
         for index in range(0,len(frq_steps)):
             freq = frq_steps[index]
@@ -264,7 +264,11 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
         eligibility_obj[trade_freq]["chart"].set_trading_levels_and_ratios()
         effective_trend = self.__get_effective_trend(eligibility_obj)
         eligibility_obj["effective_trend"] = effective_trend
-        
+
+        if(not eligibility_obj[trade_freq]["chart"].valid_pairs or len(eligibility_obj[trade_freq]["chart"].valid_pairs)<1):
+            eligibility_obj["message"] = symbol + " : No Valid Trading pairs Present"
+            return False, eligibility_obj
+
         reward_risk_ratio = eligibility_obj[trade_freq]["chart"].trading_pair["reward_risk_ratio"] if "reward_risk_ratio" in eligibility_obj[trade_freq]["chart"].trading_pair else 0
         eligibility_obj["message"] = f"{symbol} : {effective_trend.value} , Reward:Risk - {reward_risk_ratio}"
         if(effective_trend == Trends.UPTREND):

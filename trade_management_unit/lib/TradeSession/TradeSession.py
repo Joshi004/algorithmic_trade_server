@@ -101,7 +101,7 @@ class TradeSession(metaclass=TradeSessionMeta):
                 indicator_obj = IndicatorClass(str(self),symbol,self.trading_freq,other_params)
                 indicator_obj.update(last_price)
                 indicator_obj.append_information(tick)
-                indicator_obj.mark_into_indicator_records(tick,symbol)
+                indicator_obj.mark_into_indicator_records(tick,symbol,token,self.trade_session_id)
             data = self.get_formated_tick(tick,symbol)
 
         except Exception as e:
