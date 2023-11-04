@@ -18,6 +18,7 @@ class Trend(Enum):
 class AlgoUdtsScanRecord(models.Model):
     class Meta:
         db_table = "algo_udts_scan_records"
+        unique_together = (('trade', 'instrument'),)
 
     id = models.AutoField(primary_key=True)
     recorded_at = models.DateTimeField(auto_now_add=True)
@@ -38,25 +39,22 @@ class AlgoUdtsScanRecord(models.Model):
     trade = models.ForeignKey('Trade', on_delete=models.CASCADE)
 
     # Add the instrument_id field as a foreign key to the Instrument model
-    instrument_id = models.ForeignKey('Instrument', on_delete=models.CASCADE)
+    instrument = models.ForeignKey('Instrument', on_delete=models.CASCADE)
 
     # Add the tracking_algo_id field as a foreign key to the Algorithm model
     tracking_algo_id = models.ForeignKey('Algorithm', on_delete=models.CASCADE)
 
     @classmethod
+    def fetch_udts_record(cls,trade_id,instrument_id):
+        udts_record = cls.objects.get(
+            trade_id = trade_id,
+            instrument_id = instrument_id
+        )
+        return udts_record
+
+
+    @classmethod
     def add_entry(cls, *, market_price, support_price, resistance_price, support_strength, resistance_strength, effective_trend, trade_candle_interval, movement_potential, trade_id, instrument_id, tracking_algo_name,volume):  # Add instrument_id parameter
-        # Round off the values to the desired format
-        market_price = Decimal(market_price).quantize(Decimal('.01'), rounding=ROUND_DOWN)
-        support_price = Decimal(support_price).quantize(Decimal('.01'), rounding=ROUND_DOWN)
-        resistance_price = Decimal(resistance_price).quantize(Decimal('.01'), rounding=ROUND_DOWN)
-        support_strength = Decimal(support_strength).quantize(Decimal('.0001'), rounding=ROUND_DOWN)
-        resistance_strength = Decimal(resistance_strength).quantize(Decimal('.0001'), rounding=ROUND_DOWN)
-        movement_potential = Decimal(movement_potential).quantize(Decimal('.01'), rounding=ROUND_DOWN)
-
-        # Validate the trend value
-        if effective_trend not in Trends._value2member_map_:
-            raise ValidationError(f"Invalid trend value: {effective_trend}. Expected one of: {', '.join(Trends._value2member_map_.keys())}")
-
         # Get the Trade instance
         try:
             trade = Trade.objects.get(pk=trade_id)
@@ -69,27 +67,43 @@ class AlgoUdtsScanRecord(models.Model):
         except ObjectDoesNotExist:
             raise ValidationError(f"Instrument with id {instrument_id} does not exist.")
 
-         # Get the Algorithm instance
         try:
-            tracking_algo = Algorithm.objects.get(name=tracking_algo_name)  # Get the Algorithm instance using tracking_algo_name
-        except ObjectDoesNotExist:
-            raise ValidationError(f"Algorithm with name {tracking_algo_name} does not exist.")
+            udts_record = cls.fetch_udts_record(trade_id,instrument_id)
+            return udts_record
+        except:
+            # Round off the values to the desired format
+            market_price = Decimal(market_price).quantize(Decimal('.01'), rounding=ROUND_DOWN)
+            support_price = Decimal(support_price).quantize(Decimal('.01'), rounding=ROUND_DOWN)
+            resistance_price = Decimal(resistance_price).quantize(Decimal('.01'), rounding=ROUND_DOWN)
+            support_strength = Decimal(support_strength).quantize(Decimal('.0001'), rounding=ROUND_DOWN)
+            resistance_strength = Decimal(resistance_strength).quantize(Decimal('.0001'), rounding=ROUND_DOWN)
+            movement_potential = Decimal(movement_potential).quantize(Decimal('.01'), rounding=ROUND_DOWN)
 
-        # Create and save the new record
-        record = cls(
-            market_price=market_price,
-            support_price=support_price,
-            resistance_price=resistance_price,
-            support_strength=support_strength,
-            resistance_strength=resistance_strength,
-            effective_trend=effective_trend,
-            trade_candle_interval=trade_candle_interval,
-            movement_potential=movement_potential,
-            volume=volume,  # Add volume to the record
-            trade=trade,
-            instrument=instrument,
-            tracking_algo_id=tracking_algo  # Add tracking_algo to the record
-        )
+            # Validate the trend value
+            if effective_trend not in Trends._value2member_map_:
+                raise ValidationError(f"Invalid trend value: {effective_trend}. Expected one of: {', '.join(Trends._value2member_map_.keys())}")
 
-        record.full_clean()  # This will validate all fields and raise a ValidationError if any field is invalid.
-        record.save()
+             # Get the Algorithm instance
+            try:
+                tracking_algo = Algorithm.objects.get(name=tracking_algo_name)  # Get the Algorithm instance using tracking_algo_name
+            except ObjectDoesNotExist:
+                raise ValidationError(f"Algorithm with name {tracking_algo_name} does not exist.")
+
+            # Create and save the new record
+            record = cls(
+                market_price=market_price,
+                support_price=support_price,
+                resistance_price=resistance_price,
+                support_strength=support_strength,
+                resistance_strength=resistance_strength,
+                effective_trend=effective_trend,
+                trade_candle_interval=trade_candle_interval,
+                movement_potential=movement_potential,
+                volume=volume,  # Add volume to the record
+                trade=trade,
+                instrument=instrument,
+                tracking_algo_id=tracking_algo  # Add tracking_algo to the record
+            )
+            record.full_clean()  # This will validate all fields and raise a ValidationError if any field is invalid.
+            record.save()
+            return record

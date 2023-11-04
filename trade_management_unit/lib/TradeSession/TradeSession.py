@@ -90,22 +90,26 @@ class TradeSession(metaclass=TradeSessionMeta):
             token = tick['instrument_token']
             symbol = self.token_to_symbol_map[token]
             last_price = tick["last_price"]
+            trade = Trade.fetch_active_trade(token,self.trade_session_id,self.user_id,self.dummy)
+            trade_id = trade.id
             print("Got Tick For ",symbol,token,self.instruments[symbol])
-            for IndicatorClass in self.tracking_algo_instance.indicators:
+            if(not trade.max_price or last_price > trade.max_price):
+                trade.max_price = last_price
+                trade.save()
+            elif(not trade.min_price or last_price < trade.min_price):
+                trade.min_price = last_price
+                trade.save()
 
-                other_params = {
-                    "support_price":self.instruments[symbol]["support_price"],
-                    "resistance_price":self.instruments[symbol]["resistance_price"],
-                    "view": View.LONG if self.instruments[symbol]["effective_trend"] == Trends.UPTREND else View.SHORT if self.instruments[symbol]["effective_trend"] == Trends.DOWNTREND else None
-                                }
-                indicator_obj = IndicatorClass(str(self),symbol,self.trading_freq,other_params)
+            for IndicatorClass in self.tracking_algo_instance.indicators:
+                indicator_obj = IndicatorClass(trade_id,symbol,token,self.trading_freq)
                 indicator_obj.update(last_price)
                 indicator_obj.append_information(tick)
-                data = self.get_formated_tick(tick,symbol)
-                if(indicator_obj.price_zone_changed or data["required_action"]):
-                    indicator_obj.mark_into_indicator_records(data,self.trade_session_id)
-                if(data["required_action"]):
-                   self.__process__instrument_actions__(data)
+                if(1 or indicator_obj.price_zone_changed):
+                    indicator_obj.mark_into_indicator_records(tick,self.trade_session_id)
+
+            formated_instrument_data = self.get_formated_tick(tick,symbol)
+            if(formated_instrument_data["required_action"]):
+               self.tracking_algo_instance.process_tracker_actions(self,formated_instrument_data,self.trade_session_id,self.user_id,self.dummy)
 
 
         except Exception as e:

@@ -27,22 +27,22 @@ class UdtsSlto(metaclass=TrackerAlgoMeta):
         self.trade_sessions[str(trade_session_obj)] = trade_session_obj
 
 
-    def __process_tracker_actions__(self,trade_session,instrument,trade_session_id,user_id,dummy):
+    def process_tracker_actions(self,instrument,trade_session_id,user_id,dummy):
         trading_symbol = instrument["trading_symbol"]
         action = instrument["required_action"]
         if action:
             instrument_id = instrument["instrument_id"]
             market_price = instrument["market_data"]["market_price"]
-            trade_id = Trade.fetch_trade(instrument_id,trade_session_id,user_id,dummy).id
+            trade_id = Trade.fetch_active_trade(instrument_id,trade_session_id,user_id,dummy).id
             quantity = self.__get_square_off_quantity__(instrument_id,trade_session_id,user_id,trade_id,dummy)
             if not dummy:
                 order_params = {"trading_symbol":trading_symbol,
-                                "exchange" : DEFAULT_EXCHANGE ,
-                                "transaction_type" : action ,
-                                "order_type" : "MARKET" ,
-                                "quantity" :quantity ,
-                                "product" : "MIS" ,
-                                "validity" : "DAY"}
+                                "exchange": DEFAULT_EXCHANGE,
+                                "transaction_type": action,
+                                "order_type": "MARKET",
+                                "quantity":quantity,
+                                "product": "MIS",
+                                "validity": "DAY"}
                 kite_order_id = Portfolio.initiate_order(order_params)
 
             frictional_losses = RiskManager().get_frictional_losses(TRADE_TYPE["intraday"],market_price, quantity, action == "BUY")

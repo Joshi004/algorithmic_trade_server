@@ -3,14 +3,17 @@ from trade_management_unit.Constants.TmuConstants import *
 from trade_management_unit.models.AlgoSltoTrackRecord import AlgoSltoTrackRecord
 from datetime import datetime
 
-class SLTO(): 
+from trade_management_unit.models.AlgoUdtsScanRecord import AlgoUdtsScanRecord
+class SLTO():
 
-    def __init__(self,trade_session_identifier:str,trading_symbol:str,trading_frequency:str,other_params:dict):
+    def __init__(self,trade_id,trading_symbol,instrunent_id,trading_frequency):
         self.symbol = trading_symbol
         self.trading_frequency = trading_frequency
-        self.view = other_params["view"]
-        self.support_price = other_params["support_price"]
-        self.resistance_price = other_params["resistance_price"]
+        udts_record = AlgoUdtsScanRecord.fetch_udts_record(trade_id,instrunent_id)
+        effective_trend = udts_record.effective_trend
+        self.view = View.LONG if effective_trend == Trends.UPTREND else View.SHORT if effective_trend == Trends.DOWNTREND else None
+        self.support_price = udts_record.support_price
+        self.resistance_price = udts_record.resistance_price
         self.zone_in_time = datetime.now()
         self.price_zone = PriceZone.RANGE
         self.tracking_start_time = datetime.now()
@@ -67,7 +70,7 @@ class SLTO():
     def mark_into_indicator_records(self,tick,trade_session_id):
         instrument_id = tick["instrument_token"]
         AlgoSltoTrackRecord.add_indicator_entry(
-            market_price=tick["market_data"]["market_price"],
+            market_price=tick["last_price"],
             trade_session_id = trade_session_id,
             instrument_id = instrument_id,
             existing_price_zone=tick["indicator_data"]["slto"]["prev_price_zone"],

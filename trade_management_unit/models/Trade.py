@@ -26,13 +26,14 @@ class Trade(models.Model):
 
 
     @classmethod
-    def fetch_trade(cls, instrument_id, action, trade_session_id, user_id, dummy):
+    def fetch_active_trade(cls, instrument_id,trade_session_id, user_id, dummy):
         trade = None
         trade = cls.objects.get(
             instrument_id=instrument_id,
             trade_session_id=trade_session_id,
             user_id=user_id,
-            is_active=True
+            is_active=True,
+            dummy=dummy
         )
         return trade
 
