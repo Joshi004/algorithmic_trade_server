@@ -1,8 +1,9 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
+
 from trade_management_unit.lib.Kite.KiteUser import KiteUser
 from trade_management_unit.models.Database import Database
 import logging
-import time
+import time as tm
 class FetchData:
     def __init__(self):
         logging.getLogger("urllib3").setLevel(logging.WARNING)
@@ -42,7 +43,7 @@ class FetchData:
                 start_date = end_date - timedelta(days=number_of_candles)
 
             # print("----- Getting Historical data symbol: ", token, " Total CAndles : ",len(historical_data),"  Time Diff: ",end_date-start_date," From: ",end_date," To: ",start_date)
-            new_data = FetchData().fetch_data_from_zerodha(token, start_date, end_date,interval)
+            new_data = self.fetch_data_from_zerodha(token, start_date, end_date,interval)
 
             # Prepend new_data to historical_data
             historical_data = stored_data + new_data + historical_data
@@ -71,4 +72,9 @@ class FetchData:
         # Fetch all data from the table
         historical_data = database.fetch_history_data(table_name)
         return list(historical_data)
+
+    def fetch_data_from_zerodha(self,instrument_token, start_date, end_date,interval):
+        data = self.kite.historical_data(instrument_token, start_date, end_date, interval)
+        return data
+
 

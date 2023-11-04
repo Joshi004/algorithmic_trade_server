@@ -3,8 +3,9 @@ from trade_management_unit.lib.Algorithms.ScannerAlgos.UDTS.CandleChart import C
 from trade_management_unit.lib.Algorithms.ScannerAlgos.ScannerSingletonMeta import ScannerSingletonMeta
 from trade_management_unit.lib.Instruments.Instruments import Instruments
 from  trade_management_unit.models.Instrument import Instrument
-from trade_management_unit.lib.Trade.trade import Trade
+from trade_management_unit.lib.Trade.trade import Trade as TradeLib
 from trade_management_unit.models.Order import Order
+from trade_management_unit.models.Trade import Trade
 from trade_management_unit.Constants.TmuConstants import *
 from trade_management_unit.lib.Instruments.historical_data.FetchData import FetchData
 from trade_management_unit.models.AlgoUdtsScanRecord import AlgoUdtsScanRecord
@@ -108,15 +109,15 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
             risk_manager = RiskManager()
             quantity,frictional_losses = risk_manager.get_quantity_and_frictional_losses(action,market_price,instrument["support_price"],instrument["resistance_price"],user_id,dummy)
             print("!!! Order from Zerodha",trading_symbol,action)
-            kite_order_id = self.place_order_on_kite(trading_symbol,quantity,action,instrument["support_price"],instrument["resistance_price"],instrument["market_data"]["market_price"],user_id)
+            kite_order_id = self.place_order_on_kite(trading_symbol,quantity,action,instrument["support_price"],instrument["resistance_price"],instrument["market_data"]["market_price"],user_id,dummy)
             order_id = Order.initiate_order(action, instrument_id, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity).id
             return trade_id
         return None
 
-    def place_order_on_kite(self,trading_symbol,qunatity,action,support_price,resistance_price,market_price,user_id):
+    def place_order_on_kite(self,trading_symbol,qunatity,action,support_price,resistance_price,market_price,user_id,dummy):
         stoploss = market_price - 0.99*support_price if action == OrderType.BUY else  1.01*support_price - market_price
         squareoff = 1.01*resistance_price - market_price if action == OrderType.BUY else market_price - 0.99*support_price
-        if (not self.dummy):
+        if (not dummy):
             print("!!! Check Stoploss and squareoff values properly before this ")
             params = {"trading_symbol":trading_symbol,
                       "qunatity":qunatity,
@@ -197,7 +198,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
 
     def is_eligible(self,symbol,token):
         eligibility_obj = {"message": str(symbol) + " : Eligible"}
-        quote  = Trade().get_quotes({"symbol" : symbol, "exchange" : DEFAULT_EXCHANGE})
+        quote  = TradeLib().get_quotes({"symbol" : symbol, "exchange" : DEFAULT_EXCHANGE})
         key = DEFAULT_EXCHANGE+":"+symbol.upper()
         if key not in quote["data"]:
             eligibility_obj["message"] = symbol + " : No Da ta Fetched from quotes"
@@ -219,7 +220,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
         for index in range(0,len(frq_steps)):
             freq = frq_steps[index]
             eligibility_obj[freq] = {}
-            eligibility_obj[freq]["data"] = FetchData.fetch_hostorical_candle_data_from_kite(symbol,token,frq_steps[index],number_of_candles)
+            eligibility_obj[freq]["data"] = FetchData().fetch_hostorical_candle_data_from_kite(symbol,token,frq_steps[index],number_of_candles)
             if(len(eligibility_obj[freq]["data"]) < 200): #For This frequency no data was fetched
                 eligibility_obj["message"] = symbol + " : Not Enough Candles For " + str(freq)
                 return False , eligibility_obj

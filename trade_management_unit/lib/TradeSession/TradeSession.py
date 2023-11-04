@@ -1,11 +1,5 @@
 import logging
 import threading
-from kiteconnect import KiteConnect
-from django.core import serializers
-import json
-import asyncio
-from channels.db import database_sync_to_async
-from asgiref.sync import sync_to_async
 from trade_management_unit.lib.common.Communicator import Communicator
 from trade_management_unit.models.TradeSession import TradeSession as TradeSessionDB
 from trade_management_unit.lib.Algorithms.ScannerAlgos.ScannerAlgoFactory import ScannerAlgoFactory
@@ -13,14 +7,11 @@ from trade_management_unit.lib.Algorithms.TrackerAlgos.TrackerAlgoFactory import
 from trade_management_unit.lib.TradeSession.TradeSessionMeta import TradeSessionMeta
 from  trade_management_unit.Constants.TmuConstants import *
 from  trade_management_unit.models.Trade import Trade
-from  trade_management_unit.models.Order import Order
-from  trade_management_unit.models.Instrument import Instrument
-from  trade_management_unit.lib.TradeSession.RiskManager import RiskManager
-from  trade_management_unit.lib.Portfolio.Portfolio import Portfolio
+
 
 
 import concurrent.futures
-from datetime import datetime
+
 
 class TradeSession(metaclass=TradeSessionMeta):
    
