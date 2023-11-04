@@ -5,6 +5,7 @@ from trade_management_unit.models.Order import  Order
 from trade_management_unit.lib.Portfolio.Portfolio import Portfolio
 from trade_management_unit.Constants.TmuConstants import  *
 from trade_management_unit.lib.TradeSession.RiskManager import RiskManager
+from datetime import datetime
 class UdtsSlto(metaclass=TrackerAlgoMeta):
     def __init__(self,trading_frequency,scanning_algorithm_name):
         self.trading_frequency = trading_frequency
@@ -33,8 +34,10 @@ class UdtsSlto(metaclass=TrackerAlgoMeta):
         if action:
             instrument_id = instrument["instrument_id"]
             market_price = instrument["market_data"]["market_price"]
-            trade_id = Trade.fetch_active_trade(instrument_id,trade_session_id,user_id,dummy).id
+            trade = Trade.fetch_active_trade(instrument_id,trade_session_id,user_id,dummy).id
+            trade_id = trade.id
             quantity = self.__get_square_off_quantity__(instrument_id,trade_session_id,user_id,trade_id,dummy)
+            kite_order_id = None
             if not dummy:
                 order_params = {"trading_symbol":trading_symbol,
                                 "exchange": DEFAULT_EXCHANGE,
@@ -47,8 +50,18 @@ class UdtsSlto(metaclass=TrackerAlgoMeta):
 
             frictional_losses = RiskManager().get_frictional_losses(TRADE_TYPE["intraday"],market_price, quantity, action == "BUY")
             order = Order.initiate_order(action, instrument_id, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity)
-            return trade_id
+            self.__update_and_close_trade__(trade,order.closed_at)
+            return trade
         return None
+
+    def __update_and_close_trade__(self,trade,closed_at):
+        if(closed_at):
+            net_profit = Trade.get_net_profit(trade.id)
+            trade.net_profit = net_profit
+            trade.closed_at = closed_at
+            trade.is_active = 0
+            trade.save()
+
 
     def __get_square_off_quantity__(self,instrument_id,trade_session_id,user_id,trade_id,dummy):
         order = Order.fetch_order(instrument_id, trade_id,dummy,user_id)

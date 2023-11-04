@@ -109,14 +109,13 @@ class TradeSession(metaclass=TradeSessionMeta):
 
             formated_instrument_data = self.get_formated_tick(tick,symbol)
             if(formated_instrument_data["required_action"]):
-               self.tracking_algo_instance.process_tracker_actions(self,formated_instrument_data,self.trade_session_id,self.user_id,self.dummy)
-
-
+                trade = self.tracking_algo_instance.process_tracker_actions(self,formated_instrument_data,self.trade_session_id,self.user_id,self.dummy)
+                if(not trade.is_active):
+                    self.remove_tokens([token])
         except Exception as e:
             raise("Error in on_ticks: ",e)
-            # return {'status':500,'message':'Something Went Wrong'}
 
-        self.communicator.send_data_to_channel_layer(data, self.communication_group)
+        self.communicator.send_data_to_channel_layer(formated_instrument_data, self.communication_group)
         
 
 
@@ -124,43 +123,6 @@ class TradeSession(metaclass=TradeSessionMeta):
         tick_handler_thread = threading.Thread(target=self.async_tick_handler,args=(tick,))
         tick_handler_thread.setDaemon(True)
         tick_handler_thread.start()
-            
-
-
-    def __process__instrument_actions__(self,instrument):
-        trading_symbol = instrument["trading_symbol"]
-        action = instrument["required_action"]
-        if action:
-            instrument_id = instrument["instrument_id"]
-            market_price = instrument["market_data"]["market_price"]
-            trade_id = Trade.fetch_or_initiate_trade(instrument_id, action, self.trade_session_id, self.user_id, self.dummy).id
-            risk_manager = RiskManager()
-            quantity,frictional_losses = risk_manager.get_quantity_and_frictional_losses(action,market_price,instrument["support_price"],instrument["resistance_price"],self.user_id,self.dummy)
-            print("!!! Order from Zerodha",trading_symbol,action)
-            kite_order_id = self.place_order_on_kite(trading_symbol,quantity,action,instrument["support_price"],instrument["resistance_price"],instrument["market_data"]["market_price"])
-            order_id = Order.initiate_order(action, instrument_id, trade_id, self.dummy, kite_order_id, frictional_losses, self.user_id, quantity).id
-            return trade_id
-        return None
-
-
-    def place_order_on_kite(self,trading_symbol,qunatity,action,support_price,resistance_price,market_price):
-        stoploss = market_price - 0.99*support_price if action == OrderType.BUY else  1.01*support_price - market_price
-        squareoff = 1.01*resistance_price - market_price if action == OrderType.BUY else market_price - 0.99*support_price
-        if (not self.dummy): 
-            print("!!! Check Stoploss and squareoff values properly before this ")
-            params = {"trading_symbol":trading_symbol,
-                      "qunatity":qunatity,
-                      "order_type":action,
-                      "product":"BO",
-                      "squareoff":squareoff,
-                      "stoploss":stoploss,
-                      "validity":"IOC",
-                      "price":market_price
-                      }
-            resposne  = Portfolio().place_order(params)
-            return resposne.trade_id
-        else:
-            return self.user_id+"__"+str(datetime.now)
 
 
     def __add_instrument_actions__(self,instrument):
@@ -193,7 +155,9 @@ class TradeSession(metaclass=TradeSessionMeta):
             token = instrument["instrument_token"]
             symbol = instrument["trading_symbol"]
 
-            trade_id = self.__process__instrument_actions__(instrument)
+            # trade_id = self.__process__instrument_actions__(instrument)
+            trade_id = self.scanning_algo_instance.process_scanner_actions(instrument)
+
             
             if(trade_id):
                 self.scanning_algo_instance.mark_into_scan_records(trade_id,self.tracking_algo_name,instrument)

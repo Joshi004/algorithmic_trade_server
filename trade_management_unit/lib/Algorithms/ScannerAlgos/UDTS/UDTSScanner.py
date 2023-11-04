@@ -1,23 +1,21 @@
-import json
 import time as tm
-from django.core import serializers
-from trade_management_unit.lib.Algorithms.ScannerAlgos.UDTS.FetchData import FetchData
 from trade_management_unit.lib.Algorithms.ScannerAlgos.UDTS.CandleChart import CandleChart
-from trade_management_unit.lib.Algorithms.TrackerAlgos.TrackerAlgoFactory import TrackerAlgoFactory
 from trade_management_unit.lib.Algorithms.ScannerAlgos.ScannerSingletonMeta import ScannerSingletonMeta
 from trade_management_unit.lib.Instruments.Instruments import Instruments
 from  trade_management_unit.models.Instrument import Instrument
 from trade_management_unit.lib.Trade.trade import Trade
+from trade_management_unit.models.Order import Order
 from trade_management_unit.Constants.TmuConstants import *
+from trade_management_unit.lib.Instruments.historical_data.FetchData import FetchData
 from trade_management_unit.models.AlgoUdtsScanRecord import AlgoUdtsScanRecord
-from trade_management_unit.models.Database import Database
 from trade_management_unit.lib.TradeSession.RiskManager import RiskManager
-from channels.db import database_sync_to_async
+from trade_management_unit.lib.Portfolio.Portfolio import  Portfolio
 
 import pandas as pd
 import concurrent.futures
 import threading
-from datetime import datetime, timedelta, time
+from datetime import datetime
+
 
 class UDTSScanner(metaclass=ScannerSingletonMeta):
 
@@ -100,6 +98,40 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
             tracking_algo_name=tracking_algo_name,
             volume=instrument["market_data"]["volume"]
         )
+    def process_scanner_actions(self,instrument,user_id,dummy,trade_session_id):
+        trading_symbol = instrument["trading_symbol"]
+        action = instrument["required_action"]
+        if action:
+            instrument_id = instrument["instrument_id"]
+            market_price = instrument["market_data"]["market_price"]
+            trade_id = Trade.fetch_or_initiate_trade(instrument_id, action,trade_session_id,user_id,dummy).id
+            risk_manager = RiskManager()
+            quantity,frictional_losses = risk_manager.get_quantity_and_frictional_losses(action,market_price,instrument["support_price"],instrument["resistance_price"],user_id,dummy)
+            print("!!! Order from Zerodha",trading_symbol,action)
+            kite_order_id = self.place_order_on_kite(trading_symbol,quantity,action,instrument["support_price"],instrument["resistance_price"],instrument["market_data"]["market_price"],user_id)
+            order_id = Order.initiate_order(action, instrument_id, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity).id
+            return trade_id
+        return None
+
+    def place_order_on_kite(self,trading_symbol,qunatity,action,support_price,resistance_price,market_price,user_id):
+        stoploss = market_price - 0.99*support_price if action == OrderType.BUY else  1.01*support_price - market_price
+        squareoff = 1.01*resistance_price - market_price if action == OrderType.BUY else market_price - 0.99*support_price
+        if (not self.dummy):
+            print("!!! Check Stoploss and squareoff values properly before this ")
+            params = {"trading_symbol":trading_symbol,
+                      "qunatity":qunatity,
+                      "order_type":action,
+                      "product":"BO",
+                      "squareoff":squareoff,
+                      "stoploss":stoploss,
+                      "validity":"IOC",
+                      "price":market_price
+                      }
+            resposne  = Portfolio().place_order(params)
+            return resposne.trade_id
+        else:
+            return user_id+"__"+str(datetime.now)
+
 
     def __get_required_actions__(self,instrument):
         print("Check Volume COnstraints and also min ratio if needed ")
@@ -142,71 +174,6 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
         scanner_thread = threading.Thread(target=self.scan_in_seperate_trhread,args=(all_instruments,))
         scanner_thread.setDaemon(True)
         scanner_thread.start()
-
-    def get_stored_data(self, symbol, interval):
-        database = Database()
-    # Define the table name
-        table_name = f"hd__{interval}__{symbol}"
-
-        # Check if the table exists
-        if not database.table_exists(table_name):
-            # If not, create the table
-            database.create_hd_table(table_name)
-
-        # Fetch all data from the table
-        historical_data = database.fetch_history_data(table_name)
-        return list(historical_data)
-        
-
-    def __fetch_hostorical_data(self,symbol, token, interval, number_of_candles, trade_date=None):
-        # Initialize end_date and historical_data
-        end_date = trade_date if trade_date else datetime.now()
-        historical_data = []
-        stored_data = self.get_stored_data(symbol,interval)
-        last_stored_date = None
-        if (stored_data and len(stored_data)):
-            last_record_date = stored_data[-1]["date"]
-
-        print("History from data",len(stored_data))
-
-        iteration_count = 1
-        while (len(historical_data) < number_of_candles+1 and iteration_count < 10 and end_date.year > 2019):
-            iteration_count += 1
-            # Skip non-trading hours (before 9:15 or after 15:30)
-            if end_date.time() < time(9, 15) or end_date.time() > time(15, 30):
-                # Move to the previous trading day
-                end_date = end_date.replace(hour=15, minute=30) - timedelta(days=1)
-
-            # Skip weekends (Saturday and Sunday)
-            while end_date.weekday() >= 5:
-                # Move to the previous day
-                end_date -= timedelta(days=1)
-
-            # Calculate start_date based on the current length of historical_data
-            if last_stored_date:
-                start_date = last_record_date
-            elif "minute" in interval:
-                minutes = int(interval.replace("minute", ""))
-                start_date = end_date - timedelta(minutes=minutes*(number_of_candles))
-            elif interval == "day":
-                start_date = end_date - timedelta(days=number_of_candles)
-
-            # print("----- Getting Historical data symbol: ", token, " Total CAndles : ",len(historical_data),"  Time Diff: ",end_date-start_date," From: ",end_date," To: ",start_date)
-            new_data = FetchData().fetch_data_from_zerodha(token, start_date, end_date,interval)
-
-            # Prepend new_data to historical_data
-            historical_data = stored_data + new_data + historical_data
-            stored_data = []
-
-            # Update end_date for the next iteration
-            end_date = start_date
-
-        # If we fetched more data than needed, trim the excess
-        if len(historical_data) > number_of_candles:
-            historical_data = historical_data[:number_of_candles]
-        print("Fetched Historical Data for ",symbol,interval)
-        Database().update_historical_data(symbol,interval,historical_data)           
-        return historical_data
 
 
     def __get_effective_trend(slef,eligibility_obj):
@@ -252,7 +219,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
         for index in range(0,len(frq_steps)):
             freq = frq_steps[index]
             eligibility_obj[freq] = {}
-            eligibility_obj[freq]["data"] = self.__fetch_hostorical_data(symbol,token,frq_steps[index],number_of_candles)
+            eligibility_obj[freq]["data"] = FetchData.fetch_hostorical_candle_data_from_kite(symbol,token,frq_steps[index],number_of_candles)
             if(len(eligibility_obj[freq]["data"]) < 200): #For This frequency no data was fetched
                 eligibility_obj["message"] = symbol + " : Not Enough Candles For " + str(freq)
                 return False , eligibility_obj
