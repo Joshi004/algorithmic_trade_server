@@ -156,9 +156,8 @@ class TradeSession(metaclass=TradeSessionMeta):
             symbol = instrument["trading_symbol"]
 
             # trade_id = self.__process__instrument_actions__(instrument)
-            trade_id = self.scanning_algo_instance.process_scanner_actions(instrument)
+            trade_id = self.scanning_algo_instance.process_scanner_actions(instrument,self.user_id,self.dummy,self.trade_session_id)
 
-            
             if(trade_id):
                 self.scanning_algo_instance.mark_into_scan_records(trade_id,self.tracking_algo_name,instrument)
             
