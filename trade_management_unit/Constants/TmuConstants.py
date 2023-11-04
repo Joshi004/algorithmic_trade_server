@@ -39,7 +39,8 @@ class TradeType(Enum):
 
 
 # Other constants
-PI = 3.14
+MARKET_CUTOFF_TIME = '15:20'
+MARKET_END_TIME = '15:20'
 GREETING = "Hello, world!"
 TRADE_TYPE = {"intraday":"equity_intraday"}
 DEFAULT_EXCHANGE = "NSE"

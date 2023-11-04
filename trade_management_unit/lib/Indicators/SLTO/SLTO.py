@@ -96,6 +96,8 @@ class SLTO():
 
     def __set_place_order_action__(self,current_price_zone:PriceZone,time_delta:int)-> None:
         self.required_action = None
+
+
         if(current_price_zone == PriceZone.RESISTANCE_BREAKOUT):
             if(self.view == View.LONG):
                 self.required_action = OrderType.SELL
@@ -111,7 +113,21 @@ class SLTO():
                 self.required_action = OrderType.SELL
                 self.tracking_end_time = datetime.now()
         else:
-            pass # Price in Range
+             # Get the current time
+            current_time = datetime.now().time()
+            # Define the cut-off time as 15:20 and end time as 15:30
+            cut_off_time = datetime.strptime(MARKET_CUTOFF_TIME, '%H:%M').time()
+            end_time = datetime.strptime(MARKET_END_TIME, '%H:%M').time()
+            # Check if the current time is greater than the cut-off time and less than the end time
+            if cut_off_time < current_time < end_time:
+                if self.view == View.SHORT:
+                    self.required_action = OrderType.BUY
+                    self.tracking_end_time = datetime.now()
+                elif self.view == View.LONG:
+                    self.required_action = OrderType.SELL
+                    self.tracking_end_time = datetime.now()
+
+
 
 
 
