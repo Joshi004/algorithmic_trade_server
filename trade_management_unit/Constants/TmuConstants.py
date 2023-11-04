@@ -11,15 +11,40 @@ class View(Enum):
     LONG = "long"
     SHORT = "short"
 
+class Trends(Enum):
+    """An enum to represent the trend of a stock."""
+    UPTREND = "uptrend"
+    DOWNTREND = "downtrend"
+    SIDETREND = "sidetrend"
+    
+    @classmethod
+    def choices(cls):
+        return [(member.value, member.value) for member in cls]
+
 class OrderType(Enum):
     """An enum to represent the order type of the trade."""
     BUY = "buy"
     SELL = "sell"
 
+class TradeType(Enum):
+    EQUITY_DELIVERY = "equity_delivery"
+    EQUITY_INTRADAY = "equity_intraday"
+    EQUITY_FUTURES = "equity_futures"
+    EQUITY_OPTIONS = "equity_options"
+    CURRENCY_FUTURES = "currency_futures"
+    CURRENCY_OPTIONS = "currency_options"
+    COMMODITY_FUTURES = "commodity_futures"
+    COMMODITY_OPTIONS = "commodity_options"
+
+
 
 # Other constants
-PI = 3.14
+MARKET_CUTOFF_TIME = '15:20'
+MARKET_END_TIME = '15:20'
 GREETING = "Hello, world!"
+TRADE_TYPE = {"intraday":"equity_intraday"}
+DEFAULT_EXCHANGE = "NSE"
+TRADE_THRESHHOLD_PER_MINUTE = 100000 
 FREQUENCY = ["minute","3minute","5minute","10minute","15minute","30minute","60minute","day"]
 NUM_CANDLES_FOR_TREND_ANALYSIS = 200
 FREQUENCY_STEPS = {

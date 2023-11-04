@@ -16,7 +16,7 @@ class KiteTickhandler(metaclass=SingletonMeta):
         self.api_key = self.env.read("api_key")
         self.api_secret = self.env.read("api_secret")
         self.access_token = self.env.read("access_token")
-        self.__kto__ = None
+        self.kto = None
         self.scanning_sessions = {}
         self.tracking_sessions = {}
         self.trade_sessions = {}
@@ -72,35 +72,16 @@ class KiteTickhandler(metaclass=SingletonMeta):
 
 
     def get_kite_ticker_instance(self):
-        if(self.__kto__):
-            return self.__kto__
+        if(self.kto):
+            return self.kto
         else:
             kto = KiteTicker(self.api_key,self.access_token)
             kto.on_connect = self.on_connect
             kto.on_ticks = self.on_ticks
             kto.on_close = self.on_close
-            self.__kto__ = kto
-            return self.__kto__
+            self.kto = kto
+            return self.kto
 
 
     def on_close(self,ws,code,reason):
         ws.stop()
-
-    def get_formated_ticks(self,ticks):
-        
-        try: 
-            # You might see that if mode is chnged to full there is no reposnse on UI wth no eror this might be coz of datetime.dateime obect that is not serlisable directly 
-            # for tick in ticks:
-                # if (tick["mode"] == "full"):
-                #     tick = json.loads(serializers.serialize('json', tick))
-            
-            formated_obj = {
-                'data':ticks,
-                'meta':{
-                'number_of_ticks' : len(ticks),
-                'algorithm' : self.communication_group
-                # Attach Indicators also with metadata
-                }}
-            return formated_obj
-        except Exception as e:
-            print ("Error in Formating ticks",e)

@@ -1,18 +1,23 @@
 from trade_management_unit.lib.Algorithms.ScannerAlgos.UDTS.Candle import Candle
 import pandas as pd
+from trade_management_unit.Constants.TmuConstants import *
 class CandleChart:
-    def __init__(self,symbol,trade_freq,price_list):
+    def __init__(self,token,symbol,market_price,trade_volume,last_quantity,trade_freq,price_list):
         self.price_list = price_list
-        self.trend = None
+        self.market_price = market_price
+        self.last_quantity = last_quantity
+        self.volume = trade_volume
+        self.instrument_token = token
         self.interval = trade_freq
         self.deflection_points = []
+        self.trading_pair= {}
+        self.trend = None
         self.average_candle_span = None
         self.rounding_factor = None
         self.symbol = symbol
-        self.trading_pair= {}
         self.valid_pairs=None
-        self.market_price = price_list[-1]["open"]
-        
+    
+
     def __add_deflection_point(self,direction, price, stoping_potential, distance, frequency, progression_potential,deflection_index,reversal_index):
         self.deflection_points.append({
             "direction" : direction, # direction: up or down, indicating the direction of the new trend
@@ -27,7 +32,6 @@ class CandleChart:
         })
 
     def set_trend_and_deflection_points(self):
-
         # This function returns the trend and the deflection points of a price list based on candlestick charting
         candle = Candle(self.price_list[0])
         swing_max = candle.high
@@ -104,7 +108,7 @@ class CandleChart:
         #Set last progression Potential and trend
         self.deflection_points[-1]["progression_potential"] = self.market_price - self.deflection_points[-1]["price"]        
         # Use Constants File for this 
-        self.trend = "BULLISH" if is_bullish_trend else "BEARISH"
+        self.trend = Trends.UPTREND if is_bullish_trend else Trends.DOWNTREND
 
     
     def normalise_deflection_points(self,scope_range):
@@ -143,7 +147,15 @@ class CandleChart:
     
 
     def set_trading_levels_and_ratios(self,min_reward = 2):
-        trading_pair = {"support":None,"resistance":None,"reward_risk_ratio":0,"strength":0}
+        trading_pair = {"support":None,
+                        "resistance":None,
+                        "reward_risk_ratio":0,
+                        "support":None,
+                        "resistance":None,
+                        "resistance_strength":None,
+                        "support_strength":None,
+                        "strength":0}
+        
         def_list = self.deflection_points
         price = self.market_price
         valid_pairs = []
@@ -165,6 +177,8 @@ class CandleChart:
                     eq_strength = resist["strength"] + support["strength"]
                     valid_pairs.append({"support":support["price"],
                                         "resistance":resist["price"],
+                                        "resistance_strength":resist["strength"],
+                                        "support_strength":support["strength"],
                                         "strength" : eq_strength})
                 
         
@@ -182,9 +196,8 @@ class CandleChart:
         product_of_strengts = resist["strength"] * support["strength"]
         if (product_of_strengts == 0):
             return False
-        if (trend == "BULLISH" and min_reward < top/bottom < 5 * min_reward ):
+        if (trend == Trends.UPTREND and min_reward < top/bottom < 5 * min_reward ):
             return True
-        if (trend == "BEARISH"  and min_reward < bottom/top < 5 * min_reward):
+        if (trend == Trends.DOWNTREND  and min_reward < bottom/top < 5 * min_reward):
             return True
         return False
-                    

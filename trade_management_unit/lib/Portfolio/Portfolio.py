@@ -20,6 +20,17 @@ class Portfolio:
             logging.error(e)
             response = {"data":None, "status":"failure", "message":str(e)}
         return response
+    
+    def get_available_margin(self):
+        try:
+            margins = self.kite.margins()
+            # Below response hirarchy might have issue please checkthe response first
+            response = {"data": margins['equity']['available']['live_balance'], "status": "success"}
+        except Exception as e:
+            logging.error(e)
+            response = {"data": None, "status": "failure", "message": str(e)}
+        return response
+
 
     def get_positions(self, params):
         try:
@@ -65,7 +76,7 @@ class Portfolio:
             self._validate_params(params)
 
             # Extract the parameters from the input dictionary and convert them to the required types using the _convert_param method
-            tradingsymbol = self._convert_param(params, "tradingsymbol", str)
+            trading_symbol = self._convert_param(params, "trading_symbol", str)
             exchange = self._convert_param(params, "exchange", str)
             transaction_type = self._convert_param(params, "transaction_type", str)
             order_type = self._convert_param(params, "order_type", str)
@@ -82,7 +93,7 @@ class Portfolio:
 
             # Place the order using the Kite Connect API
             order_id = self.kite.place_order(
-                tradingsymbol=tradingsymbol,
+                tradingsymbol=trading_symbol,
                 exchange=exchange,
                 transaction_type=transaction_type,
                 order_type=order_type,
@@ -112,10 +123,10 @@ class Portfolio:
         if not params or not isinstance(params, dict):
             raise ValueError("params must be a non-empty dictionary")
 
-        # Check if the tradingsymbol parameter is valid
-        tradingsymbol = params.get("tradingsymbol", None)
-        if not tradingsymbol or not isinstance(tradingsymbol, str):
-            raise ValueError("tradingsymbol must be a non-empty string")
+        # Check if the trading_symbol parameter is valid
+        trading_symbol = params.get("trading_symbol", None)
+        if not trading_symbol or not isinstance(trading_symbol, str):
+            raise ValueError("trading_symbol must be a non-empty string")
 
         # Check if the exchange parameter is valid
         exchange = params.get("exchange", None)
