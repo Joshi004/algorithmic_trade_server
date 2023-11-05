@@ -2,6 +2,7 @@ from trade_management_unit.lib.Indicators.IndicitorSingletonMeta import Indicito
 from trade_management_unit.Constants.TmuConstants import *
 from trade_management_unit.models.AlgoSltoTrackRecord import AlgoSltoTrackRecord
 from datetime import datetime
+from trade_management_unit.models.Trade import Trade
 
 from trade_management_unit.models.AlgoUdtsScanRecord import AlgoUdtsScanRecord
 class SLTO():
@@ -67,11 +68,13 @@ class SLTO():
         else:
             return PriceZone.RANGE
 
-    def mark_into_indicator_records(self,tick,trade_session_id):
+    def mark_into_indicator_records(self,tick,trade_session_id,user_id,dummy):
         instrument_id = tick["instrument_token"]
+        trade = Trade.fetch_active_trade(instrument_id,trade_session_id,user_id,dummy)
+        trade_id = trade.id
         AlgoSltoTrackRecord.add_indicator_entry(
             market_price=tick["last_price"],
-            trade_session_id = trade_session_id,
+            trade_id = trade_id,
             instrument_id = instrument_id,
             existing_price_zone=tick["indicator_data"]["slto"]["prev_price_zone"],
             next_price_zone=tick["indicator_data"]["slto"]["price_zone"],

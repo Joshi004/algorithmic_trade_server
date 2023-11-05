@@ -39,7 +39,7 @@ class AlgoUdtsScanRecord(models.Model):
     trade = models.ForeignKey('Trade', on_delete=models.CASCADE)
 
     # Add the instrument_id field as a foreign key to the Instrument model
-    instrument = models.ForeignKey('Instrument', on_delete=models.CASCADE)
+    instrument = models.ForeignKey('Instrument', on_delete=models.PROTECT)
 
     # Add the tracking_algo_id field as a foreign key to the Algorithm model
     tracking_algo_id = models.ForeignKey('Algorithm', on_delete=models.CASCADE)

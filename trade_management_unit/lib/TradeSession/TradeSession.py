@@ -96,7 +96,7 @@ class TradeSession(metaclass=TradeSessionMeta):
                 indicator_obj.update(last_price)
                 indicator_obj.append_information(tick)
                 if(indicator_obj.price_zone_changed):
-                    indicator_obj.mark_into_indicator_records(tick,self.trade_session_id)
+                    indicator_obj.mark_into_indicator_records(tick,self.trade_session_id,self.user_id,self.dummy)
 
             formated_instrument_data = self.get_formated_tick(tick,symbol)
             if(formated_instrument_data["required_action"]):
