@@ -1,4 +1,5 @@
 from django.db import models
+from trade_management_unit.models.Trade import Trade
 from django.utils import timezone
 
 class DummyAccount(models.Model):    
@@ -20,3 +21,10 @@ class DummyAccount(models.Model):
             return getattr(user, attribute, None)
         except cls.DoesNotExist:
             return None
+
+    @classmethod
+    def get_current_balance_including_margin(cls,user_id,dummy):
+        current_amount = cls.objects.get(user_id=user_id).current_amount
+        existing_margin_used = Trade.get_total_margin(user_id,dummy)
+        return (current_amount  - existing_margin_used)
+

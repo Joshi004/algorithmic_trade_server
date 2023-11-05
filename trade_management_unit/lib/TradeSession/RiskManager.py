@@ -1,6 +1,7 @@
 from trade_management_unit.models.DummyAccount import DummyAccount
 from trade_management_unit.models.UserConfiguration import UserConfiguration
 from trade_management_unit.lib.Portfolio.Portfolio import Portfolio
+from trade_management_unit.models.Trade import Trade
 from  trade_management_unit.Constants.TmuConstants import *
 class RiskManager:
     def __init__(self):
@@ -24,9 +25,10 @@ class RiskManager:
     
     def get_balance_amount(self, user_id,dummy):
         if dummy:
-            return float(DummyAccount.get_attribute(user_id, "current_balance"))
+            return float(DummyAccount.get_current_balance_including_margin(user_id,dummy))
         else:
-            return Portfolio().get_available_margin()
+            used_margin = Trade.get_total_margin(user_id,dummy)
+            return (Portfolio().get_available_margin() - used_margin)
 
     def get_risk_appetite(self,user_id):
         return UserConfiguration.get_attribute(user_id,"risk_appetite")

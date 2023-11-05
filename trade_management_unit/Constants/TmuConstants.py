@@ -41,7 +41,7 @@ class TradeType(Enum):
 # Other constants
 MARKET_CUTOFF_TIME = '15:20'
 MARKET_END_TIME = '15:20'
-GREETING = "Hello, world!"
+MARGIN_FACTOR=1.5
 TRADE_TYPE = {"intraday":"equity_intraday"}
 DEFAULT_EXCHANGE = "NSE"
 TRADE_THRESHHOLD_PER_MINUTE = 100000 

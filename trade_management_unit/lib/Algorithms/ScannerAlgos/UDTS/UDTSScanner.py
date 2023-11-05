@@ -6,6 +6,7 @@ from  trade_management_unit.models.Instrument import Instrument
 from trade_management_unit.lib.Trade.trade import Trade as TradeLib
 from trade_management_unit.models.Order import Order
 from trade_management_unit.models.Trade import Trade
+from trade_management_unit.models.DummyAccount import DummyAccount
 from trade_management_unit.Constants.TmuConstants import *
 from trade_management_unit.lib.Instruments.historical_data.FetchData import FetchData
 from trade_management_unit.models.AlgoUdtsScanRecord import AlgoUdtsScanRecord
@@ -105,19 +106,44 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
         if action:
             instrument_id = instrument["instrument_id"]
             market_price = instrument["market_data"]["market_price"]
-            trade_id = Trade.fetch_or_initiate_trade(instrument_id, action,trade_session_id,user_id,dummy).id
             risk_manager = RiskManager()
             quantity,frictional_losses = risk_manager.get_quantity_and_frictional_losses(action,market_price,instrument["support_price"],instrument["resistance_price"],user_id,dummy)
             print("!!! Order from Zerodha",trading_symbol,action)
-            kite_order_id = self.place_order_on_kite(trading_symbol,quantity,action,instrument["support_price"],instrument["resistance_price"],instrument["market_data"]["market_price"],user_id,dummy)
-            order_id = Order.initiate_order(action, instrument_id, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity).id
+            margin = self.get_trade_margin(action,market_price,instrument["support_price"],instrument["resistance_price"],quantity)
+            trade_id = Trade.fetch_or_initiate_trade(instrument_id, action,trade_session_id,user_id,dummy,margin).id
+            if(not self.has_active_position(trade_id)):
+                kite_order_id = self.place_order_on_kite(trading_symbol,quantity,action,instrument["support_price"],instrument["resistance_price"],instrument["market_data"]["market_price"],user_id,dummy)
+                order_id = Order.initiate_order(action, instrument_id, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity).id
             return trade_id
         return None
+
+    def has_active_position(self,trade_id):
+        orders = Order.objects.filter(trade_id=trade_id,is_active=1)
+        if(len(orders)==1):
+            return True
+        return False
+
+    def get_trade_margin(self,action,market_price,support_price,resistance_price,quantity):
+        if(action == OrderType.SELL):
+            risk = (resistance_price - market_price) * quantity
+            margin = MARGIN_FACTOR*risk
+            return margin
+        else:
+            return 0
+
 
     def place_order_on_kite(self,trading_symbol,qunatity,action,support_price,resistance_price,market_price,user_id,dummy):
         stoploss = market_price - 0.99*support_price if action == OrderType.BUY else  1.01*support_price - market_price
         squareoff = 1.01*resistance_price - market_price if action == OrderType.BUY else market_price - 0.99*support_price
-        if (not dummy):
+        if (dummy):
+            dummy_account = DummyAccount.objects.get(user_id=user_id)
+            current_balance = dummy_account.current_balance
+            order_amount = qunatity * market_price
+            new_balance = current_balance - order_amount
+            dummy_account.current_balance = new_balance
+            dummy_account.save()
+            return user_id+"__"+str(datetime.now)
+        else:
             print("!!! Check Stoploss and squareoff values properly before this ")
             params = {"trading_symbol":trading_symbol,
                       "qunatity":qunatity,
@@ -130,8 +156,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
                       }
             resposne  = Portfolio().place_order(params)
             return resposne.trade_id
-        else:
-            return user_id+"__"+str(datetime.now)
+
 
 
     def __get_required_actions__(self,instrument):

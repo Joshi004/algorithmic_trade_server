@@ -4,6 +4,7 @@ from trade_management_unit.models import Trade
 from trade_management_unit.models.Order import  Order
 from trade_management_unit.lib.Portfolio.Portfolio import Portfolio
 from trade_management_unit.Constants.TmuConstants import  *
+from trade_management_unit.models.DummyAccount import DummyAccount
 from trade_management_unit.lib.TradeSession.RiskManager import RiskManager
 from datetime import datetime
 class UdtsSlto(metaclass=TrackerAlgoMeta):
@@ -36,23 +37,31 @@ class UdtsSlto(metaclass=TrackerAlgoMeta):
             market_price = instrument["market_data"]["market_price"]
             trade = Trade.fetch_active_trade(instrument_id,trade_session_id,user_id,dummy).id
             trade_id = trade.id
-            quantity = self.__get_square_off_quantity__(instrument_id,trade_session_id,user_id,trade_id,dummy)
-            kite_order_id = None
-            if not dummy:
-                order_params = {"trading_symbol":trading_symbol,
-                                "exchange": DEFAULT_EXCHANGE,
-                                "transaction_type": action,
-                                "order_type": "MARKET",
-                                "quantity":quantity,
-                                "product": "MIS",
-                                "validity": "DAY"}
-                kite_order_id = Portfolio.initiate_order(order_params)
-
+            quantity = self.__get_square_off_quantity__(trade_id)
+            kite_order_id = self.square_off_order_on_zerodha(trading_symbol,action,quantity,user_id,dummy,market_price)
             frictional_losses = RiskManager().get_frictional_losses(TRADE_TYPE["intraday"],market_price, quantity, action == "BUY")
             order = Order.initiate_order(action, instrument_id, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity)
             self.__update_and_close_trade__(trade,order.closed_at)
             return trade
         return None
+
+    def square_off_order_on_zerodha(self,trading_symbol,action,quantity,user_id,dummy,market_price):
+        kite_order_id = user_id+"__"+str(datetime.now)
+        if dummy:
+            retrived_amount = quantity * market_price
+            dummy_record = DummyAccount.objects.get(user_id = user_id)
+            current_balance = dummy_record.current_balance
+            dummy_record.current_balance = (current_balance + retrived_amount)
+        else:
+            order_params = {"trading_symbol":trading_symbol,
+                    "exchange": DEFAULT_EXCHANGE,
+                    "transaction_type": action,
+                    "order_type": "MARKET",
+                    "quantity":quantity,
+                    "product": "MIS",
+                    "validity": "DAY"}
+            kite_order_id = Portfolio.initiate_order(order_params)
+        return kite_order_id
 
     def __update_and_close_trade__(self,trade,closed_at):
         if(closed_at):
@@ -63,8 +72,8 @@ class UdtsSlto(metaclass=TrackerAlgoMeta):
             trade.save()
 
 
-    def __get_square_off_quantity__(self,instrument_id,trade_session_id,user_id,trade_id,dummy):
-        order = Order.fetch_order(instrument_id, trade_id,dummy,user_id)
+    def __get_square_off_quantity__(self,trade_id):
+        order = Order.fetch_order(trade_id)
         existing_quantity = order.quantity
         return existing_quantity
 
