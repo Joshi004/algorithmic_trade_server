@@ -68,7 +68,7 @@ class SLTO():
         else:
             return PriceZone.RANGE
 
-    def mark_into_indicator_records(self,tick,trade_session_id,user_id,dummy):
+    def mark_into_indicator_records(self,tick,trade_session_id,user_id,dummy,scanning_algo_name):
         instrument_id = tick["instrument_token"]
         trade = Trade.fetch_active_trade(instrument_id,trade_session_id,user_id,dummy)
         trade_id = trade.id
@@ -79,6 +79,7 @@ class SLTO():
             existing_price_zone=tick["indicator_data"]["slto"]["prev_price_zone"],
             next_price_zone=tick["indicator_data"]["slto"]["price_zone"],
             zone_change_time=tick["indicator_data"]["slto"]["mark_time"],
+            scaning_algo_name=scanning_algo_name
         )
 
     def append_information(self,initial_data:dict):

@@ -7,14 +7,6 @@ from trade_management_unit.models.Instrument import Instrument  # Import the Ins
 from trade_management_unit.models.Algorithm import Algorithm  # Import the Algorithm model
 from trade_management_unit.Constants.TmuConstants import *
 
-class Trend(Enum):
-    BULLISH = "bullish"
-    BEARISH = "bearish"
-
-    @classmethod
-    def choices(cls):
-        return [(key.value, key.name) for key in cls]
-
 class AlgoUdtsScanRecord(models.Model):
     class Meta:
         db_table = "algo_udts_scan_records"
@@ -27,22 +19,13 @@ class AlgoUdtsScanRecord(models.Model):
     resistance_price = models.DecimalField(max_digits=10, decimal_places=2)
     support_strength = models.DecimalField(max_digits=10, decimal_places=4)
     resistance_strength = models.DecimalField(max_digits=10, decimal_places=4)
-    TREND_CHOICES = [(trend, trend) for trend in Trends]
-    effective_trend = models.CharField(
-        max_length=20,
-        choices=Trends.choices(),
-        default=Trends.UPTREND,
-    )
+    effective_trend = models.CharField(max_length=20,choices=Trends.choices(),default=Trends.UPTREND,)
     trade_candle_interval = models.CharField(max_length=255)
     movement_potential = models.DecimalField(max_digits=10, decimal_places=2)
-    volume = models.DecimalField(max_digits=10, decimal_places=2)  # Add volume field
+    volume = models.DecimalField(max_digits=10, decimal_places=2)
     trade = models.ForeignKey('Trade', on_delete=models.CASCADE)
-
-    # Add the instrument_id field as a foreign key to the Instrument model
     instrument = models.ForeignKey('Instrument', on_delete=models.PROTECT)
-
-    # Add the tracking_algo_id field as a foreign key to the Algorithm model
-    tracking_algo_id = models.ForeignKey('Algorithm', on_delete=models.CASCADE)
+    tracking_algo = models.ForeignKey('Algorithm', on_delete=models.PROTECT)
 
     @classmethod
     def fetch_udts_record(cls,trade_id,instrument_id):
@@ -51,7 +34,6 @@ class AlgoUdtsScanRecord(models.Model):
             instrument_id = instrument_id
         )
         return udts_record
-
 
     @classmethod
     def add_entry(cls, *, market_price, support_price, resistance_price, support_strength, resistance_strength, effective_trend, trade_candle_interval, movement_potential, trade_id, instrument_id, tracking_algo_name,volume):  # Add instrument_id parameter
@@ -99,11 +81,11 @@ class AlgoUdtsScanRecord(models.Model):
                 effective_trend=effective_trend,
                 trade_candle_interval=trade_candle_interval,
                 movement_potential=movement_potential,
-                volume=volume,  # Add volume to the record
+                volume=volume,
                 trade=trade,
                 instrument=instrument,
-                tracking_algo_id=tracking_algo  # Add tracking_algo to the record
+                tracking_algo=tracking_algo
             )
-            record.full_clean()  # This will validate all fields and raise a ValidationError if any field is invalid.
+            record.full_clean()
             record.save()
             return record
