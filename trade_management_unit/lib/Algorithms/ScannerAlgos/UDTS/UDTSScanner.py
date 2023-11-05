@@ -212,7 +212,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
 
 
         is_volume_eligible = self.get_volume_eligibility(quote_data)
-        if (not is_volume_eligible):
+        if (not not is_volume_eligible):
             print("Volume Not Eligible For",symbol)
             eligibility_obj["message"] = symbol + " : Volume not eligible"
             return False, eligibility_obj

@@ -93,6 +93,6 @@ class Instruments:
         with transaction.atomic():
             with connection.cursor() as cursor:
                 cursor.execute('SET FOREIGN_KEY_CHECKS=0;')
-                Instrument.objects.all().delete()
+                cursor.execute('DELETE FROM instruments')
                 cursor.execute('SET FOREIGN_KEY_CHECKS=1;')
             Instrument.objects.bulk_create(instrument_instances)
