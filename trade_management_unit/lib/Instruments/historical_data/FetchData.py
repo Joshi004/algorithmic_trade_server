@@ -1,9 +1,10 @@
 from datetime import datetime, timedelta, time
 
 from trade_management_unit.lib.Kite.KiteUser import KiteUser
-from trade_management_unit.models.Database import Database
+from trade_management_unit.lib.Instruments.historical_data.Database import Database
 import logging
-import time as tm
+
+
 class FetchData:
     def __init__(self):
         logging.getLogger("urllib3").setLevel(logging.WARNING)
