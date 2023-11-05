@@ -13,7 +13,7 @@ class AlgoSltoTrackRecord(models.Model):
     zone_change_time = models.DateTimeField(auto_now_add=True)
     market_price = models.DecimalField(max_digits=10, decimal_places=2)
     trade_session = models.ForeignKey('TradeSession', on_delete=models.CASCADE)
-    instrument = models.ForeignKey('Instrument', on_delete=models.CASCADE)
+    instrument = models.ForeignKey('Instrument', on_delete=models.PROTECT)
 
     PRICE_ZONE_CHOICES = [(tag.name, tag.value) for tag in PriceZone]
     existing_price_zone = EnumField(choices=PRICE_ZONE_CHOICES, default=PriceZone.RANGE.value)
