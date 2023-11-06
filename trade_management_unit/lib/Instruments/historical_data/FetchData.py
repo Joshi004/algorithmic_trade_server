@@ -25,9 +25,13 @@ class FetchData:
         while (len(historical_data) < number_of_candles+1 and iteration_count < 10 and to_date.year > 2019):
             iteration_count += 1
             # Skip non-trading hours (before 9:15 or after 15:30)
-            if to_date.time() < time(9, 15) or to_date.time() > time(15, 30):
+            if to_date.time() < time(9, 15):
                 # Move to the previous trading day
                 to_date = to_date.replace(hour=15, minute=30) - timedelta(days=1)
+            elif to_date.time() > time(15, 30):
+                # Move to the 3 30 time
+                to_date = to_date.replace(hour=15, minute=30)
+
 
             # Skip weekends (Saturday and Sunday)
             while to_date.weekday() >= 5:
