@@ -5,8 +5,9 @@ class UserConfiguration(models.Model):
     id = models.AutoField(primary_key=True)
     user_id = models.IntegerField(unique=True)
     risk_appetite = models.FloatField(default=5, validators=[MinValueValidator(0), MaxValueValidator(100)])
-    reward_risk_ratio = models.FloatField(default=2)
-
+    min_reward_risk_ratio = models.FloatField(default=2)
+    max_reward_risk_ratio = models.FloatField(default=20)
+    trades_per_session = models.IntegerField(default=100)
     class Meta:
         db_table = "user_configurations"
 

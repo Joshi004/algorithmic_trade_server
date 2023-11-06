@@ -8,6 +8,7 @@ from django.db.models import Q
 from django.core.paginator import Paginator
 from django.core import serializers
 from django.db import transaction
+from django.db import connection
 import json
 
 from trade_management_unit.lib.Kite.KiteUser import KiteUser
@@ -90,6 +91,8 @@ class Instruments:
             for instrument in instrument_dict
         ]
         with transaction.atomic():
-            # This code executes inside a transaction.
-            Instrument.objects.all().delete()  # Clear the table
-            Instrument.objects.bulk_create(instrument_instances)  # Add new data
+            with connection.cursor() as cursor:
+                cursor.execute('SET FOREIGN_KEY_CHECKS=0;')
+                cursor.execute('DELETE FROM instruments')
+                cursor.execute('SET FOREIGN_KEY_CHECKS=1;')
+            Instrument.objects.bulk_create(instrument_instances)

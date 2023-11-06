@@ -41,10 +41,11 @@ class TradeType(Enum):
 # Other constants
 MARKET_CUTOFF_TIME = '15:20'
 MARKET_END_TIME = '15:20'
-GREETING = "Hello, world!"
+MARGIN_FACTOR=1.5
 TRADE_TYPE = {"intraday":"equity_intraday"}
 DEFAULT_EXCHANGE = "NSE"
-TRADE_THRESHHOLD_PER_MINUTE = 100000 
+MINIMUM_REQUIRED_BALANCE = 100
+TRADE_THRESHHOLD_PER_MINUTE = 1000
 FREQUENCY = ["minute","3minute","5minute","10minute","15minute","30minute","60minute","day"]
 NUM_CANDLES_FOR_TREND_ANALYSIS = 200
 FREQUENCY_STEPS = {

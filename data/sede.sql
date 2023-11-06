@@ -7,3 +7,8 @@ VALUES ('udts', 'algo_udts_scan_records', 'scanning', '<div><h1>Unidirectional T
 
 INSERT INTO algorithms (name, table_name, type, description)
 VALUES ('slto', 'algo_slto_track_records', 'tracking', 'System waits for 20th of trade frequency in case of stop loss hit and squares off when price reaches the target');
+
+
+
+INSERT INTO user_configurations (user_id, risk_appetite, min_reward_risk_ratio, max_reward_risk_ratio, trades_per_session)
+VALUES (1, 5, 2, 15, 100);

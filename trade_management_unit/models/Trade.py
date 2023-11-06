@@ -1,5 +1,6 @@
 from django.db import models
 from django_mysql.models import EnumField
+from django.db.models import Sum
 from datetime import datetime
 from django.db.models import Q
 from trade_management_unit.models.Instrument import Instrument
@@ -21,9 +22,7 @@ class Trade(models.Model):
     user_id = models.CharField(max_length=64,default="1")
     max_price = models.FloatField(blank=True, null=True)
     min_price = models.FloatField(blank=True, null=True)
-
-         
-
+    margin = models.FloatField(blank=False,null=False,default=0)
 
     @classmethod
     def fetch_active_trade(cls, instrument_id,trade_session_id, user_id, dummy):
@@ -38,7 +37,7 @@ class Trade(models.Model):
         return trade
 
     @classmethod
-    def fetch_or_initiate_trade(cls, instrument_id, action, trade_session_id, user_id, dummy):
+    def fetch_or_initiate_trade(cls, instrument_id, action, trade_session_id, user_id, dummy,margin):
         try:
             # Try to find an existing active trade with the same parameters
             trade = cls.objects.get(
@@ -59,7 +58,8 @@ class Trade(models.Model):
                 user_id=user_id,
                 dummy=dummy,
                 max_price=None,
-                min_price=None
+                min_price=None,
+                margin = margin
             )
             trade.save()
         return trade
@@ -92,6 +92,12 @@ class Trade(models.Model):
                 net_profit += order.price
             net_profit -= order.frictional_losses
         return net_profit
+
+    @classmethod
+    def get_total_margin(cls, user_id,dummy):
+        total_margin = cls.objects.filter(user_id=user_id, is_active=True,dummy=dummy).aggregate(total_margin=Sum('margin'))['total_margin']
+        return total_margin if total_margin else 0
+
 
 
     

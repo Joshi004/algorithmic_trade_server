@@ -50,7 +50,7 @@ class TradeSession(metaclass=TradeSessionMeta):
         self.scanning_algo_instance = scanning_algo_instance
         scanning_algo_instance.register_trade_session(self)
         self.kite_tick_handler.register_scanning_session(scanning_algo_instance)
-        scanning_algo_instance.fetch_instrument_tokens_and_start_tracking()
+        scanning_algo_instance.fetch_instrument_tokens_and_start_tracking(self.user_id,self.dummy)
 
 
     def __instanciate_tracking_algo__(self):
@@ -96,7 +96,7 @@ class TradeSession(metaclass=TradeSessionMeta):
                 indicator_obj.update(last_price)
                 indicator_obj.append_information(tick)
                 if(indicator_obj.price_zone_changed):
-                    indicator_obj.mark_into_indicator_records(tick,self.trade_session_id)
+                    indicator_obj.mark_into_indicator_records(tick,self.trade_session_id,self.user_id,self.dummy,self.scanning_algo_name)
 
             formated_instrument_data = self.get_formated_tick(tick,symbol)
             if(formated_instrument_data["required_action"]):

@@ -5,6 +5,8 @@ from kiteconnect import KiteConnect
 from trade_management_unit.lib.common.EnvFile import EnvFile
 from trade_management_unit.lib.Kite.KiteUser import KiteUser
 from trade_management_unit.models.Instrument import Instrument
+from trade_management_unit.models.DummyAccount import DummyAccount
+from trade_management_unit.models.Trade import Trade
 
 class Portfolio:
     def __init__(self):
@@ -30,6 +32,17 @@ class Portfolio:
             logging.error(e)
             response = {"data": None, "status": "failure", "message": str(e)}
         return response
+
+    def get_current_balance_including_margin(self,user_id,dummy):
+        used_amrgin = float(Trade.get_total_margin(user_id,dummy))
+        if(dummy):
+            shown_balance = float(DummyAccount.get_attribute(user_id,"current_balance"))
+            current_balance = shown_balance -used_amrgin
+            return current_balance
+        else:
+            shown_balance =  self.get_available_margin()
+            current_balance = shown_balance -used_amrgin
+            return current_balance
 
 
     def get_positions(self, params):
