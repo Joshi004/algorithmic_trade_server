@@ -11,8 +11,7 @@ from trade_management_unit.Constants.TmuConstants import *
 from trade_management_unit.lib.Instruments.historical_data.FetchData import FetchData
 from trade_management_unit.models.AlgoUdtsScanRecord import AlgoUdtsScanRecord
 from trade_management_unit.lib.TradeSession.RiskManager import RiskManager
-from trade_management_unit.lib.Portfolio.Portfolio import  Portfolio
-
+from trade_management_unit.lib.Portfolio.Portfolio import Portfolio
 import pandas as pd
 import concurrent.futures
 import threading
@@ -20,7 +19,6 @@ from datetime import datetime
 
 
 class UDTSScanner(metaclass=ScannerSingletonMeta):
-
     def __init__(self,trade_freq,tracking_algorithm):
         self.trade_sessions = {} # Stores All the KiteUser instace refs
         self.trade_freqency = trade_freq
@@ -33,7 +31,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
     def register_trade_session(self,trade_sesion):
         self.trade_sessions[str(trade_sesion)] = trade_sesion
 
-    def scan_in_seperate_trhread(self,all_instruments):
+    def scan_in_seperate_trhread(self,all_instruments,user_id,dummy):
         counter = 0
         while(True):
             counter += 1
@@ -47,11 +45,15 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
                 symbol = instrument["trading_symbol"]
                 token = instrument["instrument_token"]
                 print("\n\n\n")
+                current_balance = Portfolio().get_current_balance_including_margin(user_id,dummy)
+                if(current_balance < MINIMUM_REQUIRED_BALANCE):
+                    print("Not Enough Balance to place Trades ",current_balance)
+                    continue
                 print("Scanning Instrument now ",symbol)
                 is_eligible,eligibility_obj = self.is_eligible(symbol,token)
                 print("Instrument Number",instrument_counter)
-                if (is_eligible):
 
+                if (is_eligible):
                     instrument_id = Instrument.objects.get(trading_symbol=symbol,exchange=DEFAULT_EXCHANGE).id
                     eligible_instrument_counter += 1
                     print("FOUND NEXT ELIGIBLE -- - ",eligible_instrument_counter,symbol)
@@ -107,7 +109,10 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
             instrument_id = instrument["instrument_id"]
             market_price = instrument["market_data"]["market_price"]
             risk_manager = RiskManager()
-            quantity,frictional_losses = risk_manager.get_quantity_and_frictional_losses(action,market_price,instrument["support_price"],instrument["resistance_price"],user_id,dummy)
+            quantity,frictional_losses = risk_manager.get_quantity_and_frictional_losses(action,market_price,instrument["support_price"],instrument["resistance_price"],user_id,dummy,trade_session_id)
+            if(quantity<1):
+                print("Cant performa action on less than 1 quantity")
+                return None
             print("!!! Order from Zerodha",trading_symbol,action)
             margin = self.get_trade_margin(action,market_price,instrument["support_price"],instrument["resistance_price"],quantity)
             trade_id = Trade.fetch_or_initiate_trade(instrument_id, action,trade_session_id,user_id,dummy,margin).id
@@ -118,7 +123,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
         return None
 
     def has_active_position(self,trade_id):
-        orders = Order.objects.filter(trade_id=trade_id,is_active=1)
+        orders = Order.objects.filter(trade_id=trade_id)
         if(len(orders)==1):
             return True
         return False
@@ -137,10 +142,10 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
         squareoff = 1.01*resistance_price - market_price if action == OrderType.BUY else market_price - 0.99*support_price
         if (dummy):
             dummy_account = DummyAccount.objects.get(user_id=user_id)
-            current_balance = dummy_account.current_balance
+            current_balance = (dummy_account.current_balance)
             order_amount = qunatity * market_price
-            new_balance = current_balance - order_amount
-            dummy_account.current_balance = new_balance
+            new_balance = float(current_balance) - order_amount
+            dummy_account.current_balance = round(new_balance,2)
             dummy_account.save()
             return user_id+"__"+str(datetime.now)
         else:
@@ -189,20 +194,20 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
         return all_instruments
 
 
-    def fetch_instrument_tokens_and_start_tracking(self):
+    def fetch_instrument_tokens_and_start_tracking(self,user_id,dummy):
         with concurrent.futures.ThreadPoolExecutor() as executor:
             future = executor.submit((self.fetch_instruments_from_db))
             result = future.result()
-        self.scan_and_add_instruments_for_tracking(result)
+        self.scan_and_add_instruments_for_tracking(result,user_id,dummy)
 
 
-    def scan_and_add_instruments_for_tracking(self,all_instruments):
-        scanner_thread = threading.Thread(target=self.scan_in_seperate_trhread,args=(all_instruments,))
+    def scan_and_add_instruments_for_tracking(self,all_instruments,user_id,dummy):
+        scanner_thread = threading.Thread(target=self.scan_in_seperate_trhread,args=(all_instruments,user_id,dummy))
         scanner_thread.setDaemon(True)
         scanner_thread.start()
 
 
-    def __get_effective_trend(slef,eligibility_obj):
+    def __get_effective_trend(self,eligibility_obj):
         trends = set()
         for frequency in eligibility_obj:
 
@@ -308,24 +313,25 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
     def get_udts_eligibility(self,symbol,trade_freq):
         print("get token and send hereh !!! nOt Working !!!!")
         # is_tradable,eligibility_obj =  self.is_eligible(symbol,trade_freq)
-        result = eligibility_obj[trade_freq]["chart"]
-        response_obj = {
-            "data":{
-            "price_list" : result.price_list,
-            "trend":result.trend,
-            "effective_trend" : eligibility_obj["effective_trend"],
-            "deflection_points":result.deflection_points,
-            "trading_pair":result.trading_pair,
-            "average_candle_span":result.average_candle_span,
-            "rounding_factor":result.rounding_factor,
-            "valid_pairs":result.valid_pairs,
-            "market_price":result.market_price,
-            "up_scope":result.up_scope,
-            "down_scope":result.down_scope,
-            },
-            "meta":{
-            "interval":result.interval,
-            "symbol":result.symbol,
-            }
-        }
-        return response_obj
+        # result = eligibility_obj[trade_freq]["chart"]
+        # response_obj = {
+        #     "data":{
+        #     "price_list" : result.price_list,
+        #     "trend":result.trend,
+        #     "effective_trend" : eligibility_obj["effective_trend"],
+        #     "deflection_points":result.deflection_points,
+        #     "trading_pair":result.trading_pair,
+        #     "average_candle_span":result.average_candle_span,
+        #     "rounding_factor":result.rounding_factor,
+        #     "valid_pairs":result.valid_pairs,
+        #     "market_price":result.market_price,
+        #     "up_scope":result.up_scope,
+        #     "down_scope":result.down_scope,
+        #     },
+        #     "meta":{
+        #     "interval":result.interval,
+        #     "symbol":result.symbol,
+        #     }
+        # }
+        # return response_obj
+        return {}

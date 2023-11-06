@@ -1,5 +1,6 @@
 from django.db import models
 from django_mysql.models import EnumField
+from django.db.models import Sum
 from datetime import datetime
 from django.db.models import Q
 from trade_management_unit.models.Instrument import Instrument

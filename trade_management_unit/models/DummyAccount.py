@@ -24,7 +24,7 @@ class DummyAccount(models.Model):
 
     @classmethod
     def get_current_balance_including_margin(cls,user_id,dummy):
-        current_amount = cls.objects.get(user_id=user_id).current_amount
-        existing_margin_used = Trade.get_total_margin(user_id,dummy)
+        current_amount = float(cls.objects.get(user_id=user_id).current_balance)
+        existing_margin_used = float(Trade.get_total_margin(user_id,dummy))
         return (current_amount  - existing_margin_used)
 

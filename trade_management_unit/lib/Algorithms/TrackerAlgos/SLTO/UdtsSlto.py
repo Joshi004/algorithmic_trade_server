@@ -50,8 +50,9 @@ class UdtsSlto(metaclass=TrackerAlgoMeta):
         if dummy:
             retrived_amount = quantity * market_price
             dummy_record = DummyAccount.objects.get(user_id = user_id)
-            current_balance = dummy_record.current_balance
-            dummy_record.current_balance = (current_balance + retrived_amount)
+            current_balance = float(dummy_record.current_balance)
+            dummy_record.current_balance = round((current_balance + retrived_amount),2)
+            dummy_record.save()
         else:
             order_params = {"trading_symbol":trading_symbol,
                     "exchange": DEFAULT_EXCHANGE,

@@ -50,7 +50,7 @@ class TradeSession(metaclass=TradeSessionMeta):
         self.scanning_algo_instance = scanning_algo_instance
         scanning_algo_instance.register_trade_session(self)
         self.kite_tick_handler.register_scanning_session(scanning_algo_instance)
-        scanning_algo_instance.fetch_instrument_tokens_and_start_tracking()
+        scanning_algo_instance.fetch_instrument_tokens_and_start_tracking(self.user_id,self.dummy)
 
 
     def __instanciate_tracking_algo__(self):

@@ -22,7 +22,7 @@ class AlgoSltoTrackRecord(models.Model):
 
 
     @classmethod
-    def add_indicator_entry(cls, *, market_price: float, trade_id: int, instrument_id: int, existing_price_zone: str, next_price_zone: str, zone_change_time: datetime,scanning_algo_name):
+    def add_indicator_entry(cls, *, market_price: float, trade_id: int, instrument_id: int, existing_price_zone: str, next_price_zone: str, zone_change_time: datetime,scanning_algo_name:str):
         # Validate market_price
         if not isinstance(market_price, float):
             raise ValidationError("market_price must be a float")

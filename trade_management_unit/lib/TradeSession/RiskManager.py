@@ -7,12 +7,18 @@ class RiskManager:
     def __init__(self):
         pass
 
-    def get_quantity_and_frictional_losses(self,action,market_price,support_price,resistance_price,user_id,dummy):
+    def get_quantity_and_frictional_losses(self,action,market_price,support_price,resistance_price,user_id,dummy,trade_session_id):
         unit_loss_potential =( market_price - support_price) if action == "buy" else (resistance_price-market_price) 
-        balance_amount = self.get_balance_amount(user_id,dummy)
+        orignal_balance_amount = Portfolio().get_current_balance_including_margin(user_id,dummy)
+        number_of_active_trades = len(Trade.objects.filter(trade_session_id=trade_session_id,is_active=1))
+        prefered_trades_per_session = UserConfiguration.get_attribute(user_id,"trades_per_session")
+        balance_amount = orignal_balance_amount//(prefered_trades_per_session - number_of_active_trades)
         risk_appetite  = self.get_risk_appetite(user_id)
         risk_amount = risk_appetite/100 * balance_amount
-        quantity = risk_amount // unit_loss_potential
+        quantity_from_risk = risk_amount // unit_loss_potential
+        quantity_for_balance = balance_amount // market_price
+        quantity = min(quantity_from_risk,quantity_for_balance)
+
         
         frictional_losses = self.get_frictional_losses(TRADE_TYPE["intraday"],market_price,quantity,action=="buy")
         while(quantity>0):
@@ -22,13 +28,7 @@ class RiskManager:
                  quantity -= 1
                  frictional_losses = self.get_frictional_losses(TRADE_TYPE["intraday"],market_price,quantity,action=="buy")
         return quantity,frictional_losses
-    
-    def get_balance_amount(self, user_id,dummy):
-        if dummy:
-            return float(DummyAccount.get_current_balance_including_margin(user_id,dummy))
-        else:
-            used_margin = Trade.get_total_margin(user_id,dummy)
-            return (Portfolio().get_available_margin() - used_margin)
+
 
     def get_risk_appetite(self,user_id):
         return UserConfiguration.get_attribute(user_id,"risk_appetite")

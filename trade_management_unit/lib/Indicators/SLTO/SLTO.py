@@ -79,7 +79,7 @@ class SLTO():
             existing_price_zone=tick["indicator_data"]["slto"]["prev_price_zone"],
             next_price_zone=tick["indicator_data"]["slto"]["price_zone"],
             zone_change_time=tick["indicator_data"]["slto"]["mark_time"],
-            scaning_algo_name=scanning_algo_name
+            scanning_algo_name=scanning_algo_name
         )
 
     def append_information(self,initial_data:dict):
