@@ -129,7 +129,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
         return False
 
     def get_trade_margin(self,action,market_price,support_price,resistance_price,quantity):
-        if(action == OrderType.SELL):
+        if(action == OrderType.SELL.value):
             risk = (resistance_price - market_price) * quantity
             margin = MARGIN_FACTOR*risk
             return margin
@@ -238,11 +238,8 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
         trade_freq =  self.trade_freqency
         frq_steps = FREQUENCY_STEPS[trade_freq]
         number_of_candles = NUM_CANDLES_FOR_TREND_ANALYSIS
-
-
-
         is_volume_eligible = self.get_volume_eligibility(quote_data)
-        if (not not is_volume_eligible):
+        if (not is_volume_eligible):
             print("Volume Not Eligible For",symbol)
             eligibility_obj["message"] = symbol + " : Volume not eligible"
             return False, eligibility_obj

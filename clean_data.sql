@@ -5,7 +5,6 @@ delete from algo_udts_scan_records;
 delete from algo_slto_track_records;
 
 
-
 select * from orders;
 select * from trades;
 select * from trade_sessions;
