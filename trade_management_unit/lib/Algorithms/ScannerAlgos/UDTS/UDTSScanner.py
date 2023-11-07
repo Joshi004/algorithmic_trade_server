@@ -48,6 +48,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
                 current_balance = Portfolio().get_current_balance_including_margin(user_id,dummy)
                 if(current_balance < MINIMUM_REQUIRED_BALANCE):
                     print("Not Enough Balance to place Trades ",current_balance)
+                    tm.sleep(120)
                     continue
                 print("Scanning Instrument now ",symbol)
                 is_eligible,eligibility_obj = self.is_eligible(symbol,token)
@@ -210,7 +211,6 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
     def __get_effective_trend(self,eligibility_obj):
         trends = set()
         for frequency in eligibility_obj:
-
             if frequency == "message":
                 continue
             chart = eligibility_obj[frequency]["chart"]
@@ -266,12 +266,14 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
 
         reward_risk_ratio = eligibility_obj[trade_freq]["chart"].trading_pair["reward_risk_ratio"] if "reward_risk_ratio" in eligibility_obj[trade_freq]["chart"].trading_pair else 0
         eligibility_obj["message"] = f"{symbol} : {effective_trend.value} , Reward:Risk - {reward_risk_ratio}"
-        if(effective_trend == Trends.UPTREND):
-            if(reward_risk_ratio > 2 ):
-                return True, eligibility_obj
-        elif(effective_trend == Trends.DOWNTREND):
-            if(reward_risk_ratio < 0.5 ):
-                return True, eligibility_obj
+        if(reward_risk_ratio > 2 ):
+            return True,eligibility_obj
+        # if(effective_trend == Trends.UPTREND):
+        #     if(reward_risk_ratio > 2 ):
+        #         return True, eligibility_obj
+        # elif(effective_trend == Trends.DOWNTREND):
+        #     if(reward_risk_ratio < 0.5 ):
+        #         return True, eligibility_obj
 
         return False,eligibility_obj
 

@@ -57,6 +57,6 @@ class AlgoSltoTrackRecord(models.Model):
             existing_price_zone=existing_price_zone,
             next_price_zone=next_price_zone,
             zone_change_time=zone_change_time,
-            scanning_alogo=scanning_algo
+            scanning_algo=scanning_algo
         )
         record.save()

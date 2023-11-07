@@ -22,7 +22,7 @@ class Trade(models.Model):
     user_id = models.CharField(max_length=64,default="1")
     max_price = models.FloatField(blank=True, null=True)
     min_price = models.FloatField(blank=True, null=True)
-    margin = models.FloatField(blank=False,null=False,default=0)
+    margin = models.DecimalField(max_digits=9, decimal_places=2, default=0.00)
 
     @classmethod
     def fetch_active_trade(cls, instrument_id,trade_session_id, user_id, dummy):
@@ -62,7 +62,7 @@ class Trade(models.Model):
                 dummy=dummy,
                 max_price=None,
                 min_price=None,
-                margin = margin
+                margin = round(margin,2)
             )
             trade.save()
         return trade

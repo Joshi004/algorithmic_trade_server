@@ -7,6 +7,7 @@ from trade_management_unit.lib.Algorithms.TrackerAlgos.TrackerAlgoFactory import
 from trade_management_unit.lib.TradeSession.TradeSessionMeta import TradeSessionMeta
 from  trade_management_unit.Constants.TmuConstants import *
 from  trade_management_unit.models.Trade import Trade
+from django.db import connections
 
 
 
@@ -82,6 +83,11 @@ class TradeSession(metaclass=TradeSessionMeta):
             symbol = self.token_to_symbol_map[token]
             last_price = tick["last_price"]
             trade = Trade.fetch_active_trade(token,self.trade_session_id,self.user_id,self.dummy)
+            if(not trade):
+                print(symbol,"Not Added To Trades yet")
+                self.close_connections()
+                return
+
             trade_id = trade.id
             print("Got Tick For ",symbol,token,self.instruments[symbol])
             if(not trade.max_price or last_price > trade.max_price):
@@ -104,11 +110,15 @@ class TradeSession(metaclass=TradeSessionMeta):
                 if(not trade.is_active):
                     self.remove_tokens([token])
         except Exception as e:
+            self.close_connections()
             raise("Error in on_ticks: ",e)
 
+        self.close_connections()
         self.communicator.send_data_to_channel_layer(formated_instrument_data, self.communication_group)
         
-
+    def close_connections(self):
+        for conn in connections.all():
+            conn.close()
 
     def handle_tick(self,tick):
         tick_handler_thread = threading.Thread(target=self.async_tick_handler,args=(tick,))
@@ -148,17 +158,16 @@ class TradeSession(metaclass=TradeSessionMeta):
 
             # trade_id = self.__process__instrument_actions__(instrument)
             trade_id = self.scanning_algo_instance.process_scanner_actions(instrument,self.user_id,self.dummy,self.trade_session_id)
-
             if(trade_id):
                 self.scanning_algo_instance.mark_into_scan_records(trade_id,self.tracking_algo_name,instrument)
-            
-            self.instruments[instrument['trading_symbol']] = instrument
-            self.token_to_symbol_map[token] = symbol
-            self.kite_tick_handler.register_trade_sessions(token,self)
+                self.instruments[instrument['trading_symbol']] = instrument
+                self.token_to_symbol_map[token] = symbol
+                self.kite_tick_handler.register_trade_sessions(token,self)
+                self.ws.subscribe([token])
 
         # Extract instrument tokens for the WebSocket subscription
-        instrument_tokens = [instrument['instrument_token'] for instrument in new_instruments]
-        self.ws.subscribe(instrument_tokens)
+        # instrument_tokens = [instrument['instrument_token'] for instrument in new_instruments]
+
         # self.ws.set_mode(self.ws.MODE_LTP, instrument_tokens)
 
 
