@@ -46,7 +46,7 @@ class TradeSessionConsumer(AsyncWebsocketConsumer):
         await self.send(text_data=json.dumps({"connected": True}))
 
     def start_threaded_trade_session(self,user_id,scanning_algorithm_name,tracking_algorithm_name,trading_freq,kite_tick_handler,kit_connect_object,dummy):
-        self.trade_session = TradeSession(user_id,scanning_algorithm_name,tracking_algorithm_name,trading_freq,kite_tick_handler,kit_connect_object,dummy)
+        self.trade_session = TradeSession(user_id,scanning_algorithm_name,tracking_algorithm_name,trading_freq,dummy,kite_tick_handler,kit_connect_object)
         
     async def disconnect(self, close_code):
         await self.channel_layer.group_discard(self.room_group_name, self.channel_name)

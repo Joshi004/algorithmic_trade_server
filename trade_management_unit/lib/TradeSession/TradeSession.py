@@ -16,7 +16,7 @@ import concurrent.futures
 
 class TradeSession(metaclass=TradeSessionMeta):
    
-    def __init__(self,user_id,scanning_algo_name,tracking_algo_name,trading_freq,kite_tick_handler,ws,dummy):
+    def __init__(self,user_id,scanning_algo_name,tracking_algo_name,trading_freq,dummy,kite_tick_handler,ws):
         logging.basicConfig(level=logging.DEBUG)
         self.communicator = Communicator()
         self.user_id = user_id
@@ -37,7 +37,7 @@ class TradeSession(metaclass=TradeSessionMeta):
         self.__instanciate_scanning_algo__()
     
     def __str__(self):
-        identifier =  self.user_id + "__" + self.scanning_algo_name + "__" + self.tracking_algo_name + "__" + self.trading_freq
+        identifier = self.dummy + "__" + self.user_id + "__" + self.scanning_algo_name + "__" + self.tracking_algo_name + "__" + self.trading_freq
         return identifier
 
 
@@ -50,7 +50,7 @@ class TradeSession(metaclass=TradeSessionMeta):
         scanning_algo_instance = ScannerAlgoFactory().get_scanner(self.scanning_algo_name,self.tracking_algo_name,self.trading_freq)
         self.scanning_algo_instance = scanning_algo_instance
         scanning_algo_instance.register_trade_session(self)
-        self.kite_tick_handler.register_scanning_session(scanning_algo_instance)
+        # self.kite_tick_handler.register_scanning_session(scanning_algo_instance)
         scanning_algo_instance.fetch_instrument_tokens_and_start_tracking(self.user_id,self.dummy)
 
 
@@ -98,7 +98,7 @@ class TradeSession(metaclass=TradeSessionMeta):
                 trade.save()
 
             for IndicatorClass in self.tracking_algo_instance.indicators:
-                indicator_obj = IndicatorClass(trade_id,symbol,token,self.trading_freq)
+                indicator_obj = IndicatorClass(symbol,self.trading_freq,trade_id,token)
                 indicator_obj.update(last_price)
                 indicator_obj.append_information(tick)
                 if(indicator_obj.price_zone_changed):
@@ -106,7 +106,7 @@ class TradeSession(metaclass=TradeSessionMeta):
 
             formated_instrument_data = self.get_formated_tick(tick,symbol)
             if(formated_instrument_data["required_action"]):
-                trade = self.tracking_algo_instance.process_tracker_actions(self,formated_instrument_data,self.trade_session_id,self.user_id,self.dummy)
+                trade = self.tracking_algo_instance.process_tracker_actions(formated_instrument_data,self.trade_session_id,self.user_id,self.dummy)
                 if(not trade.is_active):
                     self.remove_tokens([token])
         except Exception as e:

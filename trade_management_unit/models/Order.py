@@ -19,7 +19,7 @@ class Order(models.Model):
     trade =   models.ForeignKey("Trade", verbose_name="trade_id", on_delete=models.CASCADE)
     dummy = models.BooleanField(default=False)
     kite_order_id = models.CharField(max_length=64, blank=True, null=True)
-    frictional_losses = models.FloatField(blank=True, null=True)
+    frictional_losses = models.DecimalField(max_digits=10, decimal_places=2,blank=True, null=True)
     user_id = models.CharField(max_length=64, blank=False,default="1")
     quantity = models.IntegerField(default=1)
     price = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)

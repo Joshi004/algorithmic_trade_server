@@ -15,13 +15,13 @@ class Trade(models.Model):
     closed_at = models.DateTimeField(blank=True, null=True)
     instrument = models.ForeignKey("Instrument", verbose_name="Ordered Instrument", on_delete=models.CASCADE)   
     trade_session = models.ForeignKey("TradeSession", verbose_name="Trade Session", on_delete=models.CASCADE, default=None)   
-    net_profit = models.FloatField(blank=True, null=True)
+    net_profit = models.DecimalField(max_digits=9, decimal_places=2, blank=True, null=True)
     dummy = models.BooleanField(default=False)
     VIEW_CHOICES=[("long","long"),("short","short")]
     view = EnumField(choices=VIEW_CHOICES,default = "long")
     user_id = models.CharField(max_length=64,default="1")
-    max_price = models.FloatField(blank=True, null=True)
-    min_price = models.FloatField(blank=True, null=True)
+    max_price = models.DecimalField(max_digits=9, decimal_places=2,blank=True, null=True)
+    min_price = models.DecimalField(max_digits=9, decimal_places=2,blank=True, null=True)
     margin = models.DecimalField(max_digits=9, decimal_places=2, default=0.00)
 
     @classmethod

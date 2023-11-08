@@ -42,11 +42,11 @@ class KiteTickhandler(metaclass=SingletonMeta):
                 
 
     
-    def register_scanning_session(self,sacnning_session):
-        frequency = sacnning_session.trade_freqency
-        identifier = str(sacnning_session)
-        self.scanning_sessions[frequency] = self.scanning_sessions.get(frequency) or {}
-        self.scanning_sessions[frequency][identifier] = sacnning_session
+    # def register_scanning_session(self,sacnning_session):
+    #     frequency = sacnning_session.trade_freqency
+    #     identifier = str(sacnning_session)
+    #     self.scanning_sessions[frequency] = self.scanning_sessions.get(frequency) or {}
+    #     self.scanning_sessions[frequency][identifier] = sacnning_session
 
 
     def register_tracking_session(self,tracking_session,trading_symbol):
