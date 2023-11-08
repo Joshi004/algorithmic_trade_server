@@ -40,7 +40,8 @@ class TradeSession(models.Model):
                 user_id=user_id,
                 scanning_algorithm_id=scanning_algo_id,
                 tracking_algorithm_id=tracking_algo_id,
-                trading_frequency=trading_freq
+                trading_frequency=trading_freq,
+                dummy=dummy
             )
         except cls.DoesNotExist:
             # If no matching trade session is found, create a new one
