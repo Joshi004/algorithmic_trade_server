@@ -7,6 +7,7 @@ from trade_management_unit.lib.Algorithms.TrackerAlgos.TrackerAlgoFactory import
 from trade_management_unit.lib.TradeSession.TradeSessionMeta import TradeSessionMeta
 from  trade_management_unit.Constants.TmuConstants import *
 from  trade_management_unit.models.Trade import Trade
+from django.db import connections
 
 
 
@@ -15,28 +16,29 @@ import concurrent.futures
 
 class TradeSession(metaclass=TradeSessionMeta):
    
-    def __init__(self,user_id,scanning_algo_name,tracking_algo_name,trading_freq,kite_tick_handler,ws,dummy):
+    def __init__(self,user_id,scanning_algo_name,tracking_algo_name,trading_freq,dummy,kite_tick_handler,ws):
         logging.basicConfig(level=logging.DEBUG)
         self.communicator = Communicator()
         self.user_id = user_id
         self.scanning_algo_name = scanning_algo_name
         self.tracking_algo_name = tracking_algo_name
-        self.trading_freq = trading_freq    
-        self.communication_group = str(self)
         self.trading_freq = trading_freq
+        self.dummy = dummy
+        self.trading_freq = trading_freq
+        self.communication_group = str(self)
         self.kite_tick_handler = kite_tick_handler
         self.ws = ws
         self.instruments = {}
         self.token_to_symbol_map = {}
         self.scanning_algo_instance = None
         self.tracking_algo_instance = None
-        self.dummy = dummy
+
         self.trade_session_id =  self.get_trade_session_id()
         self.__instanciate_tracking_algo__()
         self.__instanciate_scanning_algo__()
     
     def __str__(self):
-        identifier =  self.user_id + "__" + self.scanning_algo_name + "__" + self.tracking_algo_name + "__" + self.trading_freq
+        identifier = str(self.dummy) + "__" + self.user_id + "__" + self.scanning_algo_name + "__" + self.tracking_algo_name + "__" + self.trading_freq
         return identifier
 
 
@@ -49,7 +51,7 @@ class TradeSession(metaclass=TradeSessionMeta):
         scanning_algo_instance = ScannerAlgoFactory().get_scanner(self.scanning_algo_name,self.tracking_algo_name,self.trading_freq)
         self.scanning_algo_instance = scanning_algo_instance
         scanning_algo_instance.register_trade_session(self)
-        self.kite_tick_handler.register_scanning_session(scanning_algo_instance)
+        # self.kite_tick_handler.register_scanning_session(scanning_algo_instance)
         scanning_algo_instance.fetch_instrument_tokens_and_start_tracking(self.user_id,self.dummy)
 
 
@@ -82,6 +84,11 @@ class TradeSession(metaclass=TradeSessionMeta):
             symbol = self.token_to_symbol_map[token]
             last_price = tick["last_price"]
             trade = Trade.fetch_active_trade(token,self.trade_session_id,self.user_id,self.dummy)
+            if(not trade):
+                print(symbol,"Not Added To Trades yet")
+                self.close_connections()
+                return
+
             trade_id = trade.id
             print("Got Tick For ",symbol,token,self.instruments[symbol])
             if(not trade.max_price or last_price > trade.max_price):
@@ -92,23 +99,28 @@ class TradeSession(metaclass=TradeSessionMeta):
                 trade.save()
 
             for IndicatorClass in self.tracking_algo_instance.indicators:
-                indicator_obj = IndicatorClass(trade_id,symbol,token,self.trading_freq)
+                indicator_obj = IndicatorClass(self.trade_session_id,symbol,self.trading_freq,trade_id,token)
                 indicator_obj.update(last_price)
                 indicator_obj.append_information(tick)
+                # !!!!! Make Sure Every Indicator object is garbage collected ones the trade is terminated fro the symbol
                 if(indicator_obj.price_zone_changed):
                     indicator_obj.mark_into_indicator_records(tick,self.trade_session_id,self.user_id,self.dummy,self.scanning_algo_name)
 
             formated_instrument_data = self.get_formated_tick(tick,symbol)
             if(formated_instrument_data["required_action"]):
-                trade = self.tracking_algo_instance.process_tracker_actions(self,formated_instrument_data,self.trade_session_id,self.user_id,self.dummy)
+                trade = self.tracking_algo_instance.process_tracker_actions(formated_instrument_data,self.trade_session_id,self.user_id,self.dummy)
                 if(not trade.is_active):
                     self.remove_tokens([token])
         except Exception as e:
+            self.close_connections()
             raise("Error in on_ticks: ",e)
 
+        self.close_connections()
         self.communicator.send_data_to_channel_layer(formated_instrument_data, self.communication_group)
         
-
+    def close_connections(self):
+        for conn in connections.all():
+            conn.close()
 
     def handle_tick(self,tick):
         tick_handler_thread = threading.Thread(target=self.async_tick_handler,args=(tick,))
@@ -148,39 +160,47 @@ class TradeSession(metaclass=TradeSessionMeta):
 
             # trade_id = self.__process__instrument_actions__(instrument)
             trade_id = self.scanning_algo_instance.process_scanner_actions(instrument,self.user_id,self.dummy,self.trade_session_id)
-
             if(trade_id):
                 self.scanning_algo_instance.mark_into_scan_records(trade_id,self.tracking_algo_name,instrument)
-            
-            self.instruments[instrument['trading_symbol']] = instrument
-            self.token_to_symbol_map[token] = symbol
-            self.kite_tick_handler.register_trade_sessions(token,self)
+                self.instruments[instrument['trading_symbol']] = instrument
+                self.token_to_symbol_map[token] = symbol
+                self.kite_tick_handler.register_trade_sessions(token,self)
+                self.ws.subscribe([token])
 
         # Extract instrument tokens for the WebSocket subscription
-        instrument_tokens = [instrument['instrument_token'] for instrument in new_instruments]
-        self.ws.subscribe(instrument_tokens)
+        # instrument_tokens = [instrument['instrument_token'] for instrument in new_instruments]
+
         # self.ws.set_mode(self.ws.MODE_LTP, instrument_tokens)
 
 
-    def remove_tokens(self, old_instruments):
-        if not isinstance(old_instruments, list):
+    def remove_tokens(self, tokens_to_remove):
+        if not isinstance(tokens_to_remove, list):
             return
 
         # Filter out instruments not in self.instruments
-        old_instruments = [instrument for instrument in old_instruments if instrument['trading_symbol'] in self.instruments]
+        old_instruments  = []
+        for token in tokens_to_remove:
+            symbol = self.token_to_symbol_map[token]
+            if symbol in self.instruments:
+                 old_instruments.append({
+                     "instrument_token" : token,
+                     "trading_symbol" : symbol
+                 })
+
 
         if not old_instruments:
             print("No old instruments to remove")
             return
 
+
+        # Extract instrument tokens for the WebSocket unsubscription
+        instrument_tokens = [instrument['instrument_token'] for instrument in old_instruments]
+        self.ws.unsubscribe(instrument_tokens)
+        print("!!!! Remove all candle Chart and singlton onjects as well")
         # Remove old instruments from self.instruments
         for instrument in old_instruments:
             self.instruments.pop(instrument['trading_symbol'], None)
 
-        # Extract instrument tokens for the WebSocket unsubscription
-        instrument_tokens = [instrument['instrument_token'] for instrument in old_instruments]
-
-        self.ws.unsubscribe(instrument_tokens)
 
 
 

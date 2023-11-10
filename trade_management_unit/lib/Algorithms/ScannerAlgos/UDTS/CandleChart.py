@@ -113,7 +113,8 @@ class CandleChart:
     
     def normalise_deflection_points(self,scope_range):
         def custom_round(num,factor):
-            result  = (num//factor) * factor
+            print("!!! Handle AHrd coded factor here ")
+            result = (num//factor) * factor
             result = round(result,1)
             return result
             
@@ -170,16 +171,18 @@ class CandleChart:
             self.trading_pair=trading_pair
             return
 
-        
+        print("!! See from where mion rewrad is coming")
         for support in support_points:
             for resist in resist_points:
                 if(self.__is_valid_pair(price,support,resist,self.trend,min_reward)):
+                    reward_risk_ratio = self.get_reward_risk_ratio(price,support,resist,self.trend)
                     eq_strength = resist["strength"] + support["strength"]
-                    valid_pairs.append({"support":support["price"],
-                                        "resistance":resist["price"],
-                                        "resistance_strength":resist["strength"],
-                                        "support_strength":support["strength"],
-                                        "strength" : eq_strength})
+                    valid_pairs.append({"support": support["price"],
+                                        "resistance": resist["price"],
+                                        "resistance_strength": resist["strength"],
+                                        "support_strength": support["strength"],
+                                        "strength": eq_strength,
+                                        "reward_risk_ratio": reward_risk_ratio})
                 
         
         for pair in valid_pairs:
@@ -194,10 +197,22 @@ class CandleChart:
         bottom = price - support["price"]
         top = resist["price"] - price
         product_of_strengts = resist["strength"] * support["strength"]
+        print("!!! HAndle harcoding of strength factir here ")
         if (product_of_strengts == 0):
             return False
-        if (trend == Trends.UPTREND and min_reward < top/bottom < 5 * min_reward ):
+        if (trend == Trends.UPTREND and min_reward < top/bottom < 3 * min_reward ):
             return True
-        if (trend == Trends.DOWNTREND  and min_reward < bottom/top < 5 * min_reward):
+        if (trend == Trends.DOWNTREND  and min_reward < bottom/top < 3 * min_reward):
             return True
         return False
+
+    def get_reward_risk_ratio(self,price,support,resist,trend):
+        bottom = price - support["price"]
+        top = resist["price"] - price
+        if (trend == Trends.UPTREND):
+            return (top/bottom)
+        if(trend == Trends.DOWNTREND):
+            return bottom/top
+        return 0
+
+

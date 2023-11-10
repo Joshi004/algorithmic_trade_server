@@ -1,4 +1,3 @@
-from enum import Enum
 from django.db import models
 from datetime import datetime
 from django_mysql.models import EnumField
@@ -7,7 +6,7 @@ from django.core.exceptions import ValidationError
 class Order(models.Model):
     class Meta:
         db_table = "orders"
- 
+
 
     STATUS_CHOICES=[("pending","pending"),("rejected","rejected"),("exicuted","exicuted")]
     ORDER_TYPES=[("buy","buy"),("sell","sell")]
@@ -20,13 +19,13 @@ class Order(models.Model):
     trade =   models.ForeignKey("Trade", verbose_name="trade_id", on_delete=models.CASCADE)
     dummy = models.BooleanField(default=False)
     kite_order_id = models.CharField(max_length=64, blank=True, null=True)
-    frictional_losses = models.FloatField(blank=True, null=True)
+    frictional_losses = models.DecimalField(max_digits=10, decimal_places=2,blank=True, null=True)
     user_id = models.CharField(max_length=64, blank=False,default="1")
     quantity = models.IntegerField(default=1)
-
+    price = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
 
     @classmethod
-    def initiate_order(cls, order_type, instrument_id, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity):
+    def initiate_order(cls, order_type, instrument_id, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity, price):
         kite_order_id = None if dummy else kite_order_id
         order = cls(
             status='exicuted',
@@ -39,7 +38,8 @@ class Order(models.Model):
             kite_order_id=kite_order_id,
             frictional_losses=frictional_losses,
             user_id=user_id,
-            quantity=quantity
+            quantity=quantity,
+            price=price
         )
         order.save()
         return order
@@ -54,6 +54,3 @@ class Order(models.Model):
             return cls.objects.get(trade_id=trade_id)
         except cls.DoesNotExist:
             raise ValidationError("No matching order found.")
-
-
-

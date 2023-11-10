@@ -39,8 +39,8 @@ class TradeType(Enum):
 
 
 # Other constants
-MARKET_CUTOFF_TIME = '15:20'
-MARKET_END_TIME = '15:20'
+MARKET_CUTOFF_TIME = '14:50'
+MARKET_END_TIME = '15:15'
 MARGIN_FACTOR=1.5
 TRADE_TYPE = {"intraday":"equity_intraday"}
 DEFAULT_EXCHANGE = "NSE"

@@ -48,13 +48,14 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
                 current_balance = Portfolio().get_current_balance_including_margin(user_id,dummy)
                 if(current_balance < MINIMUM_REQUIRED_BALANCE):
                     print("Not Enough Balance to place Trades ",current_balance)
+                    tm.sleep(120)
                     continue
                 print("Scanning Instrument now ",symbol)
                 is_eligible,eligibility_obj = self.is_eligible(symbol,token)
                 print("Instrument Number",instrument_counter)
 
                 if (is_eligible):
-                    instrument_id = Instrument.objects.get(trading_symbol=symbol,exchange=DEFAULT_EXCHANGE).id
+                    instrument_id = token
                     eligible_instrument_counter += 1
                     print("FOUND NEXT ELIGIBLE -- - ",eligible_instrument_counter,symbol)
                     symbol_data_points = eligibility_obj[self.trade_freqency]["chart"]
@@ -78,7 +79,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
                     instrument["required_action"] = self.__get_required_actions__(instrument)
                     print("Sunscribing To ",instrument["trading_symbol"])
                     # eligible_instruments.append(instrument)
-                    self.add_tokens_to_subscribed_tracker_sessiosn([instrument])
+                    self.add_tokens_to_subscribed_trade_sessions([instrument])
                 else:
                     print(eligibility_obj["message"])
                     print(f"Active Threads {threading.active_count()}")
@@ -118,7 +119,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
             trade_id = Trade.fetch_or_initiate_trade(instrument_id, action,trade_session_id,user_id,dummy,margin).id
             if(not self.has_active_position(trade_id)):
                 kite_order_id = self.place_order_on_kite(trading_symbol,quantity,action,instrument["support_price"],instrument["resistance_price"],instrument["market_data"]["market_price"],user_id,dummy)
-                order_id = Order.initiate_order(action, instrument_id, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity).id
+                order_id = Order.initiate_order(action, instrument_id, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity,market_price).id
             return trade_id
         return None
 
@@ -175,7 +176,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
             required_action = None
         return required_action
     
-    def add_tokens_to_subscribed_tracker_sessiosn(self,eligible_instruments):
+    def add_tokens_to_subscribed_trade_sessions(self,eligible_instruments):
         for identifier in self.trade_sessions:
             trade_session = self.trade_sessions[identifier]
             trade_session.add_tokens(eligible_instruments)  
@@ -195,9 +196,10 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
 
 
     def fetch_instrument_tokens_and_start_tracking(self,user_id,dummy):
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            future = executor.submit((self.fetch_instruments_from_db))
-            result = future.result()
+        result = self.fetch_instruments_from_db()
+        # with concurrent.futures.ThreadPoolExecutor() as executor:
+        #     future = executor.submit((self.fetch_instruments_from_db))
+        #     result = future.result()
         self.scan_and_add_instruments_for_tracking(result,user_id,dummy)
 
 
@@ -210,7 +212,6 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
     def __get_effective_trend(self,eligibility_obj):
         trends = set()
         for frequency in eligibility_obj:
-
             if frequency == "message":
                 continue
             chart = eligibility_obj[frequency]["chart"]
@@ -266,12 +267,14 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
 
         reward_risk_ratio = eligibility_obj[trade_freq]["chart"].trading_pair["reward_risk_ratio"] if "reward_risk_ratio" in eligibility_obj[trade_freq]["chart"].trading_pair else 0
         eligibility_obj["message"] = f"{symbol} : {effective_trend.value} , Reward:Risk - {reward_risk_ratio}"
-        if(effective_trend == Trends.UPTREND):
-            if(reward_risk_ratio > 2 ):
-                return True, eligibility_obj
-        elif(effective_trend == Trends.DOWNTREND):
-            if(reward_risk_ratio < 0.5 ):
-                return True, eligibility_obj
+        if(reward_risk_ratio > 2 ):
+            return True,eligibility_obj
+        # if(effective_trend == Trends.UPTREND):
+        #     if(reward_risk_ratio > 2 ):
+        #         return True, eligibility_obj
+        # elif(effective_trend == Trends.DOWNTREND):
+        #     if(reward_risk_ratio < 0.5 ):
+        #         return True, eligibility_obj
 
         return False,eligibility_obj
 

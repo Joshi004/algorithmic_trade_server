@@ -5,14 +5,14 @@ from datetime import datetime
 from trade_management_unit.models.Trade import Trade
 
 from trade_management_unit.models.AlgoUdtsScanRecord import AlgoUdtsScanRecord
-class SLTO():
+class SLTO(metaclass=IndicitorSingletonMeta):
 
-    def __init__(self,trade_id,trading_symbol,instrunent_id,trading_frequency):
+    def __init__(self,trade_session_id,trading_symbol,trading_frequency,trade_id,instrunent_id):
         self.symbol = trading_symbol
         self.trading_frequency = trading_frequency
         udts_record = AlgoUdtsScanRecord.fetch_udts_record(trade_id,instrunent_id)
         effective_trend = udts_record.effective_trend
-        self.view = View.LONG if effective_trend == Trends.UPTREND else View.SHORT if effective_trend == Trends.DOWNTREND else None
+        self.view = View.LONG if effective_trend == Trends.UPTREND.value else View.SHORT if effective_trend == Trends.DOWNTREND.value else None
         self.support_price = udts_record.support_price
         self.resistance_price = udts_record.resistance_price
         self.zone_in_time = datetime.now()
@@ -23,9 +23,10 @@ class SLTO():
         self.prev_price_zone = None
         self.tracking_end_time =None
         self.price_zone_changed = False
+        self.trade_session_id = trade_session_id
 
     def __str__(self) -> str:
-        identifier = self.trading_frequency + "__" +  self.symbol
+        identifier = self.trade_session_id + "__" +  self.symbol
         return identifier
     
     def get_timeout_period(self, trade_freq):
@@ -46,6 +47,7 @@ class SLTO():
 
         # Calculate and return the timeout period
         timeout_period = number // division_factor
+        print("!!! Check thsi returning 0 insted of proper value")
         return timeout_period
 
     def update(self, ltp:float )-> None:
@@ -100,8 +102,6 @@ class SLTO():
 
     def __set_place_order_action__(self,current_price_zone:PriceZone,time_delta:int)-> None:
         self.required_action = None
-
-
         if(current_price_zone == PriceZone.RESISTANCE_BREAKOUT):
             if(self.view == View.LONG):
                 self.required_action = OrderType.SELL
@@ -116,7 +116,7 @@ class SLTO():
             elif(self.view == View.LONG and time_delta > self.timeout_period):
                 self.required_action = OrderType.SELL
                 self.tracking_end_time = datetime.now()
-        else:
+
              # Get the current time
             current_time = datetime.now().time()
             # Define the cut-off time as 15:20 and end time as 15:30

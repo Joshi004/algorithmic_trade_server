@@ -1,6 +1,6 @@
 from trade_management_unit.lib.Indicators.SLTO.SLTO import SLTO
 from trade_management_unit.lib.Algorithms.TrackerAlgos.TrackerAlgoMeta import TrackerAlgoMeta
-from trade_management_unit.models import Trade
+from trade_management_unit.models.Trade import Trade
 from trade_management_unit.models.Order import  Order
 from trade_management_unit.lib.Portfolio.Portfolio import Portfolio
 from trade_management_unit.Constants.TmuConstants import  *
@@ -33,14 +33,14 @@ class UdtsSlto(metaclass=TrackerAlgoMeta):
         trading_symbol = instrument["trading_symbol"]
         action = instrument["required_action"]
         if action:
-            instrument_id = instrument["instrument_id"]
+            instrument_id = instrument["instrument_token"]
             market_price = instrument["market_data"]["market_price"]
-            trade = Trade.fetch_active_trade(instrument_id,trade_session_id,user_id,dummy).id
+            trade = Trade.fetch_active_trade(instrument_id,trade_session_id,user_id,dummy)
             trade_id = trade.id
             quantity = self.__get_square_off_quantity__(trade_id)
             kite_order_id = self.square_off_order_on_zerodha(trading_symbol,action,quantity,user_id,dummy,market_price)
             frictional_losses = RiskManager().get_frictional_losses(TRADE_TYPE["intraday"],market_price, quantity, action == "BUY")
-            order = Order.initiate_order(action, instrument_id, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity)
+            order = Order.initiate_order(action.value, instrument_id, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity,market_price)
             self.__update_and_close_trade__(trade,order.closed_at)
             return trade
         return None

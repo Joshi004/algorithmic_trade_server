@@ -15,26 +15,29 @@ class Trade(models.Model):
     closed_at = models.DateTimeField(blank=True, null=True)
     instrument = models.ForeignKey("Instrument", verbose_name="Ordered Instrument", on_delete=models.CASCADE)   
     trade_session = models.ForeignKey("TradeSession", verbose_name="Trade Session", on_delete=models.CASCADE, default=None)   
-    net_profit = models.FloatField(blank=True, null=True)
+    net_profit = models.DecimalField(max_digits=9, decimal_places=2, blank=True, null=True)
     dummy = models.BooleanField(default=False)
     VIEW_CHOICES=[("long","long"),("short","short")]
     view = EnumField(choices=VIEW_CHOICES,default = "long")
     user_id = models.CharField(max_length=64,default="1")
-    max_price = models.FloatField(blank=True, null=True)
-    min_price = models.FloatField(blank=True, null=True)
-    margin = models.FloatField(blank=False,null=False,default=0)
+    max_price = models.DecimalField(max_digits=9, decimal_places=2,blank=True, null=True)
+    min_price = models.DecimalField(max_digits=9, decimal_places=2,blank=True, null=True)
+    margin = models.DecimalField(max_digits=9, decimal_places=2, default=0.00)
 
     @classmethod
     def fetch_active_trade(cls, instrument_id,trade_session_id, user_id, dummy):
-        trade = None
-        trade = cls.objects.get(
-            instrument_id=instrument_id,
-            trade_session_id=trade_session_id,
-            user_id=user_id,
-            is_active=True,
-            dummy=dummy
-        )
-        return trade
+        try:
+            trade = cls.objects.get(
+                instrument_id=instrument_id,
+                trade_session_id=trade_session_id,
+                user_id=user_id,
+                is_active=True,
+                dummy=dummy
+            )
+            return trade
+        except cls.DoesNotExist:
+            return None
+
 
     @classmethod
     def fetch_or_initiate_trade(cls, instrument_id, action, trade_session_id, user_id, dummy,margin):
@@ -59,7 +62,7 @@ class Trade(models.Model):
                 dummy=dummy,
                 max_price=None,
                 min_price=None,
-                margin = margin
+                margin = round(margin,2)
             )
             trade.save()
         return trade

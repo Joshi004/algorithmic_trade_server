@@ -12,7 +12,8 @@ class RiskManager:
         orignal_balance_amount = Portfolio().get_current_balance_including_margin(user_id,dummy)
         number_of_active_trades = len(Trade.objects.filter(trade_session_id=trade_session_id,is_active=1))
         prefered_trades_per_session = UserConfiguration.get_attribute(user_id,"trades_per_session")
-        balance_amount = orignal_balance_amount//(prefered_trades_per_session - number_of_active_trades)
+        division_factor  = (prefered_trades_per_session - number_of_active_trades) if (prefered_trades_per_session - number_of_active_trades) != 0 else 1
+        balance_amount = orignal_balance_amount//division_factor
         risk_appetite  = self.get_risk_appetite(user_id)
         risk_amount = risk_appetite/100 * balance_amount
         quantity_from_risk = risk_amount // unit_loss_potential

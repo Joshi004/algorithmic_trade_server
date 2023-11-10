@@ -22,7 +22,7 @@ class AlgoUdtsScanRecord(models.Model):
     effective_trend = models.CharField(max_length=20,choices=Trends.choices(),default=Trends.UPTREND,)
     trade_candle_interval = models.CharField(max_length=255)
     movement_potential = models.DecimalField(max_digits=10, decimal_places=2)
-    volume = models.DecimalField(max_digits=10, decimal_places=2)
+    volume = models.DecimalField(max_digits=20, decimal_places=2)
     trade = models.ForeignKey('Trade', on_delete=models.CASCADE)
     instrument = models.ForeignKey('Instrument', on_delete=models.PROTECT)
     tracking_algo = models.ForeignKey('Algorithm', on_delete=models.PROTECT)
@@ -60,6 +60,7 @@ class AlgoUdtsScanRecord(models.Model):
             support_strength = Decimal(support_strength).quantize(Decimal('.0001'), rounding=ROUND_DOWN)
             resistance_strength = Decimal(resistance_strength).quantize(Decimal('.0001'), rounding=ROUND_DOWN)
             movement_potential = Decimal(movement_potential).quantize(Decimal('.01'), rounding=ROUND_DOWN)
+            volume = Decimal(volume).quantize(Decimal('.01'), rounding=ROUND_DOWN)
 
             # Validate the trend value
             if effective_trend not in Trends._value2member_map_:
