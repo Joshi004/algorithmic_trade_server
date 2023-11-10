@@ -21,7 +21,7 @@ def update_instruments(request,*args,**kwvrgs):
 
 def get_instruments(request,*args,**kwvrgs):
     query_paramas  =  request.GET
-    instruments = Instruments(query_paramas)
+    instruments = Instruments()
     response = instruments.fetch_instruments(query_paramas)
     return JsonResponse(response, content_type='application/json')
 

@@ -51,7 +51,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
                     tm.sleep(120)
                     continue
                 print("Scanning Instrument now ",symbol)
-                is_eligible,eligibility_obj = self.is_eligible(symbol,token)
+                is_eligible,eligibility_obj = self.is_eligible(symbol)
                 print("Instrument Number",instrument_counter)
 
                 if (is_eligible):
@@ -227,7 +227,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
         return float(average_candle_span)
     # This is causing deflection point strength to go NAN check this 
 
-    def is_eligible(self,symbol,token):
+    def is_eligible(self,symbol):
         eligibility_obj = {"message": str(symbol) + " : Eligible"}
         quote  = TradeLib().get_quotes({"symbol" : symbol, "exchange" : DEFAULT_EXCHANGE})
         key = DEFAULT_EXCHANGE+":"+symbol.upper()
@@ -269,12 +269,6 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
         eligibility_obj["message"] = f"{symbol} : {effective_trend.value} , Reward:Risk - {reward_risk_ratio}"
         if(reward_risk_ratio > 2 ):
             return True,eligibility_obj
-        # if(effective_trend == Trends.UPTREND):
-        #     if(reward_risk_ratio > 2 ):
-        #         return True, eligibility_obj
-        # elif(effective_trend == Trends.DOWNTREND):
-        #     if(reward_risk_ratio < 0.5 ):
-        #         return True, eligibility_obj
 
         return False,eligibility_obj
 
@@ -312,26 +306,25 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
             
     def get_udts_eligibility(self,symbol,trade_freq):
         print("get token and send hereh !!! nOt Working !!!!")
-        # is_tradable,eligibility_obj =  self.is_eligible(symbol,trade_freq)
-        # result = eligibility_obj[trade_freq]["chart"]
-        # response_obj = {
-        #     "data":{
-        #     "price_list" : result.price_list,
-        #     "trend":result.trend,
-        #     "effective_trend" : eligibility_obj["effective_trend"],
-        #     "deflection_points":result.deflection_points,
-        #     "trading_pair":result.trading_pair,
-        #     "average_candle_span":result.average_candle_span,
-        #     "rounding_factor":result.rounding_factor,
-        #     "valid_pairs":result.valid_pairs,
-        #     "market_price":result.market_price,
-        #     "up_scope":result.up_scope,
-        #     "down_scope":result.down_scope,
-        #     },
-        #     "meta":{
-        #     "interval":result.interval,
-        #     "symbol":result.symbol,
-        #     }
-        # }
-        # return response_obj
-        return {}
+        is_tradable,eligibility_obj =  self.is_eligible(symbol)
+        result = eligibility_obj[trade_freq]["chart"]
+        response_obj = {
+            "data":{
+            "price_list" : result.price_list,
+            "trend":result.trend.value,
+            "effective_trend" : eligibility_obj["effective_trend"].value,
+            "deflection_points":result.deflection_points,
+            "trading_pair":result.trading_pair,
+            "average_candle_span":result.average_candle_span,
+            "rounding_factor":result.rounding_factor,
+            "valid_pairs":result.valid_pairs,
+            "market_price":result.market_price,
+            "up_scope":result.up_scope,
+            "down_scope":result.down_scope,
+            },
+            "meta":{
+            "interval":result.interval,
+            "symbol":result.symbol,
+            }
+        }
+        return response_obj
