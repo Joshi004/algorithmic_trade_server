@@ -49,3 +49,4 @@ select ins.name as Name,
        join algo_udts_scan_records udts on trd.id = udts.trade_id
        join orders ord on trd.id = ord.trade_id
        order by ins.name;
+

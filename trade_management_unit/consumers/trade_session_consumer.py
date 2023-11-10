@@ -26,7 +26,7 @@ class TradeSessionConsumer(AsyncWebsocketConsumer):
 
         
         # Connect tO Clent established 
-        trading_freq = "15minute"
+        trading_freq = "10minute"
         user_id = "1"
         dummy = True
         print("!!! Add UserS PRofile And also add cotracint in all tables using user id ")
@@ -35,7 +35,7 @@ class TradeSessionConsumer(AsyncWebsocketConsumer):
         kit_connect_object = kite_tick_handler.get_kite_ticker_instance()
         kit_connect_object.connect(threaded=True)
         
-        trade_session_identifier =  user_id + "__" + scanning_algorithm_name + "__" + tracking_algorithm_name + "__" + trading_freq
+        trade_session_identifier = str(dummy)+ "__" +user_id + "__" + scanning_algorithm_name + "__" + tracking_algorithm_name + "__" + trading_freq
         
         thread = threading.Thread(target=self.start_threaded_trade_session, args=(user_id,scanning_algorithm_name,tracking_algorithm_name,trading_freq,kite_tick_handler,kit_connect_object,dummy))
         thread.start()

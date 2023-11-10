@@ -7,7 +7,7 @@ from trade_management_unit.models.Trade import Trade
 from trade_management_unit.models.AlgoUdtsScanRecord import AlgoUdtsScanRecord
 class SLTO(metaclass=IndicitorSingletonMeta):
 
-    def __init__(self,trading_symbol,trading_frequency,trade_id,instrunent_id):
+    def __init__(self,trade_session_id,trading_symbol,trading_frequency,trade_id,instrunent_id):
         self.symbol = trading_symbol
         self.trading_frequency = trading_frequency
         udts_record = AlgoUdtsScanRecord.fetch_udts_record(trade_id,instrunent_id)
@@ -23,9 +23,10 @@ class SLTO(metaclass=IndicitorSingletonMeta):
         self.prev_price_zone = None
         self.tracking_end_time =None
         self.price_zone_changed = False
+        self.trade_session_id = trade_session_id
 
     def __str__(self) -> str:
-        identifier = self.trading_frequency + "__" +  self.symbol
+        identifier = self.trade_session_id + "__" +  self.symbol
         return identifier
     
     def get_timeout_period(self, trade_freq):
@@ -47,7 +48,7 @@ class SLTO(metaclass=IndicitorSingletonMeta):
         # Calculate and return the timeout period
         timeout_period = number // division_factor
         print("!!! Check thsi returning 0 insted of proper value")
-        return 0 #timeout_period
+        return timeout_period
 
     def update(self, ltp:float )-> None:
         self.price_zone_changed =  False
@@ -115,7 +116,7 @@ class SLTO(metaclass=IndicitorSingletonMeta):
             elif(self.view == View.LONG and time_delta > self.timeout_period):
                 self.required_action = OrderType.SELL
                 self.tracking_end_time = datetime.now()
-        else:
+
              # Get the current time
             current_time = datetime.now().time()
             # Define the cut-off time as 15:20 and end time as 15:30

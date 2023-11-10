@@ -113,7 +113,8 @@ class CandleChart:
     
     def normalise_deflection_points(self,scope_range):
         def custom_round(num,factor):
-            result  = (num//factor) * factor
+            print("!!! Handle AHrd coded factor here ")
+            result = (num//factor) * factor
             result = round(result,1)
             return result
             
@@ -196,11 +197,12 @@ class CandleChart:
         bottom = price - support["price"]
         top = resist["price"] - price
         product_of_strengts = resist["strength"] * support["strength"]
+        print("!!! HAndle harcoding of strength factir here ")
         if (product_of_strengts == 0):
             return False
-        if (trend == Trends.UPTREND and min_reward < top/bottom < 5 * min_reward ):
+        if (trend == Trends.UPTREND and min_reward < top/bottom < 3 * min_reward ):
             return True
-        if (trend == Trends.DOWNTREND  and min_reward < bottom/top < 5 * min_reward):
+        if (trend == Trends.DOWNTREND  and min_reward < bottom/top < 3 * min_reward):
             return True
         return False
 

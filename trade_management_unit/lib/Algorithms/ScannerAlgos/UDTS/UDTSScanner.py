@@ -55,7 +55,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
                 print("Instrument Number",instrument_counter)
 
                 if (is_eligible):
-                    instrument_id = Instrument.objects.get(trading_symbol=symbol,exchange=DEFAULT_EXCHANGE).id
+                    instrument_id = token
                     eligible_instrument_counter += 1
                     print("FOUND NEXT ELIGIBLE -- - ",eligible_instrument_counter,symbol)
                     symbol_data_points = eligibility_obj[self.trade_freqency]["chart"]
@@ -79,7 +79,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
                     instrument["required_action"] = self.__get_required_actions__(instrument)
                     print("Sunscribing To ",instrument["trading_symbol"])
                     # eligible_instruments.append(instrument)
-                    self.add_tokens_to_subscribed_tracker_sessiosn([instrument])
+                    self.add_tokens_to_subscribed_trade_sessions([instrument])
                 else:
                     print(eligibility_obj["message"])
                     print(f"Active Threads {threading.active_count()}")
@@ -176,7 +176,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
             required_action = None
         return required_action
     
-    def add_tokens_to_subscribed_tracker_sessiosn(self,eligible_instruments):
+    def add_tokens_to_subscribed_trade_sessions(self,eligible_instruments):
         for identifier in self.trade_sessions:
             trade_session = self.trade_sessions[identifier]
             trade_session.add_tokens(eligible_instruments)  
@@ -196,9 +196,10 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
 
 
     def fetch_instrument_tokens_and_start_tracking(self,user_id,dummy):
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            future = executor.submit((self.fetch_instruments_from_db))
-            result = future.result()
+        result = self.fetch_instruments_from_db()
+        # with concurrent.futures.ThreadPoolExecutor() as executor:
+        #     future = executor.submit((self.fetch_instruments_from_db))
+        #     result = future.result()
         self.scan_and_add_instruments_for_tracking(result,user_id,dummy)
 
 

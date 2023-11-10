@@ -14,7 +14,7 @@ class IndicitorSingletonMeta(type):
     # Override the __call__ method to control the creation of instances
     def __call__(cls, *args, **kwargs):
         # Get the symbol from the arguments
-        unique_class_identifier = args[0] + "__" + args[1]
+        unique_class_identifier = str(args[0]) + "__" + args[1]
 
         # Check if the symbol already exists in the dictionary
         if unique_class_identifier not in cls._instances:
