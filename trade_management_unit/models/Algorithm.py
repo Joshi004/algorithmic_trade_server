@@ -12,7 +12,8 @@ class AlgorithmType(Enum):
 class Algorithm(models.Model):
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=255, db_index=True, unique=True)  # Made this field unique
-    table_name = models.CharField(max_length=255)
+    display_name = models.CharField(max_length=255, db_index=True, default=None)  # Made this field unique
+    table_name = models.CharField(max_length=255,null=True,blank=True)
     type = models.CharField(
         max_length=20,
         choices=AlgorithmType.choices(),
