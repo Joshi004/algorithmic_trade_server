@@ -21,7 +21,8 @@ urlpatterns = [
     path('get_order_history',portfolio_view.get_order_history),    
     path('place_order',portfolio_view.place_order),
     path('initiate_trade_session',trade_session_view.initiate_trade_session),
-    path('get_new_session_param_options',trade_session_view.get_new_session_param_options)
+    path('get_new_session_param_options',trade_session_view.get_new_session_param_options),
+    path('get_trade_sessions',trade_session_view.get_trade_sessions)
 ]
 
 
