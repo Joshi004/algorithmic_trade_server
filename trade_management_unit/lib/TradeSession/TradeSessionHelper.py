@@ -23,6 +23,7 @@ class TradeSessionHelper():
             trade_sessions = []
             for session in trade_session_objects:
                 trade_sessions.append({
+                    "net_profit": session.net_profit,
                     "id": session.id,
                     "started_at": session.started_at,
                     "closed_at": session.closed_at,
@@ -46,10 +47,11 @@ class TradeSessionHelper():
 
     def get_query(self,is_active,session_id,dummy):
         sql_query = """
-        SELECT ts.id,ts.started_at,ts.closed_at,ts.dummy,ts.is_active,ts.user_id,ts.trading_frequency, sa.display_name AS scanning_algorithm_name, ta.display_name AS tracking_algorithm_name
+        SELECT sum(td.net_profit) as net_profit ,ts.id,ts.started_at,ts.closed_at,ts.dummy,ts.is_active,ts.user_id,ts.trading_frequency, sa.display_name AS scanning_algorithm_name, ta.display_name AS tracking_algorithm_name
         FROM trade_sessions ts
         INNER JOIN algorithms sa ON ts.scanning_algorithm_id = sa.id
         INNER JOIN algorithms ta ON ts.tracking_algorithm_id = ta.id
+        LEFT JOIN trades td ON td.trade_session_id = ts.id
         WHERE ts.user_id = %s
         """
 
@@ -60,5 +62,7 @@ class TradeSessionHelper():
             sql_query += " AND ts.id = %s" % session_id
         if dummy is not None:
             sql_query += " AND ts.dummy = %s" % int(dummy)
+
+        sql_query += " GROUP BY ts.id"
 
         return sql_query
