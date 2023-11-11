@@ -1,7 +1,7 @@
 from django.urls import path
 # from django.urls import re_path
 
-from .views import instrument_view, trade_view,kite_view, scanner_algo_view, portfolio_view
+from .views import instrument_view, trade_view,kite_view, scanner_algo_view, portfolio_view,trade_session_view
 from .consumers import trade_session_consumer
 
 urlpatterns = [
@@ -19,7 +19,9 @@ urlpatterns = [
     path('get_orders',portfolio_view.get_orders),    
     path('get_orders_trades',portfolio_view.get_orders_trades),    
     path('get_order_history',portfolio_view.get_order_history),    
-    path('place_order',portfolio_view.place_order)    
+    path('place_order',portfolio_view.place_order),
+    path('initiate_trade_session',trade_session_view.initiate_trade_session),
+    path('get_new_session_param_options',trade_session_view.get_new_session_param_options)
 ]
 
 
