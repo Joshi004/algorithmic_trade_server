@@ -118,7 +118,7 @@ class TradeSession(metaclass=TradeSessionMeta):
                     "trade_session_id": self.trade_session_id,
                     "trading_symbol": symbol,
                     "instrument_id": int(token),
-                    "price": float(tick["market_data"]["market_price"]),
+                    "price": float(order["price"]),
                     "net_profit": float(trade.net_profit if trade.net_profit else 0),
                     "timestamp": datetime.now()
                 }
