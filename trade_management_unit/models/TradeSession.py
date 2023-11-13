@@ -57,7 +57,7 @@ class TradeSession(models.Model):
             )
             trade_session.save()  # Save the new trade session to the database
 
-        return trade_session.id
+        return trade_session
 
     @classmethod
     def fetch_trade_sessions(cls, is_active=None, session_id=None,user_id=user_id,dummy=dummy):

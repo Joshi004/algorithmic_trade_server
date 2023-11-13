@@ -36,6 +36,18 @@ class TradeType(Enum):
     COMMODITY_FUTURES = "commodity_futures"
     COMMODITY_OPTIONS = "commodity_options"
 
+class COMMUNICATION_ACTION(Enum):
+    INITIATE_TRADE = "initiate_trade"
+    TERMINATE_TRADE = "terminate_trade"
+    BUY_INSTRUMENT = "buy_instrument"
+    SELL_INSTRUMENT = "sell_instrument"
+    SUBSCRIBE_INSTRUMENT = "subscribe_instrument"
+    UNSUBSCRIBE_INSTRUMENT = "unsubscribe_instrument"
+    RANGE_CROSSOVER = "range_crossover"
+    BALANCE_ALERT = "balance_alert"
+    PRICE_UPDATE = "price_update"
+    candle_update = "candle_update"
+
 
 
 # Other constants
@@ -54,3 +66,4 @@ FREQUENCY_STEPS = {
     "15minute" : ["15minute","60minute","day"],
     "day" : ["day","day","day"],
 }
+

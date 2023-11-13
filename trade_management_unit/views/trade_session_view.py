@@ -1,12 +1,12 @@
 from django.http import JsonResponse
 from trade_management_unit.lib.Trade.trade import Trade
-from trade_management_unit.lib.TradeSession.TradeSession import TradeSession as TradeSessionLib
+from trade_management_unit.lib.TradeSession.TradeSession import TradeSession
 from trade_management_unit.lib.TradeSession.TradeSessionHelper import TradeSessionHelper
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.forms.models import model_to_dict
 from trade_management_unit.models.Algorithm import Algorithm
 from trade_management_unit.lib.Kite.KiteTickhandler import KiteTickhandler
-from trade_management_unit.models.TradeSession import TradeSession
+
 from trade_management_unit.Constants.TmuConstants import *
 
 

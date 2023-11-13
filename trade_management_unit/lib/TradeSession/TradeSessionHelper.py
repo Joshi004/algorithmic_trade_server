@@ -16,9 +16,9 @@ class TradeSessionHelper():
             if dummy is not None:
                 dummy = bool(int(dummy))
 
-            query = self.get_query(is_active,session_id,dummy)
+            query = self.get_query(is_active,session_id,user_id,dummy)
                     # Execute the SQL query
-            trade_session_objects = TradeSession.objects.raw(query, [user_id])
+            trade_session_objects = TradeSession.objects.raw(query)
 
             trade_sessions = []
             for session in trade_session_objects:
@@ -45,14 +45,14 @@ class TradeSessionHelper():
             }
             return response
 
-    def get_query(self,is_active,session_id,dummy):
+    def get_query(self,is_active,session_id,user_id,dummy):
         sql_query = """
         SELECT sum(td.net_profit) as net_profit ,ts.id,ts.started_at,ts.closed_at,ts.dummy,ts.is_active,ts.user_id,ts.trading_frequency, sa.display_name AS scanning_algorithm_name, ta.display_name AS tracking_algorithm_name
         FROM trade_sessions ts
         INNER JOIN algorithms sa ON ts.scanning_algorithm_id = sa.id
         INNER JOIN algorithms ta ON ts.tracking_algorithm_id = ta.id
         LEFT JOIN trades td ON td.trade_session_id = ts.id
-        WHERE ts.user_id = %s
+        WHERE 1 = 1
         """
 
     # Add conditions to the SQL query based on the provided filters
@@ -60,6 +60,8 @@ class TradeSessionHelper():
             sql_query += " AND ts.is_active = %s" % int(is_active)
         if session_id is not None:
             sql_query += " AND ts.id = %s" % session_id
+        if user_id is not None:
+            sql_query += " AND ts.user_id = %s" % user_id
         if dummy is not None:
             sql_query += " AND ts.dummy = %s" % int(dummy)
 
