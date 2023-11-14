@@ -9,6 +9,7 @@ urlpatterns = [
     path('update_instruments',instrument_view.update_instruments),
     path('fetch_historical_data',instrument_view.fetch_historical_data),
     path('get_quotes',trade_view.get_quotes),
+    path('get_all_trades_info',trade_view.get_all_trades_info),
     path('set_session',kite_view.set_session),    
     path('get_login_url',kite_view.get_login_url),    
     path('get_profile_info',kite_view.get_profile_info),    
@@ -23,6 +24,8 @@ urlpatterns = [
     path('initiate_trade_session',trade_session_view.initiate_trade_session),
     path('get_new_session_param_options',trade_session_view.get_new_session_param_options),
     path('get_trade_sessions',trade_session_view.get_trade_sessions)
+
+
 ]
 
 
