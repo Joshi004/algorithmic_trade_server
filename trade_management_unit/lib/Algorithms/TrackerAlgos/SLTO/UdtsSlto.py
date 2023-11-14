@@ -30,6 +30,8 @@ class UdtsSlto(metaclass=TrackerAlgoMeta):
 
 
     def process_tracker_actions(self,instrument,trade_session_id,user_id,dummy):
+        trade = None
+        order = None
         trading_symbol = instrument["trading_symbol"]
         action = instrument["required_action"]
         if action:
@@ -42,8 +44,7 @@ class UdtsSlto(metaclass=TrackerAlgoMeta):
             frictional_losses = RiskManager().get_frictional_losses(TRADE_TYPE["intraday"],market_price, quantity, action == "BUY")
             order = Order.initiate_order(action.value, instrument_id, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity,market_price)
             self.__update_and_close_trade__(trade,order.closed_at)
-            return trade
-        return None
+        return (trade,order)
 
     def square_off_order_on_zerodha(self,trading_symbol,action,quantity,user_id,dummy,market_price):
         kite_order_id = user_id+"__"+str(datetime.now)

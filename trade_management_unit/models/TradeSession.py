@@ -57,6 +57,25 @@ class TradeSession(models.Model):
             )
             trade_session.save()  # Save the new trade session to the database
 
-        return trade_session.id
+        return trade_session
+
+    @classmethod
+    def fetch_trade_sessions(cls, is_active=None, session_id=None,user_id=user_id,dummy=dummy):
+        # Start with all trade sessions
+        query = cls.objects.filter(user_id=user_id)
+        # Filter by active if it's provided
+        if is_active is not None:
+            # Convert active to boolean
+            active = bool(int(is_active))
+            query = query.filter(is_active=is_active)
+
+        # Filter by session_id if it's provided
+        if session_id is not None:
+            query = query.filter(id=session_id)
+
+        if dummy is not None:
+            query = query.filter(dummy=dummy)
+
+        return query
 
 

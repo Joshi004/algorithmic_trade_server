@@ -1,9 +1,12 @@
 from django.http import JsonResponse
 from trade_management_unit.lib.Trade.trade import Trade
 from trade_management_unit.lib.TradeSession.TradeSession import TradeSession
+from trade_management_unit.lib.TradeSession.TradeSessionHelper import TradeSessionHelper
 from channels.generic.websocket import AsyncWebsocketConsumer
+from django.forms.models import model_to_dict
 from trade_management_unit.models.Algorithm import Algorithm
 from trade_management_unit.lib.Kite.KiteTickhandler import KiteTickhandler
+
 from trade_management_unit.Constants.TmuConstants import *
 
 
@@ -34,5 +37,12 @@ def get_new_session_param_options(request):
                 "trading_frequencies":trading_frequencies,
                 }
         return JsonResponse(response,status=200, content_type='application/json')
+
+def get_trade_sessions(request):
+    query_params = request.GET
+    response = TradeSessionHelper().fetch_trade_session_info(query_params)
+    return JsonResponse(response, status=200, content_type='application/json')
+
+
 
 

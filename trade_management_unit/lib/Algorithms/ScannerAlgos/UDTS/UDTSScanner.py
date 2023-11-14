@@ -104,6 +104,8 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
             volume=instrument["market_data"]["volume"]
         )
     def process_scanner_actions(self,instrument,user_id,dummy,trade_session_id):
+        order = None
+        trade = None
         trading_symbol = instrument["trading_symbol"]
         action = instrument["required_action"]
         if action:
@@ -111,17 +113,15 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
             market_price = instrument["market_data"]["market_price"]
             risk_manager = RiskManager()
             quantity,frictional_losses = risk_manager.get_quantity_and_frictional_losses(action,market_price,instrument["support_price"],instrument["resistance_price"],user_id,dummy,trade_session_id)
-            if(quantity<1):
-                print("Cant performa action on less than 1 quantity")
-                return None
-            print("!!! Order from Zerodha",trading_symbol,action)
-            margin = self.get_trade_margin(action,market_price,instrument["support_price"],instrument["resistance_price"],quantity)
-            trade_id = Trade.fetch_or_initiate_trade(instrument_id, action,trade_session_id,user_id,dummy,margin).id
-            if(not self.has_active_position(trade_id)):
-                kite_order_id = self.place_order_on_kite(trading_symbol,quantity,action,instrument["support_price"],instrument["resistance_price"],instrument["market_data"]["market_price"],user_id,dummy)
-                order_id = Order.initiate_order(action, instrument_id, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity,market_price).id
-            return trade_id
-        return None
+            if(quantity>0):
+                print("!!! Order from Zerodha",trading_symbol,action)
+                margin = self.get_trade_margin(action,market_price,instrument["support_price"],instrument["resistance_price"],quantity)
+                trade = Trade.fetch_or_initiate_trade(instrument_id, action,trade_session_id,user_id,dummy,margin)
+                trade_id = trade.id
+                if(not self.has_active_position(trade_id)):
+                    kite_order_id = self.place_order_on_kite(trading_symbol,quantity,action,instrument["support_price"],instrument["resistance_price"],instrument["market_data"]["market_price"],user_id,dummy)
+                    order = Order.initiate_order(action, instrument_id, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity,market_price)
+        return  (trade,order)
 
     def has_active_position(self,trade_id):
         orders = Order.objects.filter(trade_id=trade_id)

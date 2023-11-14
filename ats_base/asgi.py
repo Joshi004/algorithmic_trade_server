@@ -16,7 +16,7 @@ from trade_management_unit.consumers.trade_session_consumer import TradeSessionC
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ats_base.settings')
 
 ws_patterns = [
-path('ws/initiate_trade_session/',TradeSessionConsumer.as_asgi()),
+path('ws/setup_trade_session_commnication/',TradeSessionConsumer.as_asgi()),
 ]
 
 application = ProtocolTypeRouter({
