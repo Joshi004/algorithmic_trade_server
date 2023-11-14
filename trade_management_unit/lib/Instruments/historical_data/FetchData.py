@@ -10,7 +10,17 @@ class FetchData:
         logging.getLogger("urllib3").setLevel(logging.WARNING)
         self.kite = KiteUser().get_instance()   
 
-    def fetch_hostorical_candle_data_from_kite(self,symbol, token, interval, number_of_candles, trade_date=None):
+    def fetch_historical_data_for_client(self,symbol, token, interval, number_of_candles, trade_date):
+        history_data = self.fetch_historical_candle_data_from_kite(symbol, token, interval, number_of_candles, trade_date)
+        response = {
+            "data": history_data,
+            "meta":{
+                "size":len(history_data)
+            }
+        }
+        return response
+
+    def fetch_historical_candle_data_from_kite(self,symbol, token, interval, number_of_candles, trade_date=None):
         # Initialize to_date and historical_data
         to_date = trade_date if trade_date else datetime.now()
         historical_data = []

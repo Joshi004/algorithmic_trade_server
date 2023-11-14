@@ -248,7 +248,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
         for index in range(0,len(frq_steps)):
             freq = frq_steps[index]
             eligibility_obj[freq] = {}
-            eligibility_obj[freq]["data"] = FetchData().fetch_hostorical_candle_data_from_kite(symbol,token,frq_steps[index],number_of_candles)
+            eligibility_obj[freq]["data"] = FetchData().fetch_historical_candle_data_from_kite(symbol,token,frq_steps[index],number_of_candles)
             if(len(eligibility_obj[freq]["data"]) < 200): #For This frequency no data was fetched
                 eligibility_obj["message"] = symbol + " : Not Enough Candles For " + str(freq)
                 return False , eligibility_obj
