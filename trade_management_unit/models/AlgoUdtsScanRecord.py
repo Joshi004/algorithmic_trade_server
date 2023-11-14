@@ -28,10 +28,9 @@ class AlgoUdtsScanRecord(models.Model):
     tracking_algo = models.ForeignKey('Algorithm', on_delete=models.PROTECT)
 
     @classmethod
-    def fetch_udts_record(cls,trade_id,instrument_id):
+    def fetch_udts_record(cls,trade_id):
         udts_record = cls.objects.get(
             trade_id = trade_id,
-            instrument_id = instrument_id
         )
         return udts_record
 
@@ -50,7 +49,7 @@ class AlgoUdtsScanRecord(models.Model):
             raise ValidationError(f"Instrument with id {instrument_id} does not exist.")
 
         try:
-            udts_record = cls.fetch_udts_record(trade_id,instrument_id)
+            udts_record = cls.fetch_udts_record(trade_id)
             return udts_record
         except:
             # Round off the values to the desired format
