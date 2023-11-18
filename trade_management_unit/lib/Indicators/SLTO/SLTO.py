@@ -10,7 +10,7 @@ class SLTO(metaclass=IndicitorSingletonMeta):
     def __init__(self,trade_session_id,trading_symbol,trading_frequency,trade_id,instrunent_id):
         self.symbol = trading_symbol
         self.trading_frequency = trading_frequency
-        udts_record = AlgoUdtsScanRecord.fetch_udts_record(trade_id,instrunent_id)
+        udts_record = AlgoUdtsScanRecord.fetch_udts_record(trade_id)
         effective_trend = udts_record.effective_trend
         self.view = View.LONG if effective_trend == Trends.UPTREND.value else View.SHORT if effective_trend == Trends.DOWNTREND.value else None
         self.support_price = udts_record.support_price

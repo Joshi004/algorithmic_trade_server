@@ -11,3 +11,11 @@ def get_quotes(request,*args,**kwvrgs):
     trade = Trade()
     response = trade.get_quotes(query_paramas)
     return JsonResponse(response,status=200, content_type='application/json')
+
+def get_all_trades_info(request,*args,**kwvrgs):
+    query_paramas = request.GET
+    trade = Trade()
+    trade_session_id = query_paramas.get("trade_session_id","")
+    response = trade.fetch_all_trades_info(trade_session_id)
+    return JsonResponse(response,status=200, content_type='application/json')
+
