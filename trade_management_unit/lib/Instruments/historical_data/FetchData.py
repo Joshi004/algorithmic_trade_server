@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, time
-
+import re
 from trade_management_unit.lib.Kite.KiteUser import KiteUser
 from trade_management_unit.lib.Instruments.historical_data.Database import Database
 import logging
@@ -25,15 +25,15 @@ class FetchData:
         to_date = trade_date if trade_date else datetime.now()
         historical_data = []
         stored_data = self.get_stored_data(symbol,interval)
-        last_stored_date = None
+        last_stored_record_date = None
         if (stored_data and len(stored_data)):
-            last_record_date = stored_data[-1]["date"]
-
-        print("History from data",len(stored_data))
-
+            last_stored_record_date = stored_data[-1]["date"]
+        print("Data Already Stored Till", last_stored_record_date)
         iteration_count = 1
         while (len(historical_data) < number_of_candles+1 and iteration_count < 10 and to_date.year > 2019):
             iteration_count += 1
+            number,unit = self.separate_time(interval)
+            time_delta_param = {unit:number}
             # Skip non-trading hours (before 9:15 or after 15:30)
             if to_date.time() < time(9, 15):
                 # Move to the previous trading day
@@ -49,13 +49,16 @@ class FetchData:
                 to_date -= timedelta(days=1)
 
             # Calculate from_date based on the current length of historical_data
-            if last_stored_date:
-                from_date = last_record_date
+            if last_stored_record_date:
+                from_date = last_stored_record_date + timedelta(**time_delta_param)
             elif "minute" in interval:
                 minutes = int(interval.replace("minute", ""))
                 from_date = to_date - timedelta(minutes=minutes*(number_of_candles))
             elif interval == "day":
                 from_date = to_date - timedelta(days=number_of_candles)
+
+            if (to_date < from_date):
+                to_date = from_date + timedelta(**time_delta_param)
 
             # print("----- Getting Historical data symbol: ", token, " Total CAndles : ",len(historical_data),"  Time Diff: ",to_date-from_date," From: ",to_date," To: ",from_date)
             new_data = self.fetch_data_from_zerodha(token, from_date, to_date,interval)
@@ -93,4 +96,25 @@ class FetchData:
         data = self.kite.historical_data(instrument_token, start_date, end_date, interval)
         return data
 
+    def separate_time(self,s):
+        # If the string is empty or None, return 1 and None
+        if not s:
+            return 1, None
+
+        # Use regex to find the number and unit in the string
+        match = re.match(r'(\d*)(\D*)', s.strip())
+
+        # If there's no match, return 1 and None
+        if not match:
+            return 1, None
+
+        # Get the number and unit from the match
+        number, unit = match.groups()
+
+        # If the number is empty, assume it's 1
+        if not number:
+            number = '1'
+
+        # Return the number as an int and the unit
+        return int(number), str(unit)+"s"
 
