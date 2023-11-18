@@ -121,7 +121,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
                 if(not self.has_active_position(trade_id)):
                     kite_order_id = self.place_order_on_kite(trading_symbol,quantity,action,instrument["support_price"],instrument["resistance_price"],instrument["market_data"]["market_price"],user_id,dummy)
                     order = Order.initiate_order(action, instrument_id, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity,market_price)
-        return  (trade,order)
+        return (trade,order)
 
     def has_active_position(self,trade_id):
         orders = Order.objects.filter(trade_id=trade_id)
@@ -254,8 +254,8 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
                 return False , eligibility_obj
             eligibility_obj[freq]["chart"] = CandleChart(symbol,token,quote_data["last_price"],quote_data["volume"],quote_data["last_quantity"],frq_steps[index],eligibility_obj[freq]["data"])
             eligibility_obj[freq]["chart"].set_trend_and_deflection_points()
-    
-        deflection_points_scope =  self.__get_deflection_points_scope(eligibility_obj[frq_steps[-1]]["chart"])  
+        # USe Center element for scope
+        deflection_points_scope =  self.__get_deflection_points_scope(eligibility_obj[frq_steps[1]]["chart"])
         eligibility_obj[trade_freq]["chart"].normalise_deflection_points(deflection_points_scope)
         eligibility_obj[trade_freq]["chart"].set_trading_levels_and_ratios()
         effective_trend = self.__get_effective_trend(eligibility_obj)

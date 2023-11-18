@@ -14,7 +14,6 @@ class UdtsHelper:
                 "support_strength": float(result.support_strength),
                 "resistance_strength": float(result.resistance_strength),
                 "movement_potential": float(result.movement_potential),
-                "movement_potential": result.trade_id,
                 "volume": int(result.volume)
                 }
             meta = {
