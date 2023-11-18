@@ -93,24 +93,24 @@ class Trade:
         trades_info = []
         for trade in trades:
             trade_dict = {
-                'trade_id': trade.trade_id,
+                'trade_id': int(trade.trade_id),
                 'trade_start_time': trade.trade_start_time,
                 'trade_end_time': trade.trade_end_time,
-                'trade_net_profit': trade.trade_net_profit,
+                'trade_net_profit': float(trade.trade_net_profit) if trade.trade_net_profit else None,
                 'instrument' : {
-                    'instrument_id': trade.instrument_id,
+                    'instrument_id': int(trade.instrument_id),
                     'instrument_name': trade.instrument_name,
                     'trading_symbol': trade.trading_symbol,},
                 'trade_view': trade.trade_view,
-                'max_price': trade.max_price,
-                'min_price': trade.min_price,
-                'total_frictional_loss': trade.total_frictional_loss,
-                'traded_quantity': trade.traded_quantity,
-                'buy_price': trade.buy_price,
-                'sell_price': trade.sell_price,
+                'max_price': float(trade.max_price) if trade.max_price else None,
+                'min_price': float(trade.min_price) if trade.min_price else None,
+                'total_frictional_loss': float(trade.total_frictional_loss) if trade.total_frictional_loss else None,
+                'traded_quantity': float(trade.traded_quantity),
+                'buy_price': float(trade.buy_price) if trade.buy_price else None,
+                'sell_price': float(trade.sell_price) if trade.sell_price else None,
             }
             trades_info.append(trade_dict)
-        resposne = {'data' :trades_info,"meta":len(trades_info)}
+        resposne = {'data': trades_info, "meta": {"size": len(trades_info)}}
         return resposne
 
         
