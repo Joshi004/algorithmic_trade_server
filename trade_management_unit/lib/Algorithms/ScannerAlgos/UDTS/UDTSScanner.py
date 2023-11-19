@@ -197,9 +197,6 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
 
     def fetch_instrument_tokens_and_start_tracking(self,user_id,dummy):
         result = self.fetch_instruments_from_db()
-        # with concurrent.futures.ThreadPoolExecutor() as executor:
-        #     future = executor.submit((self.fetch_instruments_from_db))
-        #     result = future.result()
         self.scan_and_add_instruments_for_tracking(result,user_id,dummy)
 
 
@@ -249,13 +246,13 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
             freq = frq_steps[index]
             eligibility_obj[freq] = {}
             eligibility_obj[freq]["data"] = FetchData().fetch_historical_candle_data_from_kite(symbol,token,frq_steps[index],number_of_candles)
-            if(len(eligibility_obj[freq]["data"]) < 200): #For This frequency no data was fetched
+            if(len(eligibility_obj[freq]["data"]) < NUM_CANDLES_FOR_TREND_ANALYSIS): #For This frequency no data was fetched
                 eligibility_obj["message"] = symbol + " : Not Enough Candles For " + str(freq)
                 return False , eligibility_obj
             eligibility_obj[freq]["chart"] = CandleChart(symbol,token,quote_data["last_price"],quote_data["volume"],quote_data["last_quantity"],frq_steps[index],eligibility_obj[freq]["data"])
             eligibility_obj[freq]["chart"].set_trend_and_deflection_points()
         # USe Center element for scope
-        deflection_points_scope =  self.__get_deflection_points_scope(eligibility_obj[frq_steps[1]]["chart"])
+        deflection_points_scope =  self.__get_deflection_points_scope(eligibility_obj[frq_steps[SCOPE_COLLECTION_FREQ_INDEX]]["chart"])
         eligibility_obj[trade_freq]["chart"].normalise_deflection_points(deflection_points_scope)
         eligibility_obj[trade_freq]["chart"].set_trading_levels_and_ratios()
         effective_trend = self.__get_effective_trend(eligibility_obj)
@@ -267,7 +264,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
 
         reward_risk_ratio = eligibility_obj[trade_freq]["chart"].trading_pair["reward_risk_ratio"] if "reward_risk_ratio" in eligibility_obj[trade_freq]["chart"].trading_pair else 0
         eligibility_obj["message"] = f"{symbol} : {effective_trend.value} , Reward:Risk - {reward_risk_ratio}"
-        if(reward_risk_ratio > 2 ):
+        if(reward_risk_ratio > MINIMUM_REWARD_RISK_RATIO ):
             return True,eligibility_obj
 
         return False,eligibility_obj
@@ -276,8 +273,8 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
         self.volume = quote["volume"]
         
         # Define market open and close times
-        market_open_time = datetime.now().replace(hour=9, minute=15)
-        market_close_time = datetime.now().replace(hour=15, minute=30)
+        market_open_time = datetime.now().replace(**MARKET_OPEN_TIME)
+        market_close_time = datetime.now().replace(**MARKET_CLOSE_TIME)
         
         # Get current time
         current_time = datetime.now()

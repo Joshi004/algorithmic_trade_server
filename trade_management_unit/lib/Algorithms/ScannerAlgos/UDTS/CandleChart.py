@@ -113,7 +113,6 @@ class CandleChart:
     
     def normalise_deflection_points(self,scope_range):
         def custom_round(num,factor):
-            print("!!! Handle AHrd coded factor here ")
             result = (num//factor) * factor
             result = round(result,1)
             return result
@@ -122,9 +121,7 @@ class CandleChart:
         def_list_df = pd.DataFrame(self.deflection_points)
         price_list_df["diff"] = price_list_df["high"] - price_list_df["low"]
         self.average_candle_span = price_list_df["diff"].mean()
-        # Get Market Price in real time 
         market_price = self.market_price
-        # !!!!! Make this configurable 
         self.up_scope = market_price + scope_range
         self.down_scope = market_price - scope_range
         scope = [self.up_scope,self.down_scope]   
