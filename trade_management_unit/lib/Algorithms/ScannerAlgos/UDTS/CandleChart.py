@@ -191,7 +191,7 @@ class CandleChart:
         
         self.valid_pairs = valid_pairs
         self.trading_pair = trading_pair
-        return valid_pairs,trading_pair
+        return valid_pairs, trading_pair
 
     def __is_valid_pair(self,price,support,resist,trend,min_reward):
         bottom = price - support["price"]
@@ -200,9 +200,9 @@ class CandleChart:
         print("!!! HAndle harcoding of strength factir here ")
         if (product_of_strengts == 0):
             return False
-        if (trend == Trends.UPTREND and min_reward < top/bottom < 3 * min_reward ):
+        if (trend == Trends.UPTREND and MINIMUM_REWARD_RISK_RATIO < top/bottom < MAXIMUM_REWARD_RISK_RATIO ):
             return True
-        if (trend == Trends.DOWNTREND  and min_reward < bottom/top < 3 * min_reward):
+        if (trend == Trends.DOWNTREND  and MINIMUM_REWARD_RISK_RATIO < bottom/top < MAXIMUM_REWARD_RISK_RATIO):
             return True
         return False
 

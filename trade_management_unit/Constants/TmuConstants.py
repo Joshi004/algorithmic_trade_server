@@ -57,9 +57,11 @@ MARGIN_FACTOR=1.5
 TRADE_TYPE = {"intraday":"equity_intraday"}
 DEFAULT_EXCHANGE = "NSE"
 MINIMUM_REQUIRED_BALANCE = 100
-TRADE_THRESHHOLD_PER_MINUTE = 1000
+TRADE_THRESHHOLD_PER_MINUTE = 10000
 FREQUENCY = ["minute","3minute","5minute","10minute","15minute","30minute","60minute","day"]
 NUM_CANDLES_FOR_TREND_ANALYSIS = 200
+MINIMUM_REWARD_RISK_RATIO = 2
+MAXIMUM_REWARD_RISK_RATIO = 4
 FREQUENCY_STEPS = {
     "10minute" : ["10minute","60minute","day"],
     "5minute" : ["5minute","30minute","day"],
