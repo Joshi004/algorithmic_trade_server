@@ -51,6 +51,8 @@ class COMMUNICATION_ACTION(Enum):
 
 
 # Other constants
+MARKET_OPEN_TIME = {"hour": 9, "minute":15}
+MARKET_CLOSE_TIME = {"hour": 3, "minute":30}
 MARKET_CUTOFF_TIME = '14:50'
 MARKET_END_TIME = '15:15'
 MARGIN_FACTOR=1.5
@@ -58,14 +60,16 @@ TRADE_TYPE = {"intraday":"equity_intraday"}
 DEFAULT_EXCHANGE = "NSE"
 MINIMUM_REQUIRED_BALANCE = 100
 TRADE_THRESHHOLD_PER_MINUTE = 10000
-FREQUENCY = ["minute","3minute","5minute","10minute","15minute","30minute","60minute","day"]
+FREQUENCY = ["minute", "3minute", "5minute", "10minute", "15minute", "30minute", "60minute", "day"]
 NUM_CANDLES_FOR_TREND_ANALYSIS = 200
 MINIMUM_REWARD_RISK_RATIO = 2
 MAXIMUM_REWARD_RISK_RATIO = 4
 FREQUENCY_STEPS = {
-    "10minute" : ["10minute","60minute","day"],
-    "5minute" : ["5minute","30minute","day"],
-    "15minute" : ["15minute","60minute","day"],
-    "day" : ["day","day","day"],
+    "minute": ["minute", "10minute", "60minute"],
+    "3minute": ["3minute", "15minute", "60minute"],
+    "5minute": ["5minute", "30minute", "day"],
+    "10minute": ["10minute", "60minute", "day"],
+    "15minute": ["15minute", "60minute", "day"],
 }
+SCOPE_COLLECTION_FREQ_INDEX = 1  # This is the freq index from where the scope is calculated for price traversal
 
