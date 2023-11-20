@@ -15,7 +15,8 @@ from trade_management_unit.lib.Portfolio.Portfolio import Portfolio
 import pandas as pd
 import concurrent.futures
 import threading
-from datetime import datetime
+from trade_management_unit.lib.common.Utils import *
+import pytz
 
 
 class UDTSScanner(metaclass=ScannerSingletonMeta):
@@ -39,7 +40,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
             print("!!!! Fix Coroutine Error  !!!!")
             instrument_counter = 0
             eligible_instrument_counter = 0
-            scan_start_time = datetime.now()
+            scan_start_time = current_ist()
             for instrument in all_instruments:
                 instrument_counter+=1
                 symbol = instrument["trading_symbol"]
@@ -83,7 +84,8 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
                 else:
                     print(eligibility_obj["message"])
                     print(f"Active Threads {threading.active_count()}")
-            scan_end_time = datetime.now()
+                tm.sleep(1)
+            scan_end_time = current_ist()
             tm.sleep(30)
             print("restrting Scan - ",counter,"Last Scan Time",(scan_end_time - scan_start_time))
 
@@ -125,7 +127,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
 
     def has_active_position(self,trade_id):
         orders = Order.objects.filter(trade_id=trade_id)
-        if(len(orders)==1):
+        if(len(orders)>0):
             return True
         return False
 
@@ -148,7 +150,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
             new_balance = float(current_balance) - order_amount
             dummy_account.current_balance = round(new_balance,2)
             dummy_account.save()
-            return user_id+"__"+str(datetime.now)
+            return user_id+"__"+str(current_ist())
         else:
             print("!!! Check Stoploss and squareoff values properly before this ")
             params = {"trading_symbol":trading_symbol,
@@ -273,23 +275,23 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
         self.volume = quote["volume"]
         
         # Define market open and close times
-        market_open_time = datetime.now().replace(**MARKET_OPEN_TIME)
-        market_close_time = datetime.now().replace(**MARKET_CLOSE_TIME)
+        market_open_time = current_ist().replace(**MARKET_OPEN_TIME)
+        market_close_time = current_ist().replace(**MARKET_CLOSE_TIME)
         
         # Get current time
-        current_time = datetime.now()
+        current_time = current_ist()
         
         # Calculate total minutes from market open to current time or total trade duration
-        if current_time < market_open_time:
+        if current_time > market_open_time:
             # If current time is before market open, consider total trade duration of a day
-            total_minutes = int((market_close_time - market_open_time).total_seconds() / 60)
-        elif current_time > market_close_time:
+            total_minutes = int(( market_open_time - market_close_time).total_seconds() / 60)
+        elif current_time < market_close_time:
             # If current time is after market close, consider end time as market close
             current_time = market_close_time
-            total_minutes = int((current_time - market_open_time).total_seconds() / 60)
+            total_minutes = int((market_open_time - current_time).total_seconds() / 60)
         else:
             # If current time is within trading hours
-            total_minutes = int((current_time - market_open_time).total_seconds() / 60)
+            total_minutes = int((market_open_time - current_time).total_seconds() / 60)
         
         # Calculate volume per minute
         volume_per_minute = self.volume / total_minutes

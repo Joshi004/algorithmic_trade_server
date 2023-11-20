@@ -8,8 +8,9 @@ from trade_management_unit.lib.TradeSession.TradeSessionMeta import TradeSession
 from  trade_management_unit.Constants.TmuConstants import *
 from  trade_management_unit.models.Trade import Trade
 from django.db import connections
-from datetime import datetime
-
+from trade_management_unit.lib.common.Utils import *
+from trade_management_unit.lib.Kite.KiteTickhandler import KiteTickhandler
+import pytz
 
 import concurrent.futures
 
@@ -36,6 +37,7 @@ class TradeSession(metaclass=TradeSessionMeta):
         self.communication_group = str(self)
         self.__instanciate_tracking_algo__()
         self.__instanciate_scanning_algo__()
+        self.track_active_trades()
     
     def __str__(self):
         identifier = "trade_session__"+str(self.trade_session_id)
@@ -62,6 +64,8 @@ class TradeSession(metaclass=TradeSessionMeta):
         tracking_algo_instance.register_trade_session(self)
         print("!!! Enable register_tracking_session if needed !!! ")
         # self.kite_tick_handler.register_tracking_session(tracking_algo_instance,trading_symbol)
+
+
 
     def get_formated_tick(self,tick,symbol):
         instrument_obj = {
@@ -120,7 +124,7 @@ class TradeSession(metaclass=TradeSessionMeta):
                     "instrument_id": int(token),
                     "price": float(order.price),
                     "net_profit": float(trade.net_profit if trade.net_profit else 0),
-                    "timestamp": datetime.now()
+                    "timestamp": current_ist()
                 }
                 self.communicator.send_data_to_channel_layer(communication_bit, self.communication_group)
         except Exception as e:
@@ -170,24 +174,33 @@ class TradeSession(metaclass=TradeSessionMeta):
             token = instrument["instrument_token"]
             symbol = instrument["trading_symbol"]
 
-            trade,order = self.scanning_algo_instance.process_scanner_actions(instrument,self.user_id,self.dummy,self.trade_session_id)
+            trade, order = self.scanning_algo_instance.process_scanner_actions(instrument,self.user_id,self.dummy,self.trade_session_id)
             trade_id = trade.id if trade else None
             if(trade_id):
                 self.scanning_algo_instance.mark_into_scan_records(trade_id,self.tracking_algo_name,instrument)
                 self.instruments[instrument['trading_symbol']] = instrument
                 self.token_to_symbol_map[token] = symbol
                 self.kite_tick_handler.register_trade_sessions(token,self)
-                self.ws.subscribe([token])
+                try:
+                    self.ws.subscribe([token])
+                except:
+                    print(" !!!!!!!! Error Subscribing  retrying !!!!!!!")
+                    kite_tick_handler = KiteTickhandler()
+                    self.ws = kite_tick_handler.get_kite_ticker_instance()
+                    self.ws.connect(threaded=True)
+                    self.ws.subscribe([token])
+
+
                 communication_bit = {
                     "event_type": COMMUNICATION_ACTION.INITIATE_TRADE.value,
-                    "order_action": order.order_type,
-                    "order_quantity": order.quantity,
+                    "order_action": order.order_type if order else None,
+                    "order_quantity": order.quantity if order else None,
                     "trade_session_id": self.trade_session_id,
                     "trading_symbol": symbol,
                     "instrument_id": int(token),
                     "price": float(instrument["market_data"]["market_price"]),
                     "net_profit": float(trade.net_profit if trade.net_profit else 0),
-                    "timestamp": datetime.now()
+                    "timestamp": current_ist()
                 }
                 self.communicator.send_data_to_channel_layer(communication_bit, self.communication_group)
 

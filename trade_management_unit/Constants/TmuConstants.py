@@ -51,6 +51,7 @@ class COMMUNICATION_ACTION(Enum):
 
 
 # Other constants
+INDIAN_TIMEZONE = 'Asia/Kolkata'
 MARKET_OPEN_TIME = {"hour": 9, "minute":15}
 MARKET_CLOSE_TIME = {"hour": 3, "minute":30}
 MARKET_CUTOFF_TIME = '14:50'

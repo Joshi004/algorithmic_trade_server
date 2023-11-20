@@ -194,7 +194,6 @@ class CandleChart:
         bottom = price - support["price"]
         top = resist["price"] - price
         product_of_strengts = resist["strength"] * support["strength"]
-        print("!!! HAndle harcoding of strength factir here ")
         if (product_of_strengts == 0):
             return False
         if (trend == Trends.UPTREND and MINIMUM_REWARD_RISK_RATIO < top/bottom < MAXIMUM_REWARD_RISK_RATIO ):

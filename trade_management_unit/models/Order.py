@@ -2,6 +2,7 @@ from django.db import models
 from datetime import datetime
 from django_mysql.models import EnumField
 from django.core.exceptions import ValidationError
+from trade_management_unit.lib.common.Utils import *
 
 class Order(models.Model):
     class Meta:
@@ -13,8 +14,8 @@ class Order(models.Model):
     id = models.BigAutoField(auto_created=True, primary_key=True, blank=False)
     status = EnumField(choices=STATUS_CHOICES,default="pending")
     order_type = EnumField(choices=ORDER_TYPES)
-    started_at = models.DateTimeField(default=datetime.now,blank=False)
-    closed_at = models.DateTimeField(blank=True,null=True,default=datetime.now)
+    started_at = models.DateTimeField(default=current_ist,blank=False)
+    closed_at = models.DateTimeField(blank=True,null=True,default=current_ist)
     instrument =   models.ForeignKey("Instrument", verbose_name="instrument_id", on_delete=models.CASCADE)
     trade =   models.ForeignKey("Trade", verbose_name="trade_id", on_delete=models.CASCADE)
     dummy = models.BooleanField(default=False)
@@ -30,8 +31,8 @@ class Order(models.Model):
         order = cls(
             status='exicuted',
             order_type=order_type,
-            started_at=datetime.now(),
-            closed_at=datetime.now(),
+            started_at=current_ist(),
+            closed_at=current_ist(),
             instrument_id=instrument_id,
             trade_id=trade_id,
             dummy=dummy,

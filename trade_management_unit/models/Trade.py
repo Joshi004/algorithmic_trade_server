@@ -1,7 +1,8 @@
 from django.db import models
 from django_mysql.models import EnumField
 from django.db.models import Sum
-from datetime import datetime
+from trade_management_unit.lib.common.Utils import *
+
 from django.db.models import Q
 from trade_management_unit.models.Instrument import Instrument
 from trade_management_unit.Constants.TmuConstants import *
@@ -53,7 +54,7 @@ class Trade(models.Model):
             # If no existing trade is found, create a new one
             trade = cls(
                 is_active=True,
-                started_at=datetime.now(),
+                started_at=current_ist(),
                 closed_at=None,
                 instrument_id=instrument_id,
                 trade_session_id=trade_session_id,
@@ -90,9 +91,9 @@ class Trade(models.Model):
         net_profit = 0
         for order in orders:
             if order.order_type == 'buy':
-                net_profit -= order.price
+                net_profit -= (order.price * order.quantity)
             elif order.order_type == 'sell':
-                net_profit += order.price
+                net_profit += (order.price * order.quantity)
             net_profit -= order.frictional_losses
         return net_profit
 

@@ -2,7 +2,7 @@
 
 import datetime
 from django.db import migrations, models
-
+from trade_management_unit.lib.common.Utils import *
 
 class Migration(migrations.Migration):
 
@@ -14,6 +14,6 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='order',
             name='closed_at',
-            field=models.DateTimeField(blank=True, default=datetime.datetime.now, null=True),
+            field=models.DateTimeField(blank=True, default=current_ist, null=True),
         ),
     ]

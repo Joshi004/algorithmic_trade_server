@@ -3,7 +3,7 @@ from django_mysql.models import EnumField
 from trade_management_unit.models.Algorithm import Algorithm
 from trade_management_unit.models.Algorithm import AlgorithmType
 from trade_management_unit.Constants.TmuConstants import FREQUENCY  # assuming constants.py is in the same directory
-from datetime import datetime
+from trade_management_unit.lib.common.Utils import *
 class TradeSession(models.Model):
     class Meta:
         db_table = "trade_sessions"
@@ -51,7 +51,7 @@ class TradeSession(models.Model):
                 tracking_algorithm_id=tracking_algo_id,
                 trading_frequency=trading_freq,
                 is_active=True,  # Set is_active to True
-                started_at=datetime.now(),  # Set started_at to current timestamp
+                started_at=current_ist(),  # Set started_at to current timestamp
                 closed_at=None,  # Set closed_at to None
                 dummy=dummy  # Set dummy based on the parameter
             )

@@ -6,7 +6,7 @@ from trade_management_unit.lib.Portfolio.Portfolio import Portfolio
 from trade_management_unit.Constants.TmuConstants import  *
 from trade_management_unit.models.DummyAccount import DummyAccount
 from trade_management_unit.lib.TradeSession.RiskManager import RiskManager
-from datetime import datetime
+from trade_management_unit.lib.common.Utils import *
 class UdtsSlto(metaclass=TrackerAlgoMeta):
     def __init__(self,trading_frequency,scanning_algorithm_name):
         self.trading_frequency = trading_frequency
@@ -47,7 +47,7 @@ class UdtsSlto(metaclass=TrackerAlgoMeta):
         return (trade,order)
 
     def square_off_order_on_zerodha(self,trading_symbol,action,quantity,user_id,dummy,market_price):
-        kite_order_id = user_id+"__"+str(datetime.now)
+        kite_order_id = user_id+"__"+str(current_ist())
         if dummy:
             retrived_amount = quantity * market_price
             dummy_record = DummyAccount.objects.get(user_id = user_id)
