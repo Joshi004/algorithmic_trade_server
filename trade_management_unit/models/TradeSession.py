@@ -60,22 +60,42 @@ class TradeSession(models.Model):
         return trade_session
 
     @classmethod
-    def fetch_trade_sessions(cls, is_active=None, session_id=None,user_id=user_id,dummy=dummy):
+    def fetch_trade_sessions(cls,session_id, is_active=True):
         # Start with all trade sessions
-        query = cls.objects.filter(user_id=user_id)
+        trade_session = cls.objects.get(id=session_id,is_active=is_active)
         # Filter by active if it's provided
-        if is_active is not None:
-            # Convert active to boolean
-            active = bool(int(is_active))
-            query = query.filter(is_active=is_active)
+        return trade_session
 
-        # Filter by session_id if it's provided
-        if session_id is not None:
-            query = query.filter(id=session_id)
 
-        if dummy is not None:
-            query = query.filter(dummy=dummy)
+    @classmethod
+    def fetch_active_trade_session(cls, user_id, scanning_algo_id, tracking_algo_id, trading_freq, dummy):
+        try:
+            trade_session = cls.objects.get(
+                user_id=user_id,
+                scanning_algorithm_id=scanning_algo_id,
+                tracking_algorithm_id=tracking_algo_id,
+                trading_frequency=trading_freq,
+                dummy=dummy,
+                is_active=True
+            )
+            return trade_session
+        except cls.DoesNotExist:
+            return None
+    @classmethod
+    def create_trade_session(cls, user_id, scanning_algo_id, tracking_algo_id, trading_freq, dummy):
+        trade_session = cls(
+            user_id=user_id,
+            scanning_algorithm_id=scanning_algo_id,
+            tracking_algorithm_id=tracking_algo_id,
+            trading_frequency=trading_freq,
+            is_active=True,  # Set is_active to True
+            started_at=current_ist(),  # Set started_at to current timestamp
+            closed_at=None,  # Set closed_at to None
+            dummy=dummy  # Set dummy based on the parameter
+        )
+        trade_session.save()  # Save the new trade session to the database
+        return trade_session
 
-        return query
+
 
 

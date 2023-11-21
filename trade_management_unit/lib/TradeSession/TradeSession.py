@@ -7,6 +7,7 @@ from trade_management_unit.lib.Algorithms.TrackerAlgos.TrackerAlgoFactory import
 from trade_management_unit.lib.TradeSession.TradeSessionMeta import TradeSessionMeta
 from  trade_management_unit.Constants.TmuConstants import *
 from  trade_management_unit.models.Trade import Trade
+from  trade_management_unit.models.Algorithm import Algorithm
 from django.db import connections
 from trade_management_unit.lib.common.Utils import *
 from trade_management_unit.lib.Kite.KiteTickhandler import KiteTickhandler
@@ -45,8 +46,21 @@ class TradeSession(metaclass=TradeSessionMeta):
 
 
     def get_trade_session_id(self):
-        trade_session_id = TradeSessionDB.fetch_or_create_trade_session(self.scanning_algo_name,self.tracking_algo_name,self.trading_freq,self.dummy,self.user_id).id
-        return trade_session_id
+        scanning_algo_id = Algorithm.get_id_by_name(self.scanning_algo_name)
+        tracking_algo_id = Algorithm.get_id_by_name(self.tracking_algo_name)
+        trade_session = TradeSessionDB.fetch_active_trade_session(self.user_id, scanning_algo_id, tracking_algo_id, self.trading_freq, self.dummy)
+        if (not trade_session):
+            trade_session = TradeSessionDB.create_trade_session(self.user_id, scanning_algo_id, tracking_algo_id, self.trading_freq, self.dummy)
+        else:
+            self.track_active_trade_instruments(trade_session.id)
+        return trade_session.id
+
+    def terminate_trade_session(self,trade_session_id):
+        pass
+
+    def track_active_trade_instruments(self):
+
+        pass
         
     
     def __instanciate_scanning_algo__(self):
@@ -82,7 +96,7 @@ class TradeSession(metaclass=TradeSessionMeta):
         instrument_obj["required_action"] = self.tracking_algo_instance.get_required_action(instrument_obj)
         return instrument_obj
 
-    def async_tick_handler(self,tick):
+    def tick_handler(self,tick):
         try:
             token = tick['instrument_token']
             symbol = self.token_to_symbol_map[token]
@@ -139,9 +153,10 @@ class TradeSession(metaclass=TradeSessionMeta):
             conn.close()
 
     def handle_tick(self,tick):
-        tick_handler_thread = threading.Thread(target=self.async_tick_handler,args=(tick,))
-        tick_handler_thread.setDaemon(True)
-        tick_handler_thread.start()
+        self.tick_handler(tick)
+        # tick_handler_thread = threading.Thread(target=self.async_tick_handler,args=(tick,))
+        # tick_handler_thread.setDaemon(True)
+        # tick_handler_thread.start()
 
 
     def __add_instrument_actions__(self,instrument):

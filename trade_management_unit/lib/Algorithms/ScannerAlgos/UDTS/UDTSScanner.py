@@ -122,7 +122,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
                 trade_id = trade.id
                 if(not self.has_active_position(trade_id)):
                     kite_order_id = self.place_order_on_kite(trading_symbol,quantity,action,instrument["support_price"],instrument["resistance_price"],instrument["market_data"]["market_price"],user_id,dummy)
-                    order = Order.initiate_order(action, instrument_id, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity,market_price)
+                    order = Order.initiate_order(action, instrument_id, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity,market_price,trade_session_id)
         return (trade,order)
 
     def has_active_position(self,trade_id):

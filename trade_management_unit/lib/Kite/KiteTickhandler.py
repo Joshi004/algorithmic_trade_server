@@ -1,5 +1,6 @@
 from kiteconnect import KiteTicker
 from trade_management_unit.lib.common.EnvFile import EnvFile
+import threading
 
 class SingletonMeta(type):
     _instances = {}
@@ -34,11 +35,18 @@ class KiteTickhandler(metaclass=SingletonMeta):
 
 
 
-    def on_ticks(self,ws,ticks):
+    def async_tick_handler(self,ticks):
         for tick in ticks:
             token = tick['instrument_token']
             for trade_session in self.trade_sessions[token]:
                 trade_session.handle_tick(tick)
+
+
+    def on_ticks(self,ws,ticks):
+        tick_handler_thread = threading.Thread(target=self.async_tick_handler,args=(ticks,))
+        tick_handler_thread.setDaemon(True)
+        tick_handler_thread.start()
+
                 
 
     

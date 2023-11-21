@@ -38,11 +38,13 @@ class UdtsSlto(metaclass=TrackerAlgoMeta):
             instrument_id = instrument["instrument_token"]
             market_price = instrument["market_data"]["market_price"]
             trade = Trade.fetch_active_trade(instrument_id,trade_session_id,user_id,dummy)
+            if(not trade.is_active):
+                return trade,order
             trade_id = trade.id
             quantity = self.__get_square_off_quantity__(trade_id)
             kite_order_id = self.square_off_order_on_zerodha(trading_symbol,action,quantity,user_id,dummy,market_price)
             frictional_losses = RiskManager().get_frictional_losses(TRADE_TYPE["intraday"],market_price, quantity, action == "BUY")
-            order = Order.initiate_order(action.value, instrument_id, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity,market_price)
+            order = Order.initiate_order(action.value, instrument_id, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity,market_price,trade_session_id)
             self.__update_and_close_trade__(trade,order.closed_at)
         return (trade,order)
 

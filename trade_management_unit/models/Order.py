@@ -16,8 +16,9 @@ class Order(models.Model):
     order_type = EnumField(choices=ORDER_TYPES)
     started_at = models.DateTimeField(default=current_ist,blank=False)
     closed_at = models.DateTimeField(blank=True,null=True,default=current_ist)
-    instrument =   models.ForeignKey("Instrument", verbose_name="instrument_id", on_delete=models.CASCADE)
-    trade =   models.ForeignKey("Trade", verbose_name="trade_id", on_delete=models.CASCADE)
+    instrument = models.ForeignKey("Instrument", verbose_name="instrument_id", on_delete=models.CASCADE)
+    trade = models.ForeignKey("Trade", verbose_name="trade_id", on_delete=models.CASCADE)
+    trade_session = models.ForeignKey("TradeSession", verbose_name="trade_session_id", on_delete=models.CASCADE)
     dummy = models.BooleanField(default=False)
     kite_order_id = models.CharField(max_length=64, blank=True, null=True)
     frictional_losses = models.DecimalField(max_digits=10, decimal_places=2,blank=True, null=True)
@@ -25,8 +26,9 @@ class Order(models.Model):
     quantity = models.IntegerField(default=1)
     price = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
 
+
     @classmethod
-    def initiate_order(cls, order_type, instrument_id, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity, price):
+    def initiate_order(cls, order_type, instrument_id, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity, price,trade_session_id):
         kite_order_id = None if dummy else kite_order_id
         order = cls(
             status='exicuted',
@@ -40,7 +42,8 @@ class Order(models.Model):
             frictional_losses=frictional_losses,
             user_id=user_id,
             quantity=quantity,
-            price=price
+            price=price,
+            trade_session_id=trade_session_id
         )
         order.save()
         return order
