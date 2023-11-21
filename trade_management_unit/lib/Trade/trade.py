@@ -117,6 +117,9 @@ class Trade:
         resposne = {'data': trades_info, "meta": {"size": len(trades_info)}}
         return resposne
 
+    def terminate_trades(self,trade_ids):
+        pass
+
         
         
 

@@ -95,6 +95,10 @@ class Trade(models.Model):
         total_margin = cls.objects.filter(user_id=user_id, is_active=True,dummy=dummy).aggregate(total_margin=Sum('margin'))['total_margin']
         return total_margin if total_margin else 0
 
+    @classmethod
+    def fetch_active_trades_for_trade_session(cls, trade_session_id):
+        return cls.objects.filter(trade_session_id=trade_session_id, is_active=True)
+
 
 
     

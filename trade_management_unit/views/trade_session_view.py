@@ -39,9 +39,33 @@ def get_new_session_param_options(request):
         return JsonResponse(response,status=200, content_type='application/json')
 
 def get_trade_sessions(request):
-    query_params = request.GET
-    response = TradeSessionHelper().fetch_trade_session_info(query_params)
-    return JsonResponse(response, status=200, content_type='application/json')
+        query_params = request.GET
+        response = TradeSessionHelper().fetch_trade_session_info(query_params)
+        return JsonResponse(response, status=200, content_type='application/json')
+
+
+def resume_trade_session(request):
+        query_paramas  =  request.GET
+        trade_session_id = query_paramas.get("trade_session_id")
+        response = TradeSessionHelper().resume_trade_session(trade_session_id)
+        return JsonResponse(response, status=200, content_type='application/json')
+
+
+def session_active(request):
+        query_params = request.GET
+        trade_session_ids = query_params.get("trade_session_id")
+        # Split the comma-separated string into a list of IDs
+        trade_session_ids = [int(id) for id in trade_session_ids.split(',')]
+        responses = TradeSessionHelper().are_sessions_active(trade_session_ids)
+        return JsonResponse(responses, status=200, safe=False)
+
+def terminate_trade_session(request):
+        query_paramas  =  request.GET
+        trade_session_id = query_paramas.get("trade_session_id")
+        response = TradeSessionHelper().terminate_trade_session(trade_session_id)
+        return JsonResponse(response, status=200, content_type='application/json')
+
+
 
 
 

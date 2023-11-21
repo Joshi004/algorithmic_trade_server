@@ -1,5 +1,8 @@
 from trade_management_unit.models.TradeSession import TradeSession
+from trade_management_unit.lib.TradeSession.TradeSession import TradeSession as TradeSessionLib
+from trade_management_unit.lib.Kite.KiteTickhandler import KiteTickhandler
 from trade_management_unit.models.Algorithm import Algorithm
+from trade_management_unit.lib.Trade.trade import Trade
 from django.db import connection
 class TradeSessionHelper():
     def __init__(self):
@@ -68,3 +71,41 @@ class TradeSessionHelper():
         sql_query += " GROUP BY ts.id"
 
         return sql_query
+
+    def resume_trade_session(self,trade_session_id):
+        kite_tick_handler = KiteTickhandler()
+        kit_connect_object = kite_tick_handler.get_kite_ticker_instance()
+        kit_connect_object.connect(threaded=True)
+
+        ts_object = TradeSession.objects.get(id=trade_session_id,is_active=True)
+        scanning_algorithm_name = Algorithm.objects.get(id=ts_object.scanning_algorithm_id).name
+        tracking_algorithm_name = Algorithm.objects.get(id=ts_object.tracking_algorithm_id).name
+        trade_session = TradeSessionLib(ts_object.user_id,scanning_algorithm_name,tracking_algorithm_name,ts_object.trading_frequency,ts_object.dummy,kite_tick_handler,kit_connect_object)
+        response = trade_session.track_active_trade_instruments()
+        return response
+
+
+    def are_sessions_active(self, trade_session_ids):
+        response = {"data": [], "meta": {"size": 0}}
+        for trade_session_id in trade_session_ids:
+            ts_object = TradeSession.objects.get(id=trade_session_id, is_active=True)
+            scanning_algorithm_name = Algorithm.objects.get(id=ts_object.scanning_algorithm_id).name
+            tracking_algorithm_name = Algorithm.objects.get(id=ts_object.tracking_algorithm_id).name
+            trade_session_status = TradeSessionLib.check_if_session_exists(ts_object.user_id, scanning_algorithm_name, tracking_algorithm_name, ts_object.trading_frequency, ts_object.dummy)
+            response["data"].append({"trade_session_id": trade_session_id,"is_active":trade_session_status})
+        response["meta"]["size"] = len(response["data"])
+        return response
+
+
+    def terminate_trade_session(self,trade_session_id):
+        self.terminate_all_trades(trade_session_id)
+        self.unregister_trade_session_from_scanner(trade_session_id)
+        self.unregister_trade_session_from_tracker(trade_session_id)
+        self.unregister_trade_session_from_kite_handler(trade_session_id)
+        self.terminate_and_unregister_trade_session(trade_session_id)
+
+    def terminate_all_trades(self,trade_session_id):
+        active_trade_ids = Trade.objects.filter(trade_session_id=trade_session_id, is_active=True).values_list('id', flat=True)
+
+
+

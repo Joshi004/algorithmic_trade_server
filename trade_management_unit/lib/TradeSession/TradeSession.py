@@ -38,7 +38,7 @@ class TradeSession(metaclass=TradeSessionMeta):
         self.communication_group = str(self)
         self.__instanciate_tracking_algo__()
         self.__instanciate_scanning_algo__()
-        self.track_active_trades()
+        self.track_active_trade_instruments()
     
     def __str__(self):
         identifier = "trade_session__"+str(self.trade_session_id)
@@ -51,16 +51,52 @@ class TradeSession(metaclass=TradeSessionMeta):
         trade_session = TradeSessionDB.fetch_active_trade_session(self.user_id, scanning_algo_id, tracking_algo_id, self.trading_freq, self.dummy)
         if (not trade_session):
             trade_session = TradeSessionDB.create_trade_session(self.user_id, scanning_algo_id, tracking_algo_id, self.trading_freq, self.dummy)
-        else:
-            self.track_active_trade_instruments(trade_session.id)
         return trade_session.id
 
-    def terminate_trade_session(self,trade_session_id):
-        pass
+    @classmethod
+    def check_if_session_exists(cls, user_id, scanning_algo_name, tracking_algo_name, trading_freq, dummy):
+        unique_class_identifier = str(dummy) + "__" + user_id + "__" + scanning_algo_name + "__" + tracking_algo_name + "__" + trading_freq
+        return unique_class_identifier in cls._instances
+
 
     def track_active_trade_instruments(self):
+        active_trades = Trade.objects.select_related('instrument').filter(trade_session_id=self.trade_session_id, is_active=True)
+        instrument_objects = []
+        for trade in active_trades:
+            instrument = trade.instrument
+            instrument_object = {
+                'instrument_id': instrument.id,
+                'instrument_token': instrument.id,
+                'trading_symbol': instrument.trading_symbol,
+                'trading_frequency': self.trading_freq,
+                'required_action': None
+            }
+            instrument_objects.append(instrument_object)
+            self.add_tokens([instrument_object])
+            # self.token_to_symbol_map[instrument.id] = instrument.trading_symbol
+            # self.kite_tick_handler.register_trade_sessions(instrument.id, self)
+            # self.ws.subscribe([instrument.id])
 
-        pass
+            # {'instrument_id': 7436801,
+            #  'trading_symbol': 'ZUARI',
+            #  'instrument_token': 7436801,
+            #  'trade_freqency': '10minute',
+            #  'effective_trend': <Trends.UPTREND:
+            # 'uptrend'>, 'support_price': 155.0,
+            # 'resistance_price': 155.5,
+            # 'support_strength': 7.620394614514719e-06,
+            # 'resistance_strength': 0.006657176735240058,
+            # 'movement_potential': 0.5760000000000001,
+            # 'market_data': {'volume': 64022,
+            #                 'market_price': 155.15,
+            #                 'last_quantity': 196},
+            #                 'required_action': 'buy'}
+
+        return {"data": {"existing_instruments": instrument_objects}, "meta": {"size": len(instrument_objects)}}
+
+
+
+
         
     
     def __instanciate_scanning_algo__(self):
