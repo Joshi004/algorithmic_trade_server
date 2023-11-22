@@ -43,6 +43,10 @@ class TradeSession(metaclass=TradeSessionMeta):
     def __str__(self):
         identifier = "trade_session__"+str(self.trade_session_id)
         return identifier
+    def __eq__(self, other):
+        if isinstance(other, TradeSession):
+            return self.id == other.id
+        return False
 
 
     def get_trade_session_id(self):
@@ -227,10 +231,10 @@ class TradeSession(metaclass=TradeSessionMeta):
 
             trade, order = self.scanning_algo_instance.process_scanner_actions(instrument,self.user_id,self.dummy,self.trade_session_id)
             trade_id = trade.id if trade else None
+            self.token_to_symbol_map[token] = symbol
             if(trade_id):
                 self.scanning_algo_instance.mark_into_scan_records(trade_id,self.tracking_algo_name,instrument)
                 self.instruments[instrument['trading_symbol']] = instrument
-                self.token_to_symbol_map[token] = symbol
                 self.kite_tick_handler.register_trade_sessions(token,self)
                 try:
                     self.ws.subscribe([token])

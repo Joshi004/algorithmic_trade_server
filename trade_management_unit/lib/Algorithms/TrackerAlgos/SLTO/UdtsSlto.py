@@ -1,5 +1,6 @@
 from trade_management_unit.lib.Indicators.SLTO.SLTO import SLTO
 from trade_management_unit.lib.Algorithms.TrackerAlgos.TrackerAlgoMeta import TrackerAlgoMeta
+from trade_management_unit.lib.Indicators.IndicitorSingletonMeta import IndicitorSingletonMeta
 from trade_management_unit.models.Trade import Trade
 from trade_management_unit.models.Order import  Order
 from trade_management_unit.lib.Portfolio.Portfolio import Portfolio
@@ -27,6 +28,11 @@ class UdtsSlto(metaclass=TrackerAlgoMeta):
     
     def register_trade_session(self,trade_session_obj):
         self.trade_sessions[str(trade_session_obj)] = trade_session_obj
+
+    def unregister_trade_session(self, trade_sesion):
+        trade_session_key = str(trade_sesion)
+        if trade_session_key in self.trade_sessions:
+            del self.trade_sessions[trade_session_key]
 
 
     def process_tracker_actions(self,instrument,trade_session_id,user_id,dummy):
@@ -67,13 +73,15 @@ class UdtsSlto(metaclass=TrackerAlgoMeta):
             kite_order_id = Portfolio.initiate_order(order_params)
         return kite_order_id
 
-    def __update_and_close_trade__(self,trade,closed_at):
-        if(closed_at):
+    def __update_and_close_trade__(self,trade,order_closed_at):
+        if(order_closed_at):
             net_profit = Trade.get_net_profit(trade.id)
             trade.net_profit = net_profit
-            trade.closed_at = closed_at
+            trade.closed_at = order_closed_at
             trade.is_active = 0
             trade.save()
+            IndicitorSingletonMeta.remove_instance(IndicitorSingletonMeta, trade.id)
+
 
 
     def __get_square_off_quantity__(self,trade_id):

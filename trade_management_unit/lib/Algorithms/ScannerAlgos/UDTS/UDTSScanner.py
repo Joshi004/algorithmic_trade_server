@@ -32,6 +32,11 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
     def register_trade_session(self,trade_sesion):
         self.trade_sessions[str(trade_sesion)] = trade_sesion
 
+    def unregister_trade_session(self, trade_sesion):
+        trade_session_key = str(trade_sesion)
+        if trade_session_key in self.trade_sessions:
+            del self.trade_sessions[trade_session_key]
+
     def scan_in_seperate_trhread(self,all_instruments,user_id,dummy):
         counter = 0
         while(True):
@@ -84,7 +89,6 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
                 else:
                     print(eligibility_obj["message"])
                     print(f"Active Threads {threading.active_count()}")
-                tm.sleep(1)
             scan_end_time = current_ist()
             tm.sleep(30)
             print("restrting Scan - ",counter,"Last Scan Time",(scan_end_time - scan_start_time))

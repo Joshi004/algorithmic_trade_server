@@ -9,7 +9,7 @@ import pytz
 from trade_management_unit.models.AlgoUdtsScanRecord import AlgoUdtsScanRecord
 class SLTO(metaclass=IndicitorSingletonMeta):
 
-    def __init__(self,trade_session_id,trading_symbol,trading_frequency,trade_id,instrunent_id):
+    def __init__(self,trade_id,trade_session_id,trading_symbol,trading_frequency,instrunent_id):
         self.symbol = trading_symbol
         self.trading_frequency = trading_frequency
         udts_record = AlgoUdtsScanRecord.fetch_udts_record(trade_id)
@@ -28,7 +28,7 @@ class SLTO(metaclass=IndicitorSingletonMeta):
         self.trade_session_id = trade_session_id
 
     def __str__(self) -> str:
-        identifier = self.trade_session_id + "__" +  self.symbol
+        identifier = "Indictor__"+str(self.trade_id)
         return identifier
     
     def get_timeout_period(self, trade_freq):

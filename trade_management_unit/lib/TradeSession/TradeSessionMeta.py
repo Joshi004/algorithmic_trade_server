@@ -19,3 +19,9 @@ class TradeSessionMeta(type):
 
         # Return the instance for the symbol
         return cls._instances[unique_class_identifier]
+
+    def remove_instance(cls, user_id, scanning_algo_name, tracking_algo_name, trading_freq, dummy):
+        unique_class_identifier = str(dummy) + "__" + user_id + "__" + scanning_algo_name + "__" + tracking_algo_name + "__" + trading_freq
+        if unique_class_identifier in cls._instances:
+            del cls._instances[unique_class_identifier]
+

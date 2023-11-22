@@ -28,6 +28,15 @@ class KiteTickhandler(metaclass=SingletonMeta):
         else:
             self.trade_sessions[token] = [trade_sesion]
 
+    def unregister_trade_session(self, tokens, trade_sesion):
+        for token in tokens:
+            if token in self.trade_sessions:
+                if trade_sesion in self.trade_sessions[token]:
+                    self.trade_sessions[token].remove(trade_sesion)
+                    if not self.trade_sessions[token]:
+                        del self.trade_sessions[token]
+
+
 
     def set_tracker_session(self,identifier,tracker_session):
         self.tracker_sessions[identifier] = tracker_session
