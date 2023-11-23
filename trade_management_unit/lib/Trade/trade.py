@@ -57,7 +57,7 @@ class Trade:
 
     def fetch_all_trades_info(self, trade_session_id):
         sql_query = """
-            SELECT
+        SELECT
             trades.id AS id, 
             trades.id AS trade_id,
             trades.started_at AS trade_start_time,
@@ -70,7 +70,11 @@ class Trade:
             trades.max_price AS max_price,
             trades.min_price AS min_price,
             SUM(orders.frictional_losses) AS total_frictional_loss,
-            SUM(orders.quantity) AS traded_quantity,
+            SUM(CASE
+                WHEN trades.view = 'long' AND orders.order_type = 'buy' THEN orders.quantity
+                WHEN trades.view = 'short' AND orders.order_type = 'sell' THEN orders.quantity
+                ELSE 0
+            END) AS traded_quantity,
             GROUP_CONCAT(CASE
                 WHEN orders.order_type = 'buy' THEN orders.price
                 ELSE NULL
@@ -112,6 +116,9 @@ class Trade:
             trades_info.append(trade_dict)
         resposne = {'data': trades_info, "meta": {"size": len(trades_info)}}
         return resposne
+
+    def terminate_trades(self,trade_ids):
+        pass
 
         
         

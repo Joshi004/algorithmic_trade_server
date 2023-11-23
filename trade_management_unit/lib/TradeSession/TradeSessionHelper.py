@@ -1,5 +1,12 @@
 from trade_management_unit.models.TradeSession import TradeSession
+from trade_management_unit.lib.TradeSession.TradeSessionMeta import TradeSessionMeta
+from trade_management_unit.lib.TradeSession.TradeSession import TradeSession as TradeSessionLib
+from trade_management_unit.lib.Kite.KiteTickhandler import KiteTickhandler
 from trade_management_unit.models.Algorithm import Algorithm
+from trade_management_unit.lib.Trade.trade import Trade
+from trade_management_unit.models.Trade import Trade as TradeModel
+from trade_management_unit.Constants.TmuConstants import *
+from trade_management_unit.lib.common.Utils import *
 from django.db import connection
 class TradeSessionHelper():
     def __init__(self):
@@ -68,3 +75,116 @@ class TradeSessionHelper():
         sql_query += " GROUP BY ts.id"
 
         return sql_query
+
+    def resume_trade_session(self,trade_session_id):
+        trade_session_instance, ts_db_object = self.__get_trade_session_object__(trade_session_id)
+        response = trade_session_instance.track_active_trade_instruments()
+        return response
+
+
+    def are_sessions_active(self, trade_session_ids):
+        response = {"data": [], "meta": {"size": 0}}
+        for trade_session_id in trade_session_ids:
+            ts_object = TradeSession.objects.get(id=trade_session_id)
+            status = 'terminated'
+            if  ts_object.is_active:
+                scanning_algorithm_name = Algorithm.objects.get(id=ts_object.scanning_algorithm_id).name
+                tracking_algorithm_name = Algorithm.objects.get(id=ts_object.tracking_algorithm_id).name
+                trade_session_status = TradeSessionLib.check_if_session_exists(ts_object.user_id, scanning_algorithm_name, tracking_algorithm_name, ts_object.trading_frequency, ts_object.dummy)
+                status = 'active' if trade_session_status else 'paused'
+            response["data"].append({"trade_session_id": trade_session_id, "status": status})
+        response["meta"]["size"] = len(response["data"])
+        return response
+
+
+
+    def terminate_trade_session(self,trade_session_id):
+        try:
+            trade_session_instance, ts_db_object = self.__get_trade_session_object__(trade_session_id)
+        except TradeSession.DoesNotExist:
+            return {"data":{"trade_session_id":int(trade_session_id)},"meta":{}}
+        # Unregister From Scanner Instance
+        trade_session_instance.scanning_algo_instance.unregister_trade_session(trade_session_instance)
+        self.unregister_from_kite_and_terminate_all_trades(trade_session_instance)
+        trade_session_instance.tracking_algo_instance.unregister_trade_session(trade_session_instance)
+        # Terminate Trade Session
+        self.close_session_object_and_terminate_session(trade_session_instance, ts_db_object)
+        return {"data":{"trade_session_id": int(trade_session_id)},"meta":{}}
+
+
+        # unsubscribe on if there is no active trade with this instrument
+
+    def close_session_object_and_terminate_session(self,trade_session_instance, ts_db_object):
+        ts_db_object.is_active = False
+        ts_db_object.closed_at = current_ist()
+        ts_db_object.save()
+        user_id = trade_session_instance.user_id
+        scanning_algo_name = trade_session_instance.scanning_algo_name
+        tracking_algo_name = trade_session_instance.tracking_algo_name
+        trading_freq = trade_session_instance.trading_freq
+        dummy = trade_session_instance.dummy
+        # Remove the instance
+        TradeSessionMeta.remove_instance(TradeSessionMeta, user_id, scanning_algo_name, tracking_algo_name, trading_freq, dummy)
+
+
+    def unregister_from_kite_and_terminate_all_trades(self, trade_session_instance):
+        trade_session_instance.track_active_trade_instruments()
+        all_trades = TradeModel.objects.filter(trade_session_id=trade_session_instance.trade_session_id, is_active=True)
+
+        # Get all instrument_ids from the trades
+        instrument_ids = [trade.instrument_id for trade in all_trades]
+        if(len(instrument_ids) == 0 ):
+            return
+        #Unregister From KiteTickerHandleer
+        trade_session_instance.kite_tick_handler.unregister_trade_session(instrument_ids,trade_session_instance)
+
+        # Generate trading symbols using the token_to_symbol_map
+        trading_symbols = [trade_session_instance.token_to_symbol_map[id] for id in instrument_ids]
+
+        # Join the trading symbols with commas
+        symbols_string = ','.join(trading_symbols)
+
+        # Call get_quotes API once for all symbols
+        quotes = Trade().get_quotes({"symbol": symbols_string, "exchange": DEFAULT_EXCHANGE})
+
+        for trade in all_trades:
+            instrument_object = self.get_formated_instrument_object(trade, trade_session_instance, quotes)
+            trade_session_instance.tracking_algo_instance.process_tracker_actions(instrument_object, trade_session_instance.trade_session_id, trade_session_instance.user_id, trade_session_instance.dummy)
+
+
+    def get_formated_instrument_object(self, trade, trade_session_instance, quotes):
+        instrument_id = trade.instrument_id
+        trading_symbol = trade_session_instance.token_to_symbol_map[instrument_id]
+        key = DEFAULT_EXCHANGE+":"+trading_symbol
+        quote = quotes["data"][key]  # Get the quote for this symbol
+
+
+        return {
+            "trading_symbol": trading_symbol,
+            "instrument_token": instrument_id,
+            "trade_freqency": trade_session_instance.trading_freq,
+            "required_action": OrderType.BUY if trade.view == "short" else OrderType.SELL,
+            "indicator_data": {},
+            "market_data": {
+                "market_price": quote['last_price'],  # Fill in the market data from the quote
+                "last_quantity": quote['last_quantity'],
+                "volume": quote['volume'],
+            }
+        }
+
+
+
+
+
+
+    def __get_trade_session_object__(self,trade_session_id):
+        kite_tick_handler = KiteTickhandler()
+        kit_connect_object = kite_tick_handler.get_kite_ticker_instance()
+        kit_connect_object.connect(threaded=True)
+
+        ts_object = TradeSession.objects.get(id=trade_session_id,is_active=True)
+        scanning_algorithm_name = Algorithm.objects.get(id=ts_object.scanning_algorithm_id).name
+        tracking_algorithm_name = Algorithm.objects.get(id=ts_object.tracking_algorithm_id).name
+        trade_session = TradeSessionLib(ts_object.user_id,scanning_algorithm_name,tracking_algorithm_name,ts_object.trading_frequency,ts_object.dummy,kite_tick_handler,kit_connect_object)
+        return trade_session,ts_object
+

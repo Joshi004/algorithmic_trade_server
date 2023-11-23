@@ -1,8 +1,11 @@
-from datetime import datetime, timedelta, time
+from datetime import  timedelta, time
 import re
 from trade_management_unit.lib.Kite.KiteUser import KiteUser
 from trade_management_unit.lib.Instruments.historical_data.Database import Database
 import logging
+import pytz
+from trade_management_unit.Constants.TmuConstants import *
+from trade_management_unit.lib.common.Utils import *
 
 
 class FetchData:
@@ -11,7 +14,7 @@ class FetchData:
         self.kite = KiteUser().get_instance()   
 
     def fetch_historical_data_for_client(self,symbol, token, interval, number_of_candles, trade_date):
-        history_data = self.fetch_historical_candle_data_from_kite(symbol, token, interval, number_of_candles, trade_date)
+        history_data = self.fetch_historical_candle_data_from_kite(symbol, token, interval, number_of_candles)
         response = {
             "data": history_data,
             "meta":{
@@ -22,7 +25,7 @@ class FetchData:
 
     def fetch_historical_candle_data_from_kite(self,symbol, token, interval, number_of_candles, trade_date=None):
         # Initialize to_date and historical_data
-        to_date = trade_date if trade_date else datetime.now()
+        to_date = trade_date if trade_date else current_ist()
         historical_data = []
         stored_data = self.get_stored_data(symbol,interval)
         last_stored_record_date = None
@@ -50,7 +53,7 @@ class FetchData:
 
             # Calculate from_date based on the current length of historical_data
             if last_stored_record_date:
-                from_date = last_stored_record_date + timedelta(**time_delta_param)
+                from_date = localize_to_ist(last_stored_record_date) + timedelta(**time_delta_param)
             elif "minute" in interval:
                 minutes = int(interval.replace("minute", ""))
                 from_date = to_date - timedelta(minutes=minutes*(number_of_candles))

@@ -1,12 +1,13 @@
 from trade_management_unit.lib.Indicators.SLTO.SLTO import SLTO
 from trade_management_unit.lib.Algorithms.TrackerAlgos.TrackerAlgoMeta import TrackerAlgoMeta
+from trade_management_unit.lib.Indicators.IndicitorSingletonMeta import IndicitorSingletonMeta
 from trade_management_unit.models.Trade import Trade
 from trade_management_unit.models.Order import  Order
 from trade_management_unit.lib.Portfolio.Portfolio import Portfolio
 from trade_management_unit.Constants.TmuConstants import  *
 from trade_management_unit.models.DummyAccount import DummyAccount
 from trade_management_unit.lib.TradeSession.RiskManager import RiskManager
-from datetime import datetime
+from trade_management_unit.lib.common.Utils import *
 class UdtsSlto(metaclass=TrackerAlgoMeta):
     def __init__(self,trading_frequency,scanning_algorithm_name):
         self.trading_frequency = trading_frequency
@@ -28,6 +29,11 @@ class UdtsSlto(metaclass=TrackerAlgoMeta):
     def register_trade_session(self,trade_session_obj):
         self.trade_sessions[str(trade_session_obj)] = trade_session_obj
 
+    def unregister_trade_session(self, trade_sesion):
+        trade_session_key = str(trade_sesion)
+        if trade_session_key in self.trade_sessions:
+            del self.trade_sessions[trade_session_key]
+
 
     def process_tracker_actions(self,instrument,trade_session_id,user_id,dummy):
         trade = None
@@ -38,16 +44,18 @@ class UdtsSlto(metaclass=TrackerAlgoMeta):
             instrument_id = instrument["instrument_token"]
             market_price = instrument["market_data"]["market_price"]
             trade = Trade.fetch_active_trade(instrument_id,trade_session_id,user_id,dummy)
+            if(not trade.is_active):
+                return trade,order
             trade_id = trade.id
             quantity = self.__get_square_off_quantity__(trade_id)
             kite_order_id = self.square_off_order_on_zerodha(trading_symbol,action,quantity,user_id,dummy,market_price)
             frictional_losses = RiskManager().get_frictional_losses(TRADE_TYPE["intraday"],market_price, quantity, action == "BUY")
-            order = Order.initiate_order(action.value, instrument_id, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity,market_price)
+            order = Order.initiate_order(action.value, instrument_id, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity,market_price,trade_session_id)
             self.__update_and_close_trade__(trade,order.closed_at)
         return (trade,order)
 
     def square_off_order_on_zerodha(self,trading_symbol,action,quantity,user_id,dummy,market_price):
-        kite_order_id = user_id+"__"+str(datetime.now)
+        kite_order_id = user_id+"__"+str(current_ist())
         if dummy:
             retrived_amount = quantity * market_price
             dummy_record = DummyAccount.objects.get(user_id = user_id)
@@ -65,13 +73,15 @@ class UdtsSlto(metaclass=TrackerAlgoMeta):
             kite_order_id = Portfolio.initiate_order(order_params)
         return kite_order_id
 
-    def __update_and_close_trade__(self,trade,closed_at):
-        if(closed_at):
+    def __update_and_close_trade__(self,trade,order_closed_at):
+        if(order_closed_at):
             net_profit = Trade.get_net_profit(trade.id)
             trade.net_profit = net_profit
-            trade.closed_at = closed_at
+            trade.closed_at = order_closed_at
             trade.is_active = 0
             trade.save()
+            IndicitorSingletonMeta.remove_instance(IndicitorSingletonMeta, trade.id)
+
 
 
     def __get_square_off_quantity__(self,trade_id):

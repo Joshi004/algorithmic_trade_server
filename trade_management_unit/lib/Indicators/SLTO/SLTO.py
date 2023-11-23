@@ -3,11 +3,13 @@ from trade_management_unit.Constants.TmuConstants import *
 from trade_management_unit.models.AlgoSltoTrackRecord import AlgoSltoTrackRecord
 from datetime import datetime
 from trade_management_unit.models.Trade import Trade
+from trade_management_unit.lib.common.Utils import *
+import pytz
 
 from trade_management_unit.models.AlgoUdtsScanRecord import AlgoUdtsScanRecord
 class SLTO(metaclass=IndicitorSingletonMeta):
 
-    def __init__(self,trade_session_id,trading_symbol,trading_frequency,trade_id,instrunent_id):
+    def __init__(self,trade_id,trade_session_id,trading_symbol,trading_frequency,instrunent_id):
         self.symbol = trading_symbol
         self.trading_frequency = trading_frequency
         udts_record = AlgoUdtsScanRecord.fetch_udts_record(trade_id)
@@ -15,9 +17,9 @@ class SLTO(metaclass=IndicitorSingletonMeta):
         self.view = View.LONG if effective_trend == Trends.UPTREND.value else View.SHORT if effective_trend == Trends.DOWNTREND.value else None
         self.support_price = udts_record.support_price
         self.resistance_price = udts_record.resistance_price
-        self.zone_in_time = datetime.now()
+        self.zone_in_time = current_ist()
         self.price_zone = PriceZone.RANGE
-        self.tracking_start_time = datetime.now()
+        self.tracking_start_time = current_ist()
         self.timeout_period = self.get_timeout_period(self.trading_frequency)
         self.required_action = None
         self.prev_price_zone = None
@@ -26,7 +28,7 @@ class SLTO(metaclass=IndicitorSingletonMeta):
         self.trade_session_id = trade_session_id
 
     def __str__(self) -> str:
-        identifier = self.trade_session_id + "__" +  self.symbol
+        identifier = "Indictor__"+str(self.trade_id)
         return identifier
     
     def get_timeout_period(self, trade_freq):
@@ -53,7 +55,7 @@ class SLTO(metaclass=IndicitorSingletonMeta):
     def update(self, ltp:float )-> None:
         self.price_zone_changed =  False
         current_price_zone = self.__get_price_zone(ltp)
-        current_time = datetime.now()
+        current_time = current_ist()
         self.price_zone_changed = (self.price_zone != current_price_zone)
         time_delta = int((current_time - self.zone_in_time).total_seconds())
         if(self.price_zone_changed):
@@ -98,27 +100,27 @@ class SLTO(metaclass=IndicitorSingletonMeta):
         initial_data["indicator_data"]["slto"]["price_zone_changed"] = self.price_zone_changed
         initial_data["indicator_data"]["slto"]["required_action"] = self.required_action
         initial_data["indicator_data"]["slto"]["tracking_end_time"] = self.tracking_end_time
-        initial_data["indicator_data"]["slto"]["mark_time"] = datetime.now()
+        initial_data["indicator_data"]["slto"]["mark_time"] = current_ist()
 
     def __set_place_order_action__(self,current_price_zone:PriceZone,time_delta:int)-> None:
         self.required_action = None
         if(current_price_zone == PriceZone.RESISTANCE_BREAKOUT):
             if(self.view == View.LONG):
                 self.required_action = OrderType.SELL
-                self.tracking_end_time = datetime.now()
+                self.tracking_end_time = current_ist()
             elif(self.view == View.SHORT and time_delta > self.timeout_period):
                 self.required_action = OrderType.BUY
-                self.tracking_end_time = datetime.now()
+                self.tracking_end_time = current_ist()
         elif(current_price_zone == PriceZone.SUPPORT_BREAKOUT):
             if(self.view == View.SHORT):
                 self.required_action = OrderType.BUY
-                self.tracking_end_time = datetime.now()
+                self.tracking_end_time = current_ist()
             elif(self.view == View.LONG and time_delta > self.timeout_period):
                 self.required_action = OrderType.SELL
-                self.tracking_end_time = datetime.now()
+                self.tracking_end_time = current_ist()
 
              # Get the current time
-            current_time = datetime.now().time()
+            current_time = current_ist().time()
             # Define the cut-off time as 15:20 and end time as 15:30
             cut_off_time = datetime.strptime(MARKET_CUTOFF_TIME, '%H:%M').time()
             end_time = datetime.strptime(MARKET_END_TIME, '%H:%M').time()
@@ -126,10 +128,10 @@ class SLTO(metaclass=IndicitorSingletonMeta):
             if cut_off_time < current_time < end_time:
                 if self.view == View.SHORT:
                     self.required_action = OrderType.BUY
-                    self.tracking_end_time = datetime.now()
+                    self.tracking_end_time = current_ist()
                 elif self.view == View.LONG:
                     self.required_action = OrderType.SELL
-                    self.tracking_end_time = datetime.now()
+                    self.tracking_end_time = current_ist()
 
 
 

@@ -34,7 +34,6 @@ def get_historical_data(request,*args,**kwvrgs):
     interval = str(query_paramas.get("trade_frequency"))
     number_of_candles = int(query_paramas.get("number_of_candles"))
     date_str = (query_paramas.get("trade_date"))
-    trade_date = datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%S")
     symbol = Instrument.objects.get(id=token).trading_symbol
-    response = FetchData().fetch_historical_data_for_client(symbol, token, interval, number_of_candles, trade_date)
+    response = FetchData().fetch_historical_data_for_client(symbol, token, interval, number_of_candles,date_str)
     return JsonResponse(response, content_type='application/json')

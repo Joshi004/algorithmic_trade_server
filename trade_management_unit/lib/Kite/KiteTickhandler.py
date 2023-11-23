@@ -1,5 +1,7 @@
 from kiteconnect import KiteTicker
 from trade_management_unit.lib.common.EnvFile import EnvFile
+import threading
+from trade_management_unit.lib.common.Utils import *
 
 class SingletonMeta(type):
     _instances = {}
@@ -27,6 +29,15 @@ class KiteTickhandler(metaclass=SingletonMeta):
         else:
             self.trade_sessions[token] = [trade_sesion]
 
+    def unregister_trade_session(self, tokens, trade_sesion):
+        for token in tokens:
+            if token in self.trade_sessions:
+                if trade_sesion in self.trade_sessions[token]:
+                    self.trade_sessions[token].remove(trade_sesion)
+                    if not self.trade_sessions[token]:
+                        del self.trade_sessions[token]
+
+
 
     def set_tracker_session(self,identifier,tracker_session):
         self.tracker_sessions[identifier] = tracker_session
@@ -34,11 +45,20 @@ class KiteTickhandler(metaclass=SingletonMeta):
 
 
 
-    def on_ticks(self,ws,ticks):
+    def async_tick_handler(self,ticks):
+        print("Date Time ",current_ist())
+        print("Recved Tick Lot",ticks)
         for tick in ticks:
             token = tick['instrument_token']
             for trade_session in self.trade_sessions[token]:
                 trade_session.handle_tick(tick)
+
+
+    def on_ticks(self,ws,ticks):
+        tick_handler_thread = threading.Thread(target=self.async_tick_handler,args=(ticks,))
+        tick_handler_thread.setDaemon(True)
+        tick_handler_thread.start()
+
                 
 
     

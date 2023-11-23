@@ -1,7 +1,9 @@
 from django.db import models
 from django_mysql.models import EnumField
 from django.db.models import Sum
-from datetime import datetime
+from trade_management_unit.lib.common.Utils import *
+from django.db import transaction
+
 from django.db.models import Q
 from trade_management_unit.models.Instrument import Instrument
 from trade_management_unit.Constants.TmuConstants import *
@@ -40,31 +42,23 @@ class Trade(models.Model):
 
 
     @classmethod
-    def fetch_or_initiate_trade(cls, instrument_id, action, trade_session_id, user_id, dummy,margin):
-        try:
-            # Try to find an existing active trade with the same parameters
-            trade = cls.objects.get(
+    def fetch_or_initiate_trade(cls, instrument_id, action, trade_session_id, user_id, dummy, margin):
+        with transaction.atomic():
+            trade, created = cls.objects.select_for_update().get_or_create(
                 instrument_id=instrument_id,
                 trade_session_id=trade_session_id,
                 user_id=user_id,
-                is_active=True
-            )
-        except cls.DoesNotExist:
-            # If no existing trade is found, create a new one
-            trade = cls(
                 is_active=True,
-                started_at=datetime.now(),
-                closed_at=None,
-                instrument_id=instrument_id,
-                trade_session_id=trade_session_id,
-                view='long' if action == 'buy' else 'short',
-                user_id=user_id,
-                dummy=dummy,
-                max_price=None,
-                min_price=None,
-                margin = round(margin,2)
+                defaults={
+                    'started_at': current_ist(),
+                    'closed_at': None,
+                    'view': 'long' if action == 'buy' else 'short',
+                    'dummy': dummy,
+                    'max_price': None,
+                    'min_price': None,
+                    'margin': round(margin, 2),
+                }
             )
-            trade.save()
         return trade
 
 
@@ -90,9 +84,9 @@ class Trade(models.Model):
         net_profit = 0
         for order in orders:
             if order.order_type == 'buy':
-                net_profit -= order.price
+                net_profit -= (order.price * order.quantity)
             elif order.order_type == 'sell':
-                net_profit += order.price
+                net_profit += (order.price * order.quantity)
             net_profit -= order.frictional_losses
         return net_profit
 
@@ -100,6 +94,10 @@ class Trade(models.Model):
     def get_total_margin(cls, user_id,dummy):
         total_margin = cls.objects.filter(user_id=user_id, is_active=True,dummy=dummy).aggregate(total_margin=Sum('margin'))['total_margin']
         return total_margin if total_margin else 0
+
+    @classmethod
+    def fetch_active_trades_for_trade_session(cls, trade_session_id):
+        return cls.objects.filter(trade_session_id=trade_session_id, is_active=True)
 
 
 

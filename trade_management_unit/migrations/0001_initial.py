@@ -4,7 +4,7 @@ import datetime
 from django.db import migrations, models
 import django.db.models.deletion
 import django_mysql.models
-
+from trade_management_unit.lib.common.Utils import *
 
 class Migration(migrations.Migration):
 
@@ -88,8 +88,8 @@ class Migration(migrations.Migration):
                 ('id', models.CharField(auto_created=True, default='', max_length=64, primary_key=True, serialize=False)),
                 ('status', django_mysql.models.EnumField(choices=[('pending', 'pending'), ('rejected', 'rejected'), ('exicuted', 'exicuted')], default='pending')),
                 ('order_type', django_mysql.models.EnumField(choices=[('buy', 'buy'), ('sell', 'sell')])),
-                ('started_at', models.DateTimeField(default=datetime.datetime.now)),
-                ('closed_at', models.DateTimeField(blank=True, default=datetime.datetime.now)),
+                ('started_at', models.DateTimeField(default=current_ist)),
+                ('closed_at', models.DateTimeField(blank=True, default=current_ist)),
                 ('instrument', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='trade_management_unit.instrument', verbose_name='instrument_id')),
                 ('trade', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='trade_management_unit.trade', verbose_name='trade_id')),
             ],

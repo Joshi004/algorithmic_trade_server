@@ -15,7 +15,8 @@ from trade_management_unit.lib.Portfolio.Portfolio import Portfolio
 import pandas as pd
 import concurrent.futures
 import threading
-from datetime import datetime
+from trade_management_unit.lib.common.Utils import *
+import pytz
 
 
 class UDTSScanner(metaclass=ScannerSingletonMeta):
@@ -31,6 +32,11 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
     def register_trade_session(self,trade_sesion):
         self.trade_sessions[str(trade_sesion)] = trade_sesion
 
+    def unregister_trade_session(self, trade_sesion):
+        trade_session_key = str(trade_sesion)
+        if trade_session_key in self.trade_sessions:
+            del self.trade_sessions[trade_session_key]
+
     def scan_in_seperate_trhread(self,all_instruments,user_id,dummy):
         counter = 0
         while(True):
@@ -39,7 +45,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
             print("!!!! Fix Coroutine Error  !!!!")
             instrument_counter = 0
             eligible_instrument_counter = 0
-            scan_start_time = datetime.now()
+            scan_start_time = current_ist()
             for instrument in all_instruments:
                 instrument_counter+=1
                 symbol = instrument["trading_symbol"]
@@ -77,13 +83,12 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
                         }
                         }
                     instrument["required_action"] = self.__get_required_actions__(instrument)
-                    print("Sunscribing To ",instrument["trading_symbol"])
                     # eligible_instruments.append(instrument)
                     self.add_tokens_to_subscribed_trade_sessions([instrument])
                 else:
                     print(eligibility_obj["message"])
                     print(f"Active Threads {threading.active_count()}")
-            scan_end_time = datetime.now()
+            scan_end_time = current_ist()
             tm.sleep(30)
             print("restrting Scan - ",counter,"Last Scan Time",(scan_end_time - scan_start_time))
 
@@ -120,12 +125,12 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
                 trade_id = trade.id
                 if(not self.has_active_position(trade_id)):
                     kite_order_id = self.place_order_on_kite(trading_symbol,quantity,action,instrument["support_price"],instrument["resistance_price"],instrument["market_data"]["market_price"],user_id,dummy)
-                    order = Order.initiate_order(action, instrument_id, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity,market_price)
+                    order = Order.initiate_order(action, instrument_id, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity,market_price,trade_session_id)
         return (trade,order)
 
     def has_active_position(self,trade_id):
         orders = Order.objects.filter(trade_id=trade_id)
-        if(len(orders)==1):
+        if(len(orders)>0):
             return True
         return False
 
@@ -148,7 +153,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
             new_balance = float(current_balance) - order_amount
             dummy_account.current_balance = round(new_balance,2)
             dummy_account.save()
-            return user_id+"__"+str(datetime.now)
+            return user_id+"__"+str(current_ist())
         else:
             print("!!! Check Stoploss and squareoff values properly before this ")
             params = {"trading_symbol":trading_symbol,
@@ -197,9 +202,6 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
 
     def fetch_instrument_tokens_and_start_tracking(self,user_id,dummy):
         result = self.fetch_instruments_from_db()
-        # with concurrent.futures.ThreadPoolExecutor() as executor:
-        #     future = executor.submit((self.fetch_instruments_from_db))
-        #     result = future.result()
         self.scan_and_add_instruments_for_tracking(result,user_id,dummy)
 
 
@@ -249,13 +251,13 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
             freq = frq_steps[index]
             eligibility_obj[freq] = {}
             eligibility_obj[freq]["data"] = FetchData().fetch_historical_candle_data_from_kite(symbol,token,frq_steps[index],number_of_candles)
-            if(len(eligibility_obj[freq]["data"]) < 200): #For This frequency no data was fetched
+            if(len(eligibility_obj[freq]["data"]) < NUM_CANDLES_FOR_TREND_ANALYSIS): #For This frequency no data was fetched
                 eligibility_obj["message"] = symbol + " : Not Enough Candles For " + str(freq)
                 return False , eligibility_obj
             eligibility_obj[freq]["chart"] = CandleChart(symbol,token,quote_data["last_price"],quote_data["volume"],quote_data["last_quantity"],frq_steps[index],eligibility_obj[freq]["data"])
             eligibility_obj[freq]["chart"].set_trend_and_deflection_points()
         # USe Center element for scope
-        deflection_points_scope =  self.__get_deflection_points_scope(eligibility_obj[frq_steps[1]]["chart"])
+        deflection_points_scope =  self.__get_deflection_points_scope(eligibility_obj[frq_steps[SCOPE_COLLECTION_FREQ_INDEX]]["chart"])
         eligibility_obj[trade_freq]["chart"].normalise_deflection_points(deflection_points_scope)
         eligibility_obj[trade_freq]["chart"].set_trading_levels_and_ratios()
         effective_trend = self.__get_effective_trend(eligibility_obj)
@@ -267,7 +269,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
 
         reward_risk_ratio = eligibility_obj[trade_freq]["chart"].trading_pair["reward_risk_ratio"] if "reward_risk_ratio" in eligibility_obj[trade_freq]["chart"].trading_pair else 0
         eligibility_obj["message"] = f"{symbol} : {effective_trend.value} , Reward:Risk - {reward_risk_ratio}"
-        if(reward_risk_ratio > 2 ):
+        if(reward_risk_ratio > MINIMUM_REWARD_RISK_RATIO ):
             return True,eligibility_obj
 
         return False,eligibility_obj
@@ -276,23 +278,23 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
         self.volume = quote["volume"]
         
         # Define market open and close times
-        market_open_time = datetime.now().replace(hour=9, minute=15)
-        market_close_time = datetime.now().replace(hour=15, minute=30)
+        market_open_time = current_ist().replace(**MARKET_OPEN_TIME)
+        market_close_time = current_ist().replace(**MARKET_CLOSE_TIME)
         
         # Get current time
-        current_time = datetime.now()
+        current_time = current_ist()
         
         # Calculate total minutes from market open to current time or total trade duration
-        if current_time < market_open_time:
+        if current_time > market_open_time:
             # If current time is before market open, consider total trade duration of a day
-            total_minutes = int((market_close_time - market_open_time).total_seconds() / 60)
-        elif current_time > market_close_time:
+            total_minutes = int(( market_open_time - market_close_time).total_seconds() / 60)
+        elif current_time < market_close_time:
             # If current time is after market close, consider end time as market close
             current_time = market_close_time
-            total_minutes = int((current_time - market_open_time).total_seconds() / 60)
+            total_minutes = int((market_open_time - current_time).total_seconds() / 60)
         else:
             # If current time is within trading hours
-            total_minutes = int((current_time - market_open_time).total_seconds() / 60)
+            total_minutes = int((market_open_time - current_time).total_seconds() / 60)
         
         # Calculate volume per minute
         volume_per_minute = self.volume / total_minutes

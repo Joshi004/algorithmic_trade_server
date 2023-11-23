@@ -113,7 +113,6 @@ class CandleChart:
     
     def normalise_deflection_points(self,scope_range):
         def custom_round(num,factor):
-            print("!!! Handle AHrd coded factor here ")
             result = (num//factor) * factor
             result = round(result,1)
             return result
@@ -122,9 +121,7 @@ class CandleChart:
         def_list_df = pd.DataFrame(self.deflection_points)
         price_list_df["diff"] = price_list_df["high"] - price_list_df["low"]
         self.average_candle_span = price_list_df["diff"].mean()
-        # Get Market Price in real time 
         market_price = self.market_price
-        # !!!!! Make this configurable 
         self.up_scope = market_price + scope_range
         self.down_scope = market_price - scope_range
         scope = [self.up_scope,self.down_scope]   
@@ -191,18 +188,17 @@ class CandleChart:
         
         self.valid_pairs = valid_pairs
         self.trading_pair = trading_pair
-        return valid_pairs,trading_pair
+        return valid_pairs, trading_pair
 
     def __is_valid_pair(self,price,support,resist,trend,min_reward):
         bottom = price - support["price"]
         top = resist["price"] - price
         product_of_strengts = resist["strength"] * support["strength"]
-        print("!!! HAndle harcoding of strength factir here ")
         if (product_of_strengts == 0):
             return False
-        if (trend == Trends.UPTREND and min_reward < top/bottom < 3 * min_reward ):
+        if (trend == Trends.UPTREND and MINIMUM_REWARD_RISK_RATIO < top/bottom < MAXIMUM_REWARD_RISK_RATIO ):
             return True
-        if (trend == Trends.DOWNTREND  and min_reward < bottom/top < 3 * min_reward):
+        if (trend == Trends.DOWNTREND  and MINIMUM_REWARD_RISK_RATIO < bottom/top < MAXIMUM_REWARD_RISK_RATIO):
             return True
         return False
 
