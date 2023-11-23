@@ -83,7 +83,6 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
                         }
                         }
                     instrument["required_action"] = self.__get_required_actions__(instrument)
-                    print("Sunscribing To ",instrument["trading_symbol"])
                     # eligible_instruments.append(instrument)
                     self.add_tokens_to_subscribed_trade_sessions([instrument])
                 else:

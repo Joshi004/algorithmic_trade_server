@@ -3,6 +3,7 @@ from datetime import datetime
 from django_mysql.models import EnumField
 from django.core.exceptions import ValidationError
 from trade_management_unit.lib.common.Utils import *
+from django.db import transaction
 
 class Order(models.Model):
     class Meta:
@@ -28,25 +29,33 @@ class Order(models.Model):
 
 
     @classmethod
-    def initiate_order(cls, order_type, instrument_id, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity, price,trade_session_id):
-        kite_order_id = None if dummy else kite_order_id
-        order = cls(
-            status='exicuted',
-            order_type=order_type,
-            started_at=current_ist(),
-            closed_at=current_ist(),
-            instrument_id=instrument_id,
-            trade_id=trade_id,
-            dummy=dummy,
-            kite_order_id=kite_order_id,
-            frictional_losses=frictional_losses,
-            user_id=user_id,
-            quantity=quantity,
-            price=price,
-            trade_session_id=trade_session_id
-        )
-        order.save()
-        return order
+    def initiate_order(cls, order_type, instrument_id, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity, price, trade_session_id):
+        # Locking The table can cause slow down if used excisivly
+        with transaction.atomic():
+            existing_order = cls.objects.select_for_update().filter(trade_id=trade_id, order_type=order_type).first()
+            if existing_order:
+                return existing_order
+
+            kite_order_id = None if dummy else kite_order_id
+            order = cls(
+                status='exicuted',
+                order_type=order_type,
+                started_at=current_ist(),
+                closed_at=current_ist(),
+                instrument_id=instrument_id,
+                trade_id=trade_id,
+                dummy=dummy,
+                kite_order_id=kite_order_id,
+                frictional_losses=frictional_losses,
+                user_id=user_id,
+                quantity=quantity,
+                price=price,
+                trade_session_id=trade_session_id
+            )
+            order.save()
+            return order
+
+
 
     @classmethod
     def fetch_order(cls,  trade_id: int) -> models.Model:

@@ -148,7 +148,7 @@ class TradeSession(metaclass=TradeSessionMeta):
                 return
 
             trade_id = trade.id
-            print("Got Tick For ",symbol,token,self.instruments[symbol])
+            print("Got Tick For ",symbol,token, "Session ",self.trade_session_id,self.instruments[symbol])
             if(not trade.max_price or last_price > trade.max_price):
                 trade.max_price = last_price
                 trade.save()
@@ -157,7 +157,7 @@ class TradeSession(metaclass=TradeSessionMeta):
                 trade.save()
 
             for IndicatorClass in self.tracking_algo_instance.indicators:
-                indicator_obj = IndicatorClass(self.trade_session_id,symbol,self.trading_freq,trade_id,token)
+                indicator_obj = IndicatorClass(trade_id,self.trade_session_id,symbol,self.trading_freq,token)
                 indicator_obj.update(last_price)
                 indicator_obj.append_information(tick)
                 # !!!!! Make Sure Every Indicator object is garbage collected ones the trade is terminated fro the symbol
@@ -224,7 +224,7 @@ class TradeSession(metaclass=TradeSessionMeta):
             print("no new instruments to add")
             return
         # Add new instruments to self.instruments
-        print("Adding now")
+        print("Adding now",new_instruments)
         for instrument in new_instruments:
             token = instrument["instrument_token"]
             symbol = instrument["trading_symbol"]
@@ -244,6 +244,7 @@ class TradeSession(metaclass=TradeSessionMeta):
                     self.ws = kite_tick_handler.get_kite_ticker_instance()
                     self.ws.connect(threaded=True)
                     self.ws.subscribe([token])
+                    self.ws.resubscribe()
 
 
                 communication_bit = {
@@ -287,7 +288,12 @@ class TradeSession(metaclass=TradeSessionMeta):
 
         # Extract instrument tokens for the WebSocket unsubscription
         instrument_tokens = [instrument['instrument_token'] for instrument in old_instruments]
-        self.ws.unsubscribe(instrument_tokens)
+        active_trades_with_tokens = Trade.objects.filter(
+            is_active=True,
+            instrument__id__in=instrument_tokens
+        ).values_list('instrument__id', flat=True)
+        tokens_to_unsubscribe = set(instrument_tokens) - set(active_trades_with_tokens)
+        self.ws.unsubscribe(list(tokens_to_unsubscribe))
         print("!!!! Remove all candle Chart and singlton onjects as well")
         # Remove old instruments from self.instruments
         for instrument in old_instruments:
@@ -298,3 +304,24 @@ class TradeSession(metaclass=TradeSessionMeta):
 
 
             
+
+
+
+
+from django.db.models import Q
+
+class YourClass:
+    # ...
+
+    def unsubscribe_tokens(self, instrument_tokens):
+        # Fetch all active trades with the provided tokens
+        active_trades_with_tokens = Trade.objects.filter(
+            is_active=True,
+            instrument__token__in=instrument_tokens
+        ).values_list('instrument__token', flat=True)
+
+        # Identify tokens that are present in active trades
+
+
+        # Perform unsubscription only for tokens not present in active trades
+        self.ws.unsubscribe(list(tokens_to_unsubscribe))

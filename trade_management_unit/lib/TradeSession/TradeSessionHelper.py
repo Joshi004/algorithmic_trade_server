@@ -77,8 +77,8 @@ class TradeSessionHelper():
         return sql_query
 
     def resume_trade_session(self,trade_session_id):
-        trade_session = self.__get_trade_session_object__(trade_session_id)
-        response = trade_session.track_active_trade_instruments()
+        trade_session_instance, ts_db_object = self.__get_trade_session_object__(trade_session_id)
+        response = trade_session_instance.track_active_trade_instruments()
         return response
 
 

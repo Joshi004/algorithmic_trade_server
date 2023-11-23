@@ -49,5 +49,5 @@ END) AS sell_price
 FROM trades
 INNER JOIN instruments ON trades.instrument_id = instruments.id
 LEFT JOIN orders ON trades.id = orders.trade_id
-WHERE trades.trade_session_id = 75
+WHERE trades.trade_session_id = 109
 GROUP BY trades.id;
