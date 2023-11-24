@@ -1,10 +1,8 @@
 from trade_management_unit.lib.Indicators.IndicitorSingletonMeta import IndicitorSingletonMeta
 from trade_management_unit.Constants.TmuConstants import *
 from trade_management_unit.models.AlgoSltoTrackRecord import AlgoSltoTrackRecord
-from datetime import datetime
 from trade_management_unit.models.Trade import Trade
-from trade_management_unit.lib.common.Utils import *
-import pytz
+from trade_management_unit.lib.common.Utils.Utils import *
 
 from trade_management_unit.models.AlgoUdtsScanRecord import AlgoUdtsScanRecord
 class SLTO(metaclass=IndicitorSingletonMeta):

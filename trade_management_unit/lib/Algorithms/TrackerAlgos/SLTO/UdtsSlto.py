@@ -7,9 +7,11 @@ from trade_management_unit.lib.Portfolio.Portfolio import Portfolio
 from trade_management_unit.Constants.TmuConstants import  *
 from trade_management_unit.models.DummyAccount import DummyAccount
 from trade_management_unit.lib.TradeSession.RiskManager import RiskManager
-from trade_management_unit.lib.common.Utils import *
+from trade_management_unit.lib.common.Utils.Utils import *
+from django.db import transaction
+from trade_management_unit.lib.common.Utils.custome_logger import log
 class UdtsSlto(metaclass=TrackerAlgoMeta):
-    def __init__(self,trading_frequency,scanning_algorithm_name):
+    def __init__(self, trading_frequency, scanning_algorithm_name):
         self.trading_frequency = trading_frequency
         self.scanning_algorithm_name = scanning_algorithm_name
         self.indicators = []
@@ -48,10 +50,20 @@ class UdtsSlto(metaclass=TrackerAlgoMeta):
                 return trade,order
             trade_id = trade.id
             quantity = self.__get_square_off_quantity__(trade_id)
-            kite_order_id = self.square_off_order_on_zerodha(trading_symbol,action,quantity,user_id,dummy,market_price)
             frictional_losses = RiskManager().get_frictional_losses(TRADE_TYPE["intraday"],market_price, quantity, action == "BUY")
-            order = Order.initiate_order(action.value, instrument_id, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity,market_price,trade_session_id)
-            self.__update_and_close_trade__(trade,order.closed_at)
+
+            kite_order_id = self.square_off_order_on_zerodha(trading_symbol,action,quantity,user_id,dummy,market_price)
+            if(kite_order_id):
+                try:
+                    with transaction.atomic():
+                        order = Order.initiate_order(action.value, instrument_id, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity, market_price, trade_session_id)
+                        self.__update_and_close_trade__(trade, order.closed_at)
+                except Exception as e:
+                    log(f"An error occurred: trade_id : {trade_id} {e}","error")
+                    raise (f"(!!!!! ORder Placed On Zerodha but not updated in DB trade_id : {trade_id})")
+                    print(f"(!!!!! ORder Placed On Zerodha but not updated in DB trade_id : {trade_id})")
+
+
         return (trade,order)
 
     def square_off_order_on_zerodha(self,trading_symbol,action,quantity,user_id,dummy,market_price):
@@ -81,7 +93,6 @@ class UdtsSlto(metaclass=TrackerAlgoMeta):
             trade.is_active = 0
             trade.save()
             IndicitorSingletonMeta.remove_instance(IndicitorSingletonMeta, trade.id)
-
 
 
     def __get_square_off_quantity__(self,trade_id):

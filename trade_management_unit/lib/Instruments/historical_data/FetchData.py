@@ -3,9 +3,7 @@ import re
 from trade_management_unit.lib.Kite.KiteUser import KiteUser
 from trade_management_unit.lib.Instruments.historical_data.Database import Database
 import logging
-import pytz
-from trade_management_unit.Constants.TmuConstants import *
-from trade_management_unit.lib.common.Utils import *
+from trade_management_unit.lib.common.Utils.Utils import *
 
 
 class FetchData:

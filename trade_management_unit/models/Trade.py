@@ -1,12 +1,10 @@
 from django.db import models
 from django_mysql.models import EnumField
 from django.db.models import Sum
-from trade_management_unit.lib.common.Utils import *
+from trade_management_unit.lib.common.Utils.Utils import *
 from django.db import transaction
 
-from django.db.models import Q
-from trade_management_unit.models.Instrument import Instrument
-from trade_management_unit.Constants.TmuConstants import *
+
 class Trade(models.Model):
     class Meta:
         db_table = "trades"

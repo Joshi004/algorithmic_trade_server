@@ -151,3 +151,19 @@ CORS_ORIGIN_WHITELIST = [
     '*'
     # ...
 ]
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'file': {
+            'level': 'DEBUG',
+            'class': 'logging.FileHandler',
+            'filename': '/Users/nareshjoshi/Documents/personal_workspace/ats_aplication/logfile.log',
+        },
+    },
+    'root': {
+        'handlers': ['file'],
+        'level': 'DEBUG',
+    },
+}

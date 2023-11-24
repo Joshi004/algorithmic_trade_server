@@ -29,15 +29,10 @@ class TradeSessionConsumer(AsyncWebsocketConsumer):
         # user_id = "1"
         # dummy = True
         print("!!! Add UserS PRofile And also add cotracint in all tables using user id ")
-        
-        # kite_tick_handler =  KiteTickhandler()
-        # kit_connect_object = kite_tick_handler.get_kite_ticker_instance()
-        # kit_connect_object.connect(threaded=True)
-        #
+                #
         trade_session_identifier = "trade_session__"+str(trade_session_id)
         
-        # thread = threading.Thread(target=self.start_threaded_trade_session, args=(user_id,scanning_algorithm_name,tracking_algorithm_name,trading_freq,kite_tick_handler,kit_connect_object,dummy))
-        # thread.start()
+
 
         self.room_group_name = str(trade_session_identifier)
         await self._add_to_group_and_accept()

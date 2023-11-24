@@ -1,6 +1,5 @@
 import csv
 import datetime
-from trade_management_unit.models.Stock import Stock
 class UpdateStock:
     def __init__(self):
         pass

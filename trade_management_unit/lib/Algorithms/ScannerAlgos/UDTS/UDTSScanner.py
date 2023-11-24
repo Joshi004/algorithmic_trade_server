@@ -1,8 +1,8 @@
 import time as tm
+from trade_management_unit.lib.common.Utils.custome_logger import log
 from trade_management_unit.lib.Algorithms.ScannerAlgos.UDTS.CandleChart import CandleChart
 from trade_management_unit.lib.Algorithms.ScannerAlgos.ScannerSingletonMeta import ScannerSingletonMeta
 from trade_management_unit.lib.Instruments.Instruments import Instruments
-from  trade_management_unit.models.Instrument import Instrument
 from trade_management_unit.lib.Trade.trade import Trade as TradeLib
 from trade_management_unit.models.Order import Order
 from trade_management_unit.models.Trade import Trade
@@ -13,10 +13,8 @@ from trade_management_unit.models.AlgoUdtsScanRecord import AlgoUdtsScanRecord
 from trade_management_unit.lib.TradeSession.RiskManager import RiskManager
 from trade_management_unit.lib.Portfolio.Portfolio import Portfolio
 import pandas as pd
-import concurrent.futures
 import threading
-from trade_management_unit.lib.common.Utils import *
-import pytz
+from trade_management_unit.lib.common.Utils.Utils import *
 
 
 class UDTSScanner(metaclass=ScannerSingletonMeta):
@@ -30,6 +28,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
         return idintifier
 
     def register_trade_session(self,trade_sesion):
+        log("Regieserd session")
         self.trade_sessions[str(trade_sesion)] = trade_sesion
 
     def unregister_trade_session(self, trade_sesion):
@@ -42,7 +41,6 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
         while(True):
             counter += 1
             eligible_instruments = []
-            print("!!!! Fix Coroutine Error  !!!!")
             instrument_counter = 0
             eligible_instrument_counter = 0
             scan_start_time = current_ist()
@@ -56,14 +54,14 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
                     print("Not Enough Balance to place Trades ",current_balance)
                     tm.sleep(120)
                     continue
-                print("Scanning Instrument now ",symbol)
+                log(f'Scanning {instrument["trading_symbol"]} now')
                 is_eligible,eligibility_obj = self.is_eligible(symbol)
                 print("Instrument Number",instrument_counter)
-
+                tm.sleep(0.5)
                 if (is_eligible):
                     instrument_id = token
                     eligible_instrument_counter += 1
-                    print("FOUND NEXT ELIGIBLE -- - ",eligible_instrument_counter,symbol)
+                    log(f"found next eligible instrument -- {eligible_instrument_counter} {symbol}")
                     symbol_data_points = eligibility_obj[self.trade_freqency]["chart"]
                     instrument = {
                         "instrument_id":instrument_id,
@@ -86,11 +84,11 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
                     # eligible_instruments.append(instrument)
                     self.add_tokens_to_subscribed_trade_sessions([instrument])
                 else:
-                    print(eligibility_obj["message"])
-                    print(f"Active Threads {threading.active_count()}")
+                    log(f'{eligibility_obj["message"]}')
+                    log(f"Active Threads {threading.active_count()}")
             scan_end_time = current_ist()
             tm.sleep(30)
-            print("restrting Scan - ",counter,"Last Scan Time",(scan_end_time - scan_start_time))
+            log(f"restrting Scan - {counter} Last Scan Time {scan_end_time - scan_start_time}")
 
     def mark_into_scan_records(self,trade_id,tracking_algo_name,instrument):
 
@@ -119,11 +117,12 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
             risk_manager = RiskManager()
             quantity,frictional_losses = risk_manager.get_quantity_and_frictional_losses(action,market_price,instrument["support_price"],instrument["resistance_price"],user_id,dummy,trade_session_id)
             if(quantity>0):
-                print("!!! Order from Zerodha",trading_symbol,action)
+                log(f'Processing {instrument["required_action"]} for quantity of {quantity}')
                 margin = self.get_trade_margin(action,market_price,instrument["support_price"],instrument["resistance_price"],quantity)
                 trade = Trade.fetch_or_initiate_trade(instrument_id, action,trade_session_id,user_id,dummy,margin)
                 trade_id = trade.id
                 if(not self.has_active_position(trade_id)):
+                    log(f"Found not active positions for trade_id {trade_id}")
                     kite_order_id = self.place_order_on_kite(trading_symbol,quantity,action,instrument["support_price"],instrument["resistance_price"],instrument["market_data"]["market_price"],user_id,dummy)
                     order = Order.initiate_order(action, instrument_id, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity,market_price,trade_session_id)
         return (trade,order)
@@ -153,6 +152,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
             new_balance = float(current_balance) - order_amount
             dummy_account.current_balance = round(new_balance,2)
             dummy_account.save()
+            log(f'Deducted Amount is {order_amount} and remainig amount is {new_balance}')
             return user_id+"__"+str(current_ist())
         else:
             print("!!! Check Stoploss and squareoff values properly before this ")
@@ -171,7 +171,6 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
 
 
     def __get_required_actions__(self,instrument):
-        print("Check Volume COnstraints and also min ratio if needed ")
         required_action =None
         if (instrument["effective_trend"] == Trends.UPTREND):
             required_action = OrderType.BUY.value
@@ -182,8 +181,10 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
         return required_action
     
     def add_tokens_to_subscribed_trade_sessions(self,eligible_instruments):
+        log(f'Adding New Tokens To subscribed trde Sessions')
         for identifier in self.trade_sessions:
             trade_session = self.trade_sessions[identifier]
+            log(f'Adding  {str(eligible_instruments)} to {str(trade_session)}')
             trade_session.add_tokens(eligible_instruments)  
 
 
@@ -206,7 +207,8 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
 
 
     def scan_and_add_instruments_for_tracking(self,all_instruments,user_id,dummy):
-        scanner_thread = threading.Thread(target=self.scan_in_seperate_trhread,args=(all_instruments,user_id,dummy))
+        thread_name = "scanner_thread"+'_'.join(self.trade_sessions.keys())
+        scanner_thread = threading.Thread(target=self.scan_in_seperate_trhread,args=(all_instruments,user_id,dummy),name=thread_name)
         scanner_thread.setDaemon(True)
         scanner_thread.start()
 
@@ -231,7 +233,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
 
     def is_eligible(self,symbol):
         eligibility_obj = {"message": str(symbol) + " : Eligible"}
-        quote  = TradeLib().get_quotes({"symbol" : symbol, "exchange" : DEFAULT_EXCHANGE})
+        quote = TradeLib().get_quotes({"symbol" : symbol, "exchange" : DEFAULT_EXCHANGE})
         key = DEFAULT_EXCHANGE+":"+symbol.upper()
         if key not in quote["data"]:
             eligibility_obj["message"] = symbol + " : No Da ta Fetched from quotes"
@@ -243,7 +245,6 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
         number_of_candles = NUM_CANDLES_FOR_TREND_ANALYSIS
         is_volume_eligible = self.get_volume_eligibility(quote_data)
         if (not is_volume_eligible):
-            print("Volume Not Eligible For",symbol)
             eligibility_obj["message"] = symbol + " : Volume not eligible"
             return False, eligibility_obj
         
@@ -300,6 +301,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
         volume_per_minute = self.volume / total_minutes
         trade_amount_per_minute = quote["last_price"]*volume_per_minute 
         # Check if volume per minute is greater than threshold
+        log(f'Volume Analysis trade_amount_per_minute {trade_amount_per_minute} TRADE_THRESHHOLD_PER_MINUTE {TRADE_THRESHHOLD_PER_MINUTE}')
         if trade_amount_per_minute > TRADE_THRESHHOLD_PER_MINUTE:
             return True
         else:

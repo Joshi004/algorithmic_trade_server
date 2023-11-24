@@ -6,8 +6,9 @@ from trade_management_unit.models.Algorithm import Algorithm
 from trade_management_unit.lib.Trade.trade import Trade
 from trade_management_unit.models.Trade import Trade as TradeModel
 from trade_management_unit.Constants.TmuConstants import *
-from trade_management_unit.lib.common.Utils import *
-from django.db import connection
+from trade_management_unit.lib.common.Utils.Utils import *
+
+
 class TradeSessionHelper():
     def __init__(self):
         pass
