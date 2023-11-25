@@ -2,8 +2,12 @@ from datetime import  timedelta, time
 import re
 from trade_management_unit.lib.Kite.KiteUser import KiteUser
 from trade_management_unit.lib.Instruments.historical_data.Database import Database
+from kiteconnect.exceptions import NetworkException
 import logging
 from trade_management_unit.lib.common.Utils.Utils import *
+from trade_management_unit.lib.common.Utils.custome_logger import log
+import time as tm
+
 
 
 class FetchData:
@@ -64,6 +68,7 @@ class FetchData:
             # print("----- Getting Historical data symbol: ", token, " Total CAndles : ",len(historical_data),"  Time Diff: ",to_date-from_date," From: ",to_date," To: ",from_date)
             new_data = self.fetch_data_from_zerodha(token, from_date, to_date,interval)
 
+
             # Prepend new_data to historical_data
             historical_data = stored_data + new_data + historical_data
             stored_data = []
@@ -93,9 +98,20 @@ class FetchData:
         historical_data = database.fetch_history_data(table_name)
         return list(historical_data)
 
-    def fetch_data_from_zerodha(self,instrument_token, start_date, end_date,interval):
-        data = self.kite.historical_data(instrument_token, start_date, end_date, interval)
-        return data
+    def fetch_data_from_zerodha(self, instrument_token, start_date, end_date, interval):
+        while True:
+            try:
+                data = self.kite.historical_data(instrument_token, start_date, end_date, interval)
+                return data
+            except NetworkException as e:
+                if 'Too many requests' in str(e):
+                    print("Rate limit exceeded. Retrying after 1 second...")
+                    log("Rate limit exceeded. Retrying after 1 second...")
+                    tm.sleep(1)
+                else:
+                    log(str(e),"error")
+                    raise e
+
 
     def separate_time(self,s):
         # If the string is empty or None, return 1 and None

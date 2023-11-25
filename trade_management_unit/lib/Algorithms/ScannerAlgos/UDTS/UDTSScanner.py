@@ -57,7 +57,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
                 log(f'Scanning {instrument["trading_symbol"]} now')
                 is_eligible,eligibility_obj = self.is_eligible(symbol)
                 print("Instrument Number",instrument_counter)
-                tm.sleep(0.5)
+                tm.sleep(2)
                 if (is_eligible):
                     instrument_id = token
                     eligible_instrument_counter += 1
