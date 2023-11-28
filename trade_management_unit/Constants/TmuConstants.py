@@ -72,5 +72,5 @@ FREQUENCY_STEPS = {
     "10minute": ["10minute", "30minute", "60minute"],
     "15minute": ["15minute", "60minute", "day"],
 }
-SCOPE_COLLECTION_FREQ_INDEX = 1  # This is the freq index from where the scope is calculated for price traversal
+SCOPE_COLLECTION_FREQ_INDEX = 0  # This is the freq index from where the scope is calculated for price traversal
 
