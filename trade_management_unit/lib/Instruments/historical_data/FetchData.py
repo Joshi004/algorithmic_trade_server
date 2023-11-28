@@ -57,7 +57,7 @@ class FetchData:
             if last_stored_record_date:
                 from_date = localize_to_ist(last_stored_record_date) + timedelta(**time_delta_param)
             elif "minute" in interval:
-                minutes = int(interval.replace("minute", ""))
+                minutes = int(interval.replace("minute", "") or 1)
                 from_date = to_date - timedelta(minutes=minutes*(number_of_candles))
             elif interval == "day":
                 from_date = to_date - timedelta(days=number_of_candles)
