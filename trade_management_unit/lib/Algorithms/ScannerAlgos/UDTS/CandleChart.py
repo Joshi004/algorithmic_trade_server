@@ -194,12 +194,17 @@ class CandleChart:
         bottom = price - support["price"]
         top = resist["price"] - price
         product_of_strengts = resist["strength"] * support["strength"]
+        reward = top if (trend == Trends.UPTREND) else bottom
+        risk = bottom if (trend == Trends.UPTREND) else top
         if (product_of_strengts == 0):
             return False
-        if (trend == Trends.UPTREND and MINIMUM_REWARD_RISK_RATIO < top/bottom < MAXIMUM_REWARD_RISK_RATIO ):
+        if(reward < FRICTION_COEFFECIENT/100*price):
+            return False
+        if(MINIMUM_REWARD_RISK_RATIO < reward/risk < MAXIMUM_REWARD_RISK_RATIO):
             return True
-        if (trend == Trends.DOWNTREND  and MINIMUM_REWARD_RISK_RATIO < bottom/top < MAXIMUM_REWARD_RISK_RATIO):
-            return True
+
+
+
         return False
 
     def get_reward_risk_ratio(self,price,support,resist,trend):

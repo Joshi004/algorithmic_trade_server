@@ -65,6 +65,7 @@ FREQUENCY = ["minute", "3minute", "5minute", "10minute", "15minute", "30minute",
 NUM_CANDLES_FOR_TREND_ANALYSIS = 200
 MINIMUM_REWARD_RISK_RATIO = 2
 MAXIMUM_REWARD_RISK_RATIO = 3
+FRICTION_COEFFECIENT = 0.2 # Currently Zerodha take alsmost 0.8% of total buy value or sell value so proit amount should be atleast FRICTION_COEFFECIENT/100* price
 FREQUENCY_STEPS = {
     "minute": ["minute", "10minute", "60minute"],
     "3minute": ["3minute", "15minute", "60minute"],

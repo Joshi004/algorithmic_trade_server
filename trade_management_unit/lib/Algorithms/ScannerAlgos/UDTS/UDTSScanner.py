@@ -15,6 +15,7 @@ from trade_management_unit.lib.Portfolio.Portfolio import Portfolio
 import pandas as pd
 import threading
 from trade_management_unit.lib.common.Utils.Utils import *
+from trade_management_unit.lib.TradeSession.TradeSessionMeta import TradeSessionMeta
 
 
 class UDTSScanner(metaclass=ScannerSingletonMeta):
@@ -37,6 +38,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
             del self.trade_sessions[trade_session_key]
 
     def scan_in_seperate_trhread(self,all_instruments,user_id,dummy):
+        tm.sleep(4) # let  Trade session be created
         counter = 0
         while(True):
             counter += 1
@@ -45,6 +47,10 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
             eligible_instrument_counter = 0
             scan_start_time = current_ist()
             for instrument in all_instruments:
+                working_trade_sessions_count = len(TradeSessionMeta.get_working_trade_sessions(TradeSessionMeta))
+                if(working_trade_sessions_count <= 0):
+                    print("No Active Trade Session To Scan For")
+                    return
                 instrument_counter+=1
                 symbol = instrument["trading_symbol"]
                 token = instrument["instrument_token"]
@@ -57,7 +63,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
                 log(f'Scanning {instrument["trading_symbol"]} now')
                 is_eligible,eligibility_obj = self.is_eligible(symbol)
                 print("Instrument Number",instrument_counter)
-                tm.sleep(2)
+                tm.sleep(4)
                 if (is_eligible):
                     instrument_id = token
                     eligible_instrument_counter += 1
