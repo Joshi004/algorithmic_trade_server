@@ -61,7 +61,7 @@ class TradeSession(metaclass=TradeSessionMeta):
         return unique_class_identifier in cls._instances
 
 
-    def track_active_trade_instruments(self):
+    def track_active_trade_instruments(self,resuming=False,terminating=False):
         active_trades = Trade.objects.select_related('instrument').filter(trade_session_id=self.trade_session_id, is_active=True)
         instrument_objects = []
         for trade in active_trades:
@@ -76,7 +76,7 @@ class TradeSession(metaclass=TradeSessionMeta):
             instrument_objects.append(instrument_object)
 
         tm.sleep(.5)
-        self.add_tokens(instrument_objects, True)
+        self.add_tokens(instrument_objects, resuming=resuming,terminating=terminating)
         return {"data": {"existing_instruments": instrument_objects}, "meta": {"size": len(instrument_objects)}}
 
 
@@ -115,12 +115,12 @@ class TradeSession(metaclass=TradeSessionMeta):
         instrument_obj["required_action"] = self.tracking_algo_instance.get_required_action(instrument_obj)
         return instrument_obj
 
-    def tick_handler(self,tick):
+    def tick_handler(self,tick,trade):
         try:
             token = tick['instrument_token']
             symbol = self.token_to_symbol_map[token]
             last_price = tick["last_price"]
-            trade = Trade.fetch_active_trade(token,self.trade_session_id,self.user_id,self.dummy)
+            # trade = Trade.fetch_active_trade(token,self.trade_session_id,self.user_id,self.dummy)
             log(f'Got Tick For {symbol} in Sessin ID {self.trade_session_id}')
             if(not trade):
                 ct = current_ist()
@@ -174,7 +174,10 @@ class TradeSession(metaclass=TradeSessionMeta):
             conn.close()
 
     def handle_tick(self,tick):
-        self.tick_handler(tick)
+        # Assuming you have a TradeSession instance in the variable `trade_session`
+        active_trades = self.trade_set.filter(is_active=True)
+        for trade in active_trades:
+            self.tick_handler(tick,trade)
 
 
     def __add_instrument_actions__(self,instrument):
@@ -189,7 +192,7 @@ class TradeSession(metaclass=TradeSessionMeta):
         return instrument
     
     
-    def add_tokens(self, new_instruments,resuming = False):
+    def add_tokens(self, new_instruments, resuming = False,terminating = False):
         log(f"{str(new_instruments)} sent for adding and subscribing")
         if not isinstance(new_instruments, list):
             log("!!! new_instruments must be a list of instrument tokens")
@@ -214,17 +217,21 @@ class TradeSession(metaclass=TradeSessionMeta):
                 self.scanning_algo_instance.mark_into_scan_records(trade_id,self.tracking_algo_name,instrument)
                 self.instruments[instrument['trading_symbol']] = instrument
                 self.kite_tick_handler.register_trade_sessions(token,self)
+                # Can register trade also here only
                 log(f'Appending Added Token {token} to subscription list  for prices with websocket instance')
                 tokens_to_add.append(token)
 
-            elif(resuming):
+            elif(resuming or terminating):
                 self.instruments[instrument['trading_symbol']] = instrument
                 self.kite_tick_handler.register_trade_sessions(token,self)
+                # Can register trade also here only
                 log(f'Appending   Resumed Token  {token} to subscription list  for prices with websocket instance')
-                tokens_to_add.append(token)
+                if (resuming):
+                    tokens_to_add.append(token)
 
         try:
             if(len(tokens_to_add)>0):
+             #    Do not subscribe while terminating trades
              self.ws.subscribe(tokens_to_add)
         except:
             kite_tick_handler = KiteTickhandler()

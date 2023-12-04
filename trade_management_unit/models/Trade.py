@@ -59,6 +59,24 @@ class Trade(models.Model):
             )
         return trade
 
+    @classmethod
+    def initiate_trade(cls, instrument_id, action, trade_session_id, user_id, dummy, margin):
+        trade = cls(
+                instrument_id=instrument_id,
+                trade_session_id=trade_session_id,
+                user_id=user_id,
+                is_active=True,
+                started_at= current_ist(),
+                closed_a= None,
+                view='long' if action == 'buy' else 'short',
+                dummy=dummy,
+                max_price= None,
+                min_price= None,
+                margin=round(margin, 2)
+            )
+        trade.save()
+        return trade
+
 
     @classmethod
     def update_trade(cls, trade_id, **kwargs):

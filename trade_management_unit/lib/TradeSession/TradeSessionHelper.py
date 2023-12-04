@@ -91,7 +91,7 @@ class TradeSessionHelper():
 
     def resume_trade_session(self,trade_session_id):
         trade_session_instance, ts_db_object = self.__get_trade_session_object__(trade_session_id)
-        response = trade_session_instance.track_active_trade_instruments()
+        response = trade_session_instance.track_active_trade_instruments(resuming=True)
         return response
 
 
@@ -145,15 +145,13 @@ class TradeSessionHelper():
 
     def unregister_from_kite_and_terminate_all_trades(self, trade_session_instance):
         open_trades = []
-        trade_session_instance.track_active_trade_instruments()
+        trade_session_instance.track_active_trade_instruments(terminating=True)
         all_trades = TradeModel.objects.filter(trade_session_id=trade_session_instance.trade_session_id, is_active=True)
 
         # Get all instrument_ids from the trades
         instrument_ids = [trade.instrument_id for trade in all_trades]
         if(len(instrument_ids) == 0 ):
             return []
-        #Unregister From KiteTickerHandleer
-        trade_session_instance.kite_tick_handler.unregister_trade_session(instrument_ids,trade_session_instance)
 
         # Generate trading symbols using the token_to_symbol_map
         trading_symbols = [trade_session_instance.token_to_symbol_map[id] for id in instrument_ids]
@@ -171,6 +169,8 @@ class TradeSessionHelper():
                 trade_session_instance.tracking_algo_instance.process_tracker_actions(instrument_object, trade_session_instance.trade_session_id, trade_session_instance.user_id, trade_session_instance.dummy)
             else:
                 open_trades.append(model_to_dict(trade))
+
+        trade_session_instance.kite_tick_handler.unregister_trade_session(instrument_ids,trade_session_instance)
         return open_trades
 
 

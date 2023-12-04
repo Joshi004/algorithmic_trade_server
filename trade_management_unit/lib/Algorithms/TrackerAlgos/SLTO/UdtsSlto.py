@@ -93,6 +93,8 @@ class UdtsSlto(metaclass=TrackerAlgoMeta):
             trade.is_active = 0
             trade.save()
             IndicitorSingletonMeta.remove_instance(IndicitorSingletonMeta, trade.id)
+        else:
+            raise (f"(!!!!! Closed at not present for order of trade  : {trade.id})")
 
 
     def __get_square_off_quantity__(self,trade_id):

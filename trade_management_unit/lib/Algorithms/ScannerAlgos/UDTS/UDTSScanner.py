@@ -125,7 +125,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
             if(quantity>0):
                 log(f'Processing {instrument["required_action"]} for quantity of {quantity}')
                 margin = self.get_trade_margin(action,market_price,instrument["support_price"],instrument["resistance_price"],quantity)
-                trade = Trade.fetch_or_initiate_trade(instrument_id, action,trade_session_id,user_id,dummy,margin)
+                trade = Trade.initiate_trade(instrument_id, action,trade_session_id,user_id,dummy,margin)
                 trade_id = trade.id
                 if(not self.has_active_position(trade_id)):
                     log(f"Found not active positions for trade_id {trade_id}")
