@@ -37,7 +37,7 @@ class UdtsSlto(metaclass=TrackerAlgoMeta):
             del self.trade_sessions[trade_session_key]
 
 
-    def process_tracker_actions(self,instrument,trade_session_id,user_id,dummy):
+    def process_tracker_actions(self,instrument,trade_session_id,user_id,dummy,trade):
         trade = None
         order = None
         trading_symbol = instrument["trading_symbol"]
@@ -45,7 +45,7 @@ class UdtsSlto(metaclass=TrackerAlgoMeta):
         if action:
             instrument_id = instrument["instrument_token"]
             market_price = instrument["market_data"]["market_price"]
-            trade = Trade.fetch_active_trade(instrument_id,trade_session_id,user_id,dummy)
+            # trade = Trade.fetch_active_trade(instrument_id,trade_session_id,user_id,dummy)
             if(not trade.is_active):
                 return trade,order
             trade_id = trade.id
@@ -55,15 +55,16 @@ class UdtsSlto(metaclass=TrackerAlgoMeta):
             kite_order_id = self.square_off_order_on_zerodha(trading_symbol,action,quantity,user_id,dummy,market_price)
             if(kite_order_id):
                 try:
+                    log(f'Initiating Transction for trade and order: {str(trade)}')
                     with transaction.atomic():
+                        trade = Trade.objects.select_for_update().get(id=trade_id)
                         order = Order.initiate_order(action.value, instrument_id, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity, market_price, trade_session_id)
                         self.__update_and_close_trade__(trade, order.closed_at)
+                    log(f'Order and trade updated successfully as this is new state of trade: {str(trade)}')
                 except Exception as e:
                     log(f"An error occurred: trade_id : {trade_id} {e}","error")
                     raise (f"(!!!!! ORder Placed On Zerodha but not updated in DB trade_id : {trade_id})")
                     print(f"(!!!!! ORder Placed On Zerodha but not updated in DB trade_id : {trade_id})")
-
-
         return (trade,order)
 
     def square_off_order_on_zerodha(self,trading_symbol,action,quantity,user_id,dummy,market_price):
