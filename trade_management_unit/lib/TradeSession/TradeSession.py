@@ -230,13 +230,13 @@ class TradeSession(metaclass=TradeSessionMeta):
 
         try:
             if(len(tokens_to_add)>0):
-             #    Do not subscribe while terminating trades
-             self.ws.subscribe(tokens_to_add)
+                self.ws.subscribe(tokens_to_add)
         except:
             kite_tick_handler = KiteTickhandler()
             self.ws = kite_tick_handler.get_kite_ticker_instance()
             self.ws.connect(threaded=True)
-            self.ws.subscribe(tokens_to_add)
+            if(len(tokens_to_add)>0):
+                self.ws.subscribe(tokens_to_add)
 
         subscribed_tokens = self.ws.subscribed_tokens
         print("subscribed_tokens",subscribed_tokens)

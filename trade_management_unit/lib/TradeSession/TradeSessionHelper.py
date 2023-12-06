@@ -166,7 +166,7 @@ class TradeSessionHelper():
         for trade in all_trades:
             instrument_object = self.get_formated_instrument_object(trade, trade_session_instance, quotes)
             if (instrument_object):
-                trade_session_instance.tracking_algo_instance.process_tracker_actions(instrument_object, trade_session_instance.trade_session_id, trade_session_instance.user_id, trade_session_instance.dummy)
+                trade_session_instance.tracking_algo_instance.process_tracker_actions(instrument_object, trade_session_instance.trade_session_id, trade_session_instance.user_id, trade_session_instance.dummy,trade)
             else:
                 open_trades.append(model_to_dict(trade))
 
