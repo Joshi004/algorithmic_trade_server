@@ -67,7 +67,7 @@ class Trade(models.Model):
                 user_id=user_id,
                 is_active=True,
                 started_at= current_ist(),
-                closed_a= None,
+                closed_at= None,
                 view='long' if action == 'buy' else 'short',
                 dummy=dummy,
                 max_price= None,

@@ -102,9 +102,9 @@ class TradeSession(metaclass=TradeSessionMeta):
 
     def get_formated_tick(self,tick,symbol):
         instrument_obj = {
-            "trading_symbol" : self.instruments[symbol]["trading_symbol"],
-            "instrument_token" : self.instruments[symbol]["instrument_token"],
-            "trade_freqency" : self.instruments[symbol]["trade_freqency"],
+            "trading_symbol" : symbol,
+            "instrument_token" : tick["instrument_token"],
+            "trade_freqency" : self.trading_freq,
             "indicator_data" : tick["indicator_data"],
             "market_data" : {
                 "market_price" : tick["last_price"],
@@ -143,11 +143,11 @@ class TradeSession(metaclass=TradeSessionMeta):
                 indicator_obj.append_information(tick)
                 # !!!!! Make Sure Every Indicator object is garbage collected ones the trade is terminated fro the symbol
                 if(indicator_obj.price_zone_changed):
-                    indicator_obj.mark_into_indicator_records(tick,self.trade_session_id,self.user_id,self.dummy,self.scanning_algo_name)
+                    indicator_obj.mark_into_indicator_records(tick,self.trade_session_id,self.user_id,self.dummy,self.scanning_algo_name,trade)
 
             formated_instrument_data = self.get_formated_tick(tick,symbol)
             if(formated_instrument_data["required_action"]):
-                trade,order = self.tracking_algo_instance.process_tracker_actions(formated_instrument_data,self.trade_session_id,self.user_id,self.dummy)
+                trade,order = self.tracking_algo_instance.process_tracker_actions(formated_instrument_data,self.trade_session_id,self.user_id,self.dummy,trade)
                 if(not trade.is_active):
                     self.remove_tokens([token])
                     communication_bit = {
@@ -163,10 +163,8 @@ class TradeSession(metaclass=TradeSessionMeta):
                 }
                 self.communicator.send_data_to_channel_layer(communication_bit, self.communication_group)
         except Exception as e:
-            self.close_connections()
             raise("Error in on_ticks: ",e)
 
-        self.close_connections()
         # self.communicator.send_data_to_channel_layer(formated_instrument_data, self.communication_group)
         
     def close_connections(self):
@@ -175,9 +173,10 @@ class TradeSession(metaclass=TradeSessionMeta):
 
     def handle_tick(self,tick):
         # Assuming you have a TradeSession instance in the variable `trade_session`
-        active_trades = self.trade_set.filter(is_active=True)
+        active_trades = Trade.objects.filter(is_active=True,trade_session_id=self.trade_session_id,instrument_id=tick["instrument_token"])
         for trade in active_trades:
             self.tick_handler(tick,trade)
+        self.close_connections()
 
 
     def __add_instrument_actions__(self,instrument):

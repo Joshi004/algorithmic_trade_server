@@ -2,6 +2,7 @@ from kiteconnect import KiteTicker
 from trade_management_unit.lib.common.EnvFile import EnvFile
 import threading
 from trade_management_unit.lib.common.Utils.custome_logger import log
+from django.db import connections
 from trade_management_unit.lib.common.Utils.Utils import *
 
 class SingletonMeta(type):
@@ -52,7 +53,11 @@ class KiteTickhandler(metaclass=SingletonMeta):
             token = tick['instrument_token']
             for trade_session in self.trade_sessions[token]:
                 trade_session.handle_tick(tick)
+        self.close_connections()
 
+    def close_connections(self):
+        for conn in connections.all():
+            conn.close()
 
     def on_ticks(self,ws,ticks):
         tick_handler_thread = threading.Thread(target=self.async_tick_handler,args=(ticks,),name="tick_handler")

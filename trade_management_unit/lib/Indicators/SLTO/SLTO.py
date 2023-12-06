@@ -47,7 +47,6 @@ class SLTO(metaclass=IndicitorSingletonMeta):
 
         # Calculate and return the timeout period
         timeout_period = number // division_factor
-        print("!!! Check thsi returning 0 insted of proper value")
         return timeout_period
 
     def update(self, ltp:float )-> None:
@@ -70,13 +69,12 @@ class SLTO(metaclass=IndicitorSingletonMeta):
         else:
             return PriceZone.RANGE
 
-    def mark_into_indicator_records(self,tick,trade_session_id,user_id,dummy,scanning_algo_name):
+    def mark_into_indicator_records(self,tick,trade_session_id,user_id,dummy,scanning_algo_name,trade):
         instrument_id = tick["instrument_token"]
-        trade = Trade.fetch_active_trade(instrument_id,trade_session_id,user_id,dummy)
         trade_id = trade.id
         AlgoSltoTrackRecord.add_indicator_entry(
             market_price=tick["last_price"],
-            trade_id = trade_id,
+            trade_id =trade_id,
             instrument_id = instrument_id,
             existing_price_zone=tick["indicator_data"]["slto"]["prev_price_zone"],
             next_price_zone=tick["indicator_data"]["slto"]["price_zone"],

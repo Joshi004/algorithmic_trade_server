@@ -8,6 +8,7 @@ from trade_management_unit.lib.common.Utils.custome_logger import log
 class Order(models.Model):
     class Meta:
         db_table = "orders"
+        unique_together = (('trade', 'order_type'),)
 
 
     STATUS_CHOICES=[("pending","pending"),("rejected","rejected"),("exicuted","exicuted")]
