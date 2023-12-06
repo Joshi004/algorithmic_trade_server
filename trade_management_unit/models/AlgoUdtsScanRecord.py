@@ -48,44 +48,44 @@ class AlgoUdtsScanRecord(models.Model):
         except ObjectDoesNotExist:
             raise ValidationError(f"Instrument with id {instrument_id} does not exist.")
 
+        # try:
+        #     udts_record = cls.fetch_udts_record(trade_id)
+        #     return udts_record
+        # except:
+        # Round off the values to the desired format
+        market_price = Decimal(market_price).quantize(Decimal('.01'), rounding=ROUND_DOWN)
+        support_price = Decimal(support_price).quantize(Decimal('.01'), rounding=ROUND_DOWN)
+        resistance_price = Decimal(resistance_price).quantize(Decimal('.01'), rounding=ROUND_DOWN)
+        support_strength = Decimal(support_strength).quantize(Decimal('.0001'), rounding=ROUND_DOWN)
+        resistance_strength = Decimal(resistance_strength).quantize(Decimal('.0001'), rounding=ROUND_DOWN)
+        movement_potential = Decimal(movement_potential).quantize(Decimal('.01'), rounding=ROUND_DOWN)
+        volume = Decimal(volume).quantize(Decimal('.01'), rounding=ROUND_DOWN)
+
+        # Validate the trend value
+        if effective_trend not in Trends._value2member_map_:
+            raise ValidationError(f"Invalid trend value: {effective_trend}. Expected one of: {', '.join(Trends._value2member_map_.keys())}")
+
+         # Get the Algorithm instance
         try:
-            udts_record = cls.fetch_udts_record(trade_id)
-            return udts_record
-        except:
-            # Round off the values to the desired format
-            market_price = Decimal(market_price).quantize(Decimal('.01'), rounding=ROUND_DOWN)
-            support_price = Decimal(support_price).quantize(Decimal('.01'), rounding=ROUND_DOWN)
-            resistance_price = Decimal(resistance_price).quantize(Decimal('.01'), rounding=ROUND_DOWN)
-            support_strength = Decimal(support_strength).quantize(Decimal('.0001'), rounding=ROUND_DOWN)
-            resistance_strength = Decimal(resistance_strength).quantize(Decimal('.0001'), rounding=ROUND_DOWN)
-            movement_potential = Decimal(movement_potential).quantize(Decimal('.01'), rounding=ROUND_DOWN)
-            volume = Decimal(volume).quantize(Decimal('.01'), rounding=ROUND_DOWN)
+            tracking_algo = Algorithm.objects.get(name=tracking_algo_name)  # Get the Algorithm instance using tracking_algo_name
+        except ObjectDoesNotExist:
+            raise ValidationError(f"Algorithm with name {tracking_algo_name} does not exist.")
 
-            # Validate the trend value
-            if effective_trend not in Trends._value2member_map_:
-                raise ValidationError(f"Invalid trend value: {effective_trend}. Expected one of: {', '.join(Trends._value2member_map_.keys())}")
-
-             # Get the Algorithm instance
-            try:
-                tracking_algo = Algorithm.objects.get(name=tracking_algo_name)  # Get the Algorithm instance using tracking_algo_name
-            except ObjectDoesNotExist:
-                raise ValidationError(f"Algorithm with name {tracking_algo_name} does not exist.")
-
-            # Create and save the new record
-            record = cls(
-                market_price=market_price,
-                support_price=support_price,
-                resistance_price=resistance_price,
-                support_strength=support_strength,
-                resistance_strength=resistance_strength,
-                effective_trend=effective_trend,
-                trade_candle_interval=trade_candle_interval,
-                movement_potential=movement_potential,
-                volume=volume,
-                trade=trade,
-                instrument=instrument,
-                tracking_algo=tracking_algo
-            )
-            record.full_clean()
-            record.save()
-            return record
+        # Create and save the new record
+        record = cls(
+            market_price=market_price,
+            support_price=support_price,
+            resistance_price=resistance_price,
+            support_strength=support_strength,
+            resistance_strength=resistance_strength,
+            effective_trend=effective_trend,
+            trade_candle_interval=trade_candle_interval,
+            movement_potential=movement_potential,
+            volume=volume,
+            trade=trade,
+            instrument=instrument,
+            tracking_algo=tracking_algo
+        )
+        record.full_clean()
+        record.save()
+        return record

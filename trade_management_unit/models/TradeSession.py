@@ -3,7 +3,7 @@ from django_mysql.models import EnumField
 from trade_management_unit.models.Algorithm import Algorithm
 from trade_management_unit.models.Algorithm import AlgorithmType
 from trade_management_unit.Constants.TmuConstants import FREQUENCY  # assuming constants.py is in the same directory
-from trade_management_unit.lib.common.Utils import *
+from trade_management_unit.lib.common.Utils.Utils import *
 class TradeSession(models.Model):
     class Meta:
         db_table = "trade_sessions"

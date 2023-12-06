@@ -1,12 +1,10 @@
 from django.db import models
 from django_mysql.models import EnumField
 from django.db.models import Sum
-from trade_management_unit.lib.common.Utils import *
+from trade_management_unit.lib.common.Utils.Utils import *
 from django.db import transaction
 
-from django.db.models import Q
-from trade_management_unit.models.Instrument import Instrument
-from trade_management_unit.Constants.TmuConstants import *
+
 class Trade(models.Model):
     class Meta:
         db_table = "trades"
@@ -59,6 +57,24 @@ class Trade(models.Model):
                     'margin': round(margin, 2),
                 }
             )
+        return trade
+
+    @classmethod
+    def initiate_trade(cls, instrument_id, action, trade_session_id, user_id, dummy, margin):
+        trade = cls(
+                instrument_id=instrument_id,
+                trade_session_id=trade_session_id,
+                user_id=user_id,
+                is_active=True,
+                started_at= current_ist(),
+                closed_at= None,
+                view='long' if action == 'buy' else 'short',
+                dummy=dummy,
+                max_price= None,
+                min_price= None,
+                margin=round(margin, 2)
+            )
+        trade.save()
         return trade
 
 

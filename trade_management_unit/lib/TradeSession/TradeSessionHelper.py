@@ -6,51 +6,64 @@ from trade_management_unit.models.Algorithm import Algorithm
 from trade_management_unit.lib.Trade.trade import Trade
 from trade_management_unit.models.Trade import Trade as TradeModel
 from trade_management_unit.Constants.TmuConstants import *
-from trade_management_unit.lib.common.Utils import *
-from django.db import connection
+from trade_management_unit.lib.common.Utils.Utils import *
+from django.forms.models import model_to_dict
+
+
 class TradeSessionHelper():
     def __init__(self):
         pass
 
     def fetch_trade_session_info(self,query_params):
-            is_active = query_params.get("is_active")
-            session_id = query_params.get("session_id")
-            user_id = query_params.get("user_id")
-            dummy = query_params.get("dummy")
+        is_active = query_params.get("is_active")
+        session_id = query_params.get("session_id")
+        user_id = query_params.get("user_id")
+        dummy = query_params.get("dummy")
 
-            if is_active is not None:
-                is_active = bool(int(is_active))
-            if dummy is not None:
-                dummy = bool(int(dummy))
+        if is_active is not None:
+            is_active = bool(int(is_active))
+        if dummy is not None:
+            dummy = bool(int(dummy))
 
-            query = self.get_query(is_active,session_id,user_id,dummy)
-                    # Execute the SQL query
-            trade_session_objects = TradeSession.objects.raw(query)
+        query = self.get_query(is_active,session_id,user_id,dummy)
+        # Execute the SQL query
+        trade_session_objects = TradeSession.objects.raw(query)
 
-            trade_sessions = []
-            for session in trade_session_objects:
-                trade_sessions.append({
-                    "net_profit": session.net_profit,
-                    "id": session.id,
-                    "started_at": session.started_at,
-                    "closed_at": session.closed_at,
-                    "dummy": session.dummy,
-                    "is_active": session.is_active,
-                    "user_id": session.user_id,
-                    "trading_frequency": session.trading_frequency,
-                    "scanning_algorithm_name": session.scanning_algorithm_name,
-                    "tracking_algorithm_name": session.tracking_algorithm_name,
-                })
+        # Get all session ids
+        session_ids = [session.id for session in trade_session_objects]
+        # Get the status of all sessions
+        status_info = self.are_sessions_active(session_ids)
+        # Convert the status info into a dictionary for easy lookup
+        status_dict = {item["trade_session_id"]: item["status"] for item in status_info["data"]}
 
-            response = {
-                "data": {
-                    "trade_sessions": trade_sessions,
-                },
-                "meta": {
-                    "trade_sessions_count": len(trade_sessions)
-                }
+        trade_sessions = []
+        for session in trade_session_objects:
+            # Get the status from the status dictionary
+            status = status_dict.get(session.id, 'terminated')
+
+            trade_sessions.append({
+                "net_profit": session.net_profit,
+                "id": session.id,
+                "started_at": session.started_at,
+                "closed_at": session.closed_at,
+                "dummy": session.dummy,
+                "status": status,
+                "user_id": session.user_id,
+                "trading_frequency": session.trading_frequency,
+                "scanning_algorithm_name": session.scanning_algorithm_name,
+                "tracking_algorithm_name": session.tracking_algorithm_name,
+            })
+
+        response = {
+            "data": {
+                "trade_sessions": trade_sessions,
+            },
+            "meta": {
+                "trade_sessions_count": len(trade_sessions)
             }
-            return response
+        }
+        return response
+
 
     def get_query(self,is_active,session_id,user_id,dummy):
         sql_query = """
@@ -78,7 +91,7 @@ class TradeSessionHelper():
 
     def resume_trade_session(self,trade_session_id):
         trade_session_instance, ts_db_object = self.__get_trade_session_object__(trade_session_id)
-        response = trade_session_instance.track_active_trade_instruments()
+        response = trade_session_instance.track_active_trade_instruments(resuming=True)
         return response
 
 
@@ -105,11 +118,14 @@ class TradeSessionHelper():
             return {"data":{"trade_session_id":int(trade_session_id)},"meta":{}}
         # Unregister From Scanner Instance
         trade_session_instance.scanning_algo_instance.unregister_trade_session(trade_session_instance)
-        self.unregister_from_kite_and_terminate_all_trades(trade_session_instance)
+        open_trades = self.unregister_from_kite_and_terminate_all_trades(trade_session_instance)
         trade_session_instance.tracking_algo_instance.unregister_trade_session(trade_session_instance)
         # Terminate Trade Session
-        self.close_session_object_and_terminate_session(trade_session_instance, ts_db_object)
-        return {"data":{"trade_session_id": int(trade_session_id)},"meta":{}}
+        if (len(open_trades) == 0):
+            self.close_session_object_and_terminate_session(trade_session_instance, ts_db_object)
+            return {"data":{"trade_session_id": int(trade_session_id),"open_trades":None},"meta":{}}
+        else:
+            return {"data":{"trade_session_id": int(trade_session_id),"open_trades":open_trades},"meta":{},"status":202}
 
 
         # unsubscribe on if there is no active trade with this instrument
@@ -128,15 +144,14 @@ class TradeSessionHelper():
 
 
     def unregister_from_kite_and_terminate_all_trades(self, trade_session_instance):
-        trade_session_instance.track_active_trade_instruments()
+        open_trades = []
+        trade_session_instance.track_active_trade_instruments(terminating=True)
         all_trades = TradeModel.objects.filter(trade_session_id=trade_session_instance.trade_session_id, is_active=True)
 
         # Get all instrument_ids from the trades
         instrument_ids = [trade.instrument_id for trade in all_trades]
         if(len(instrument_ids) == 0 ):
-            return
-        #Unregister From KiteTickerHandleer
-        trade_session_instance.kite_tick_handler.unregister_trade_session(instrument_ids,trade_session_instance)
+            return []
 
         # Generate trading symbols using the token_to_symbol_map
         trading_symbols = [trade_session_instance.token_to_symbol_map[id] for id in instrument_ids]
@@ -147,17 +162,27 @@ class TradeSessionHelper():
         # Call get_quotes API once for all symbols
         quotes = Trade().get_quotes({"symbol": symbols_string, "exchange": DEFAULT_EXCHANGE})
 
+
         for trade in all_trades:
             instrument_object = self.get_formated_instrument_object(trade, trade_session_instance, quotes)
-            trade_session_instance.tracking_algo_instance.process_tracker_actions(instrument_object, trade_session_instance.trade_session_id, trade_session_instance.user_id, trade_session_instance.dummy)
+            if (instrument_object):
+                trade_session_instance.tracking_algo_instance.process_tracker_actions(instrument_object, trade_session_instance.trade_session_id, trade_session_instance.user_id, trade_session_instance.dummy,trade)
+            else:
+                open_trades.append(model_to_dict(trade))
+
+        trade_session_instance.kite_tick_handler.unregister_trade_session(instrument_ids,trade_session_instance)
+        return open_trades
 
 
     def get_formated_instrument_object(self, trade, trade_session_instance, quotes):
         instrument_id = trade.instrument_id
         trading_symbol = trade_session_instance.token_to_symbol_map[instrument_id]
         key = DEFAULT_EXCHANGE+":"+trading_symbol
-        quote = quotes["data"][key]  # Get the quote for this symbol
-
+        if(not key in  quotes["data"]):
+            return None
+        #     At Time serev just responds with empty object mostly when market is closed
+        # Those time get done with all the trades possible
+        quote = quotes["data"][key]# Get the quote for this symbol
 
         return {
             "trading_symbol": trading_symbol,

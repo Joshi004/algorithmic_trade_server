@@ -63,7 +63,8 @@ def terminate_trade_session(request):
         query_paramas  =  request.GET
         trade_session_id = query_paramas.get("trade_session_id")
         response = TradeSessionHelper().terminate_trade_session(trade_session_id)
-        return JsonResponse(response, status=200, content_type='application/json')
+        status = response["status"] if "status" in response else 200
+        return JsonResponse(response, status=status, content_type='application/json')
 
 
 

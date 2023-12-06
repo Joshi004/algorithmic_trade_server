@@ -1,13 +1,14 @@
 from django.db import models
-from datetime import datetime
 from django_mysql.models import EnumField
 from django.core.exceptions import ValidationError
-from trade_management_unit.lib.common.Utils import *
+from trade_management_unit.lib.common.Utils.Utils import *
 from django.db import transaction
+from trade_management_unit.lib.common.Utils.custome_logger import log
 
 class Order(models.Model):
     class Meta:
         db_table = "orders"
+        unique_together = (('trade', 'order_type'),)
 
 
     STATUS_CHOICES=[("pending","pending"),("rejected","rejected"),("exicuted","exicuted")]
@@ -64,6 +65,9 @@ class Order(models.Model):
             raise ValidationError(f"No trade found with id {trade_id}.")
 
         try:
-            return cls.objects.get(trade_id=trade_id)
-        except cls.DoesNotExist:
+            result = cls.objects.get(trade_id=trade_id)
+            return result
+
+        except Exception as e:
+            log(f'Multiple orders found: {str(e)}', 'error')
             raise ValidationError("No matching order found.")

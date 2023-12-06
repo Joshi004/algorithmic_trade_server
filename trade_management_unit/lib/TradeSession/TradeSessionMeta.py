@@ -25,3 +25,7 @@ class TradeSessionMeta(type):
         if unique_class_identifier in cls._instances:
             del cls._instances[unique_class_identifier]
 
+    def get_working_trade_sessions(cls):
+        return cls._instances.values()
+
+
