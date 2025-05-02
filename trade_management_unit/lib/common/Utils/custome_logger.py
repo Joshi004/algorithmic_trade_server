@@ -5,6 +5,11 @@ import queue
 import inspect
 import threading
 import traceback
+import os
+from pathlib import Path
+
+# Get the project base directory
+BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent
 
 # Create a queue for the log messages
 log_queue = queue.Queue(-1)
@@ -13,7 +18,9 @@ log_queue = queue.Queue(-1)
 queue_handler = logging.handlers.QueueHandler(log_queue)
 
 # Create a listener that receives log messages from the queue and sends them to the desired handler
-file_handler = logging.FileHandler('/Users/nareshjoshi/Documents/personal_workspace/ats_aplication/logfile.log')
+log_file_path = os.path.join(BASE_DIR, 'logfile.log')
+os.makedirs(os.path.dirname(log_file_path), exist_ok=True)  # Ensure directory exists
+file_handler = logging.FileHandler(log_file_path)
 
 # Create a logging format
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')

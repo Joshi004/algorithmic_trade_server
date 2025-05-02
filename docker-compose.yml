@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  ats-db:
+    container_name: ats-mysql-db
+    image: mysql:8.0.32
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: ats_db
+      MYSQL_USER: ats_user
+      MYSQL_PASSWORD: ats_password
+    ports:
+      - "13306:3306"
+    volumes:
+      - ats_mysql_data:/var/lib/mysql
+    command: --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ats-network
+
+  ats-redis:
+    container_name: ats-redis-server
+    image: redis:7
+    restart: always
+    ports:
+      - "16379:6379"
+    volumes:
+      - ats_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ats-network
+
+  ats-app:
+    container_name: ats-django-app
+    build: .
+    restart: always
+    depends_on:
+      - ats-db
+      - ats-redis
+    ports:
+      - "18000:8000"
+    volumes:
+      - .:/app
+    environment:
+      - DATABASE_ENGINE=django.db.backends.mysql
+      - DATABASE_NAME=ats_db
+      - DATABASE_USER=ats_user
+      - DATABASE_PASSWORD=ats_password
+      - DATABASE_HOST=ats-db
+      - DATABASE_PORT=3306
+      - REDIS_HOST=ats-redis
+      - REDIS_PORT=6379
+      - DJANGO_DEBUG=True
+      - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
+    command: python manage.py runserver 0.0.0.0:8000
+    networks:
+      - ats-network
+
+volumes:
+  ats_mysql_data:
+  ats_redis_data:
+
+networks:
+  ats-network:
+    name: ats-network 

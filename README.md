@@ -1,7 +1,73 @@
-
 # Algorithmic Trade Server
 ---
-This is a project that allows you to perform algorithmic trading using a web-based interface. You can use various strategies and indicators to execute trades on different markets and platforms. To set up this project, you need to follow these steps:
+This is a project that allows you to perform algorithmic trading using a web-based interface. You can use various strategies and indicators to execute trades on different markets and platforms.
+
+## Setting Up with Docker (Recommended)
+
+The easiest way to set up the application is using Docker:
+
+1. Clone the application from GitHub using the following command:
+   ```
+   git clone https://github.com/your_username/algorithmic_trade_server.git
+   ```
+   
+2. Navigate to the project directory:
+   ```
+   cd algorithmic_trade_server
+   ```
+
+3. Build and start the application using Docker Compose:
+   ```
+   docker-compose up -d
+   ```
+   
+   This will start all required services:
+   - The Django application on port 18000 (container name: ats-django-app)
+   - MySQL database on port 13306 (container name: ats-mysql-db)
+   - Redis for WebSockets on port 16379 (container name: ats-redis-server)
+   
+4. The application will be available at http://localhost:18000
+
+### Development with Docker
+
+- All your local files are mounted into the Docker container, so you can edit them locally and see changes immediately
+- View application logs:
+  ```
+  docker-compose logs -f ats-app
+  ```
+- Run migrations:
+  ```
+  docker-compose exec ats-app python manage.py migrate
+  ```
+- Run a specific command in the container:
+  ```
+  docker-compose exec ats-app <command>
+  ```
+- Stop all services:
+  ```
+  docker-compose down
+  ```
+- Reset everything (including volumes):
+  ```
+  docker-compose down -v
+  ```
+
+### Connection Information
+
+- MySQL database:
+  - Host: localhost
+  - Port: 13306
+  - Username: ats_user
+  - Password: ats_password
+  - Database: ats_db
+
+- Redis:
+  - Host: localhost
+  - Port: 16379
+
+## Setting Up Manually (Alternative)
+
+If you prefer to set up the application without Docker, follow these steps:
 
 1. Clone the application from GitHub using the following command:
     ```
