@@ -11,5 +11,9 @@ done
 # Apply database migrations
 python manage.py migrate
 
+# Apply seed data
+echo "Applying seed data..."
+python manage.py seed_data
+
 # Start server
 exec python manage.py runserver 0.0.0.0:8000 

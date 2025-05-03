@@ -43,6 +43,14 @@ The easiest way to set up the application is using Docker:
   ```
   docker-compose exec ats-app <command>
   ```
+- Apply seed data manually:
+  ```
+  docker-compose exec ats-app python manage.py seed_data
+  ```
+- Force reapplying seed data (even if it was applied before):
+  ```
+  docker-compose exec ats-app python manage.py seed_data --force
+  ```
 - Stop all services:
   ```
   docker-compose down
@@ -108,7 +116,12 @@ If you prefer to set up the application without Docker, follow these steps:
     python manage.py makemigrations
     python manage.py migrate
     ```
-7. Make sure you have Redis installed and running on your local system. You need Redis for handling WebSocket connections and channels. To install Redis on macOS, you can use Homebrew as follows:
+7. Apply seed data to initialize the database with required records:
+    ```
+    python manage.py seed_data
+    ```
+    This command will load initial data from SQL files in the `data` directory, tracking which files have been applied to avoid duplicates.
+8. Make sure you have Redis installed and running on your local system. You need Redis for handling WebSocket connections and channels. To install Redis on macOS, you can use Homebrew as follows:
     - Update Homebrew to make sure you have the latest version by running the following command:
         ```
         brew update
