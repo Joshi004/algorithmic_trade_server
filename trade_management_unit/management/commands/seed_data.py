@@ -92,10 +92,17 @@ class Command(BaseCommand):
                         try:
                             # Try executing the insert as is
                             cursor.execute(statement)
-                        except IntegrityError:
+                        except IntegrityError as e:
                             self.stdout.write(self.style.WARNING(
-                                f'Duplicate record detected in {table_name}. Skipping this insert.'
+                                f'Integrity error in {table_name}: {str(e)}. Skipping this insert.'
                             ))
+                            self.stdout.write(self.style.WARNING(f'Statement: {statement}'))
+                        except Exception as e:
+                            self.stdout.write(self.style.ERROR(
+                                f'Error executing statement for {table_name}: {str(e)}'
+                            ))
+                            self.stdout.write(self.style.WARNING(f'Statement: {statement}'))
+                            raise
                 else:
                     # Execute other statements as is
                     cursor.execute(statement)
