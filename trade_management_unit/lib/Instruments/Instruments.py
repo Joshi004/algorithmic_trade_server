@@ -1,4 +1,3 @@
-
 import logging
 from kiteconnect import KiteConnect
 import pandas as pd
@@ -14,9 +13,10 @@ import json
 from trade_management_unit.lib.Kite.KiteUser import KiteUser
 
 class Instruments:
-    def __init__(self):
+    def __init__(self, user_id=1):
         logging.basicConfig(level=logging.DEBUG)
-        self.kite = KiteUser().get_instance()
+        self.user_id = user_id
+        self.kite = KiteUser(user_id=user_id).get_instance()
 
 
     def fetch_instruments(self, req_params):

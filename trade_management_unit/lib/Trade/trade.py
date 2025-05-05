@@ -1,4 +1,3 @@
-
 import logging
 from kiteconnect import KiteConnect
 from trade_management_unit.lib.common.EnvFile import EnvFile
@@ -8,9 +7,10 @@ from trade_management_unit.models.Trade import Trade as TradeModel
 
 
 class Trade:
-    def __init__(self):
+    def __init__(self, user_id=1):
         logging.basicConfig(level=logging.DEBUG)
-        self.kite = KiteUser().get_instance()      
+        self.user_id = user_id
+        self.kite = KiteUser(user_id=user_id).get_instance()
 
     def validate_params(self, params):
         # Check if 'symbol' and 'exchange' are present in params

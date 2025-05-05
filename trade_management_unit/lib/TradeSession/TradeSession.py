@@ -232,7 +232,7 @@ class TradeSession(metaclass=TradeSessionMeta):
             if(len(tokens_to_add)>0):
                 self.ws.subscribe(tokens_to_add)
         except:
-            kite_tick_handler = KiteTickhandler()
+            kite_tick_handler = KiteTickhandler(user_id=self.user_id)
             self.ws = kite_tick_handler.get_kite_ticker_instance()
             self.ws.connect(threaded=True)
             if(len(tokens_to_add)>0):
