@@ -18,5 +18,5 @@ from django.urls import path, include
 
 urlpatterns = [
     path('admin/', admin.site.urls),    
-    path ('tmu/',include('trade_management_unit.urls')) # Redirects To trade_management_unit Microservice
+    path('', include('ats_gateway.urls')),  # Route all requests through the gateway
 ]
