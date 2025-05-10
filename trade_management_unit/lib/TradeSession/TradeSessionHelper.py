@@ -203,12 +203,11 @@ class TradeSessionHelper():
 
 
     def __get_trade_session_object__(self,trade_session_id):
-        ts_object = TradeSession.objects.get(id=trade_session_id,is_active=True)
-        user_id = ts_object.user_id # Chek   user ID is actually resnt 
-        kite_tick_handler = KiteTickhandler(user_id=user_id)
+        kite_tick_handler = KiteTickhandler()
         kit_connect_object = kite_tick_handler.get_kite_ticker_instance()
         kit_connect_object.connect(threaded=True)
 
+        ts_object = TradeSession.objects.get(id=trade_session_id,is_active=True)
         scanning_algorithm_name = Algorithm.objects.get(id=ts_object.scanning_algorithm_id).name
         tracking_algorithm_name = Algorithm.objects.get(id=ts_object.tracking_algorithm_id).name
         trade_session = TradeSessionLib(ts_object.user_id,scanning_algorithm_name,tracking_algorithm_name,ts_object.trading_frequency,ts_object.dummy,kite_tick_handler,kit_connect_object)

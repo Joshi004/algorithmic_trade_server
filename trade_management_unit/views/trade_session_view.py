@@ -18,9 +18,7 @@ def initiate_trade_session(request,*args,**kwvrgs):
         scanning_algorithm_name = query_paramas.get("scanning_algorithm_name")
         tracking_algorithm_name = query_paramas.get("tracking_algorithm_name")
         print("!!! Add UserS PRofile And also add cotracint in all tables using user id ")
-        # Get user_id from request (we already have it in query_params)
-        user_id_int = int(user_id) if user_id else 1
-        kite_tick_handler = KiteTickhandler(user_id=user_id_int)
+        kite_tick_handler = KiteTickhandler()
         kit_connect_object = kite_tick_handler.get_kite_ticker_instance()
         kit_connect_object.connect(threaded=True)
 

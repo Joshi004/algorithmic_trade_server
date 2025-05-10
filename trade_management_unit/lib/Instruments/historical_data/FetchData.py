@@ -11,10 +11,9 @@ import time as tm
 
 
 class FetchData:
-    def __init__(self, user_id=1):
-        logging.basicConfig(level=logging.DEBUG)
-        self.user_id = user_id
-        self.kite = KiteUser(user_id=user_id).get_instance()
+    def __init__(self):
+        logging.getLogger("urllib3").setLevel(logging.WARNING)
+        self.kite = KiteUser().get_instance()   
 
     def fetch_historical_data_for_client(self,symbol, token, interval, number_of_candles, trade_date):
         history_data = self.fetch_historical_candle_data_from_kite(symbol, token, interval, number_of_candles)

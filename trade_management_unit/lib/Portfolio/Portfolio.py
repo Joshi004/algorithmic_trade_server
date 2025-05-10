@@ -9,10 +9,9 @@ from trade_management_unit.models.DummyAccount import DummyAccount
 from trade_management_unit.models.Trade import Trade
 
 class Portfolio:
-    def __init__(self, user_id=1):
+    def __init__(self):
         logging.basicConfig(level=logging.DEBUG)
-        self.user_id = user_id
-        self.kite = KiteUser(user_id=user_id).get_instance()      
+        self.kite = KiteUser().get_instance()      
 
 
     def get_holdings(self, params):
