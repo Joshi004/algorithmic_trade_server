@@ -147,7 +147,7 @@ MEDIA_URL = '/media/'
 # https://docs.djangoproject.com/en/4.0/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-AUTH_USER_MODEL = 'trade_management_unit.UserProfile'
+AUTH_USER_MODEL = 'ats_gateway.User'
 
 CORS_ORIGIN_ALLOW_ALL = True  # This allows all origins
 

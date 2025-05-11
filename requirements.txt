@@ -1,5 +1,5 @@
-django==3.2
-djangorestframework==3.9.2
+django==4.2
+djangorestframework==3.14.0
 mysqlclient == 2.1.1
 django_mysql == 4.9.0
 channels == 4.0.0
@@ -14,3 +14,4 @@ kiteconnect
 autobahn==22.4.2
 requests==2.31.0
 python-dotenv==1.0.0
+bcrypt==4.0.1
