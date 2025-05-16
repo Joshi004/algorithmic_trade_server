@@ -1,2 +1,2 @@
 from .GatewayView import GatewayView
-from .RegistrationView import RegistrationView 
+from .AuthView import register, login 
