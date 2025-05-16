@@ -4,6 +4,7 @@ from rest_framework import status
 from rest_framework.permissions import AllowAny
 from ..serializers.RegistrationSerializer import RegistrationSerializer
 from ..serializers.LoginSerializer import LoginSerializer
+from ..utils.jwt_utils import generate_token
 
 
 @api_view(['POST'])
@@ -24,8 +25,17 @@ def register(request):
 def login(request):
     serializer = LoginSerializer(data=request.data)
     if serializer.is_valid():
+        # Get user data from validated serializer
+        user_data = {
+            "public_id": str(serializer.validated_data["public_id"]),
+            "email": serializer.validated_data["email"]
+        }
+        
+        # Generate JWT token
+        token = generate_token(user_data)
+        
+        # Return token to client
         return Response({
-            "public_id": serializer.validated_data["public_id"],
-            "ssid": serializer.validated_data["ssid"]
+            "token": token
         }, status=status.HTTP_200_OK)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

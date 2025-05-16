@@ -55,6 +55,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django.middleware.common.CommonMiddleware',
+    'ats_gateway.middleware.jwt_auth_middleware.JWTAuthMiddleware',
 ]
 
 ROOT_URLCONF = 'ats_base.urls'

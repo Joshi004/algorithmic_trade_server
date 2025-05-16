@@ -30,6 +30,7 @@ class LoginSerializer(serializers.Serializer):
 
         # If valid, generate ssid (a new UUID in this example)
         data["public_id"] = user.public_id
-        data["ssid"] = uuid.uuid4()  # You can replace this with session token logic if needed
+        data["email"] = user.email
+        # data["ssid"] = uuid.uuid4()  # You can replace this with session token logic if needed
 
         return data
