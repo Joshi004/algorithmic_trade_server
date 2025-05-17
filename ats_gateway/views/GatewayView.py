@@ -44,8 +44,6 @@ class GatewayView(View):
         
         service_prefix, path = path_parts
         
-        # TODO: Add authentication and authorization logic here
-        
         # Get the appropriate connector from the factory
         connector = self.factory.get_connector(service_prefix)
         

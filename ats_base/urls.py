@@ -17,6 +17,15 @@ from django.contrib import admin
 from django.urls import path, include
 
 urlpatterns = [
-    path('admin/', admin.site.urls),    
-    path('', include('ats_gateway.urls')),  # Route all requests through the gateway
+    path('admin/', admin.site.urls),
+    
+    # Route auth endpoints through the gateway
+    path('login/', include('ats_gateway.urls')),  
+    path('register/', include('ats_gateway.urls')),
+    
+    # Route TMU endpoints directly
+    path('tmu/', include('trade_management_unit.urls')),
+    
+    # Catch any other paths through the gateway
+    path('', include('ats_gateway.urls')),
 ]

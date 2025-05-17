@@ -58,6 +58,8 @@ class JWTAuthMiddleware:
             }, status=401)
             
         token = auth_header.split(' ')[1]
+        # Strip quotes if present
+        token = token.strip('"')
         logger.info(f"Token received | Token prefix: {token[:15]}... | Path: {request.path}")
         
         # Verify token
@@ -103,6 +105,8 @@ class JWTAuthMiddleware:
             }, status=401)
             
         token = auth_header.split(' ')[1]
+        # Strip quotes if present
+        token = token.strip('"')
         logger.info(f"Token received (async) | Token prefix: {token[:15]}... | Path: {request.path}")
         
         # Verify token
