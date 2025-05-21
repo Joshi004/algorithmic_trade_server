@@ -1,8 +1,11 @@
-from django.urls import path, re_path
-from .views import GatewayView
+from django.urls import path
+from .views.AuthView import register, login, refresh_token
 
 urlpatterns = [
-    # Use the new factory-based GatewayView as the main entry point
-    re_path(r'^(?P<path>.+)$', GatewayView.as_view(), name='gateway'),
-
-] 
+    # Registration endpoint
+    path('register/', register, name='register'),
+    # Login endpoint
+    path('login/', login, name='login'),
+    # Token refresh endpoint
+    path('refresh-token/', refresh_token, name='refresh_token'),
+]
