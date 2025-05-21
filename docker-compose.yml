@@ -14,6 +14,7 @@ services:
       - "13306:3306"
     volumes:
       - ats_mysql_data:/var/lib/mysql
+      - ./mysql-init:/docker-entrypoint-initdb.d
     command: --default-authentication-plugin=mysql_native_password
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
@@ -57,10 +58,12 @@ services:
       - DATABASE_PASSWORD=ats_password
       - DATABASE_HOST=ats-db
       - DATABASE_PORT=3306
+      - TEST_DATABASE_NAME=test_ats_db
       - REDIS_HOST=ats-redis
       - REDIS_PORT=6379
       - DJANGO_DEBUG=True
       - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
+      - DJANGO_SETTINGS_MODULE=ats_base.settings
     command: python manage.py runserver 0.0.0.0:8000
     networks:
       - ats-network
@@ -71,4 +74,4 @@ volumes:
 
 networks:
   ats-network:
-    name: ats-network 
+    name: ats-network
