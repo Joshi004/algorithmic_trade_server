@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'trade_management_unit',
     'ats_gateway',
+    'integration_service',
 ]
 
 MIDDLEWARE = [

@@ -26,6 +26,9 @@ urlpatterns = [
     # Route TMU endpoints directly
     path('tmu/', include('trade_management_unit.urls')),
     
+    # Route integration service endpoints
+    path('integration/', include('integration_service.urls')),
+    
     # Catch any other paths through the gateway
     path('', include('ats_gateway.urls')),
 ]
