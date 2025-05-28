@@ -18,17 +18,14 @@ from django.urls import path, include
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    
-    # Route auth endpoints through the gateway
-    path('login/', include('ats_gateway.urls')),  
-    path('register/', include('ats_gateway.urls')),
+      
     
     # Route TMU endpoints directly
     path('tmu/', include('trade_management_unit.urls')),
     
     # Route integration service endpoints
     path('integration/', include('integration_service.urls')),
-    
-    # Catch any other paths through the gateway
+
+      # Route auth endpoints through the gateway (no prefix needed as ats_gateway.urls already defines them)
     path('', include('ats_gateway.urls')),
 ]

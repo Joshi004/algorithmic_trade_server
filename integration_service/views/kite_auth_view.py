@@ -3,6 +3,7 @@ from django.http import JsonResponse
 import json
 from django.core import serializers
 from integration_service.lib.broker.kite_user import KiteUser
+from integration_service.models.UserBrokerCredential import UserBrokerCredential
 
 def set_session(request, *args, **kwargs):
     """
@@ -48,6 +49,7 @@ def set_session(request, *args, **kwargs):
 def get_login_url(request, *args, **kwargs):
     """
     Get Kite login URL for a user
+    Updated to check if broker credentials exist first
     """
     if request.method != 'GET':
         return JsonResponse({
@@ -65,6 +67,23 @@ def get_login_url(request, *args, **kwargs):
                 "error": "User ID is required"
             }, status=400)
         
+        # Check if user has broker credentials
+        credential = UserBrokerCredential.get_default_credential(
+            user_id=user_id, 
+            broker_name="zerodha"
+        )
+        
+        if not credential:
+            # No broker credentials found, return response indicating this
+            return JsonResponse({
+                "status": "error",
+                "error": "No broker credentials found",
+                "error_code": "NO_BROKER_CREDENTIALS",
+                "message": "Please register your broker credentials first",
+                "redirect_to": "broker_registration"
+            }, status=400)
+        
+        # Broker credentials exist, proceed with login URL generation
         kite_user = KiteUser(user_id)
         response = kite_user.get_login_url()
         return JsonResponse(response, status=200, content_type='application/json')
