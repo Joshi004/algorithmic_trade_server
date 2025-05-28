@@ -5,12 +5,9 @@ This module contains unit tests for the BrokerService class,
 using real database operations with raw SQL for data verification.
 """
 
-import unittest
 import uuid
 import os
-import time
 from django.test import TransactionTestCase
-from django.db import connection, DatabaseError
 from integration_service.models.UserBrokerCredential import UserBrokerCredential
 from integration_service.lib.broker.broker_service import BrokerService
 

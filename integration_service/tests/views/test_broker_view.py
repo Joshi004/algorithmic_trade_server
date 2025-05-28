@@ -166,6 +166,8 @@ class BrokerViewTest(TransactionTestCase):
         self.assertEqual(credential.api_key, 'form_data_api_key')
         self.assertEqual(credential.api_secret, 'form_data_api_secret')
 
+
+
     # =========================================================================
     # Tests for get_user_brokers API
     # =========================================================================
