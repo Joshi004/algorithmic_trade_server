@@ -66,6 +66,17 @@ def terminate_trade_session(request):
         status = response["status"] if "status" in response else 200
         return JsonResponse(response, status=status, content_type='application/json')
 
+def get_all_trades_info(request, *args, **kwargs):
+    query_params = request.GET
+    
+    # Extract user_id from the request (assuming it's set by auth middleware)
+    user_id = request.user_data.get('public_id') if hasattr(request, 'user_data') else query_params.get('user_id')
+    
+    trade = Trade(user_id)
+    trade_session_id = query_params.get("trade_session_id", "")
+    response = trade.fetch_all_trades_info(trade_session_id)
+    return JsonResponse(response, status=200, content_type='application/json')
+
 
 
 

@@ -1,16 +1,15 @@
-
 import logging
-from kiteconnect import KiteConnect
-from trade_management_unit.lib.common.EnvFile import EnvFile
-from trade_management_unit.lib.Kite.KiteUser import KiteUser
+import requests
 from trade_management_unit.models.Instrument import Instrument
 from trade_management_unit.models.Trade import Trade as TradeModel
-
+from django.conf import settings
 
 class Trade:
-    def __init__(self):
+    def __init__(self, user_id=None):
         logging.basicConfig(level=logging.DEBUG)
-        self.kite = KiteUser().get_instance()      
+        self.user_id = user_id
+        # Get integration service URL from settings or use default
+        self.integration_service_url = getattr(settings, 'INTEGRATION_SERVICE_URL', 'http://localhost:8000/integration_service')
 
     def validate_params(self, params):
         # Check if 'symbol' and 'exchange' are present in params
@@ -40,20 +39,47 @@ class Trade:
 
         symbols, exchange = validation_result
 
-
-        instruments = [f"{exchange}:{symbol}" for symbol in symbols]  # Creating a list of instruments in the format accepted by Kite API
-        quotes = self.kite.quote(*instruments)  # Fetching quotes for all instruments
-
-        # Prepare the response with 'data' and 'meta'
-        response = {
-            'data': quotes,
-            'meta': {
+        try:
+            # Make API call to integration service
+            api_url = f"{self.integration_service_url}/get_quotes/"
+            api_params = {
+                'symbol': params["symbol"],
                 'exchange': exchange,
-                'data_length': len(quotes)
+                'user_id': self.user_id
             }
-        }
-
-        return response
+            
+            response = requests.get(api_url, params=api_params)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('status') == 'success':
+                    return {
+                        'data': data['data'],
+                        'meta': data['meta']
+                    }
+                else:
+                    return {
+                        'status_code': 500,
+                        'error_message': data.get('error', 'Unknown error from integration service')
+                    }
+            else:
+                return {
+                    'status_code': response.status_code,
+                    'error_message': f'Integration service error: {response.text}'
+                }
+                
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Error calling integration service: {str(e)}")
+            return {
+                'status_code': 500,
+                'error_message': f'Failed to connect to integration service: {str(e)}'
+            }
+        except Exception as e:
+            logging.error(f"Unexpected error: {str(e)}")
+            return {
+                'status_code': 500,
+                'error_message': f'Unexpected error: {str(e)}'
+            }
 
     def fetch_all_trades_info(self, trade_session_id):
         sql_query = """
@@ -90,10 +116,10 @@ class Trade:
         GROUP BY trades.id
         """
         trades = TradeModel.objects.raw(sql_query, [trade_session_id])
-        trdes_info = self.__get_formated_trades_info__(trades)
-        return trdes_info
+        trades_info = self.__get_formated_trades_info__(trades)
+        return trades_info
 
-    def __get_formated_trades_info__(self,trades):
+    def __get_formated_trades_info__(self, trades):
         trades_info = []
         for trade in trades:
             trade_dict = {
@@ -114,10 +140,10 @@ class Trade:
                 'sell_price': float(trade.sell_price) if trade.sell_price else None,
             }
             trades_info.append(trade_dict)
-        resposne = {'data': trades_info, "meta": {"size": len(trades_info)}}
-        return resposne
+        response = {'data': trades_info, "meta": {"size": len(trades_info)}}
+        return response
 
-    def terminate_trades(self,trade_ids):
+    def terminate_trades(self, trade_ids):
         pass
 
         

@@ -2,88 +2,80 @@ import logging
 from django.core import serializers
 import json
 from kiteconnect import KiteConnect
-from trade_management_unit.lib.common.EnvFile import EnvFile
-from trade_management_unit.lib.Kite.KiteUser import KiteUser
-from trade_management_unit.models.Instrument import Instrument
-from trade_management_unit.models.DummyAccount import DummyAccount
-from trade_management_unit.models.Trade import Trade
+from integration_service.lib.broker.kite_user import KiteUser
 
 class Portfolio:
-    def __init__(self):
+    def __init__(self, user_id):
         logging.basicConfig(level=logging.DEBUG)
-        self.kite = KiteUser().get_instance()      
+        self.user_id = user_id
+        self.kite_user = KiteUser(user_id)
+        self.kite = self.kite_user.get_instance()
 
-
-    def get_holdings(self, params):
+    def get_holdings(self, params=None):
+        """Get user holdings from Zerodha"""
         try:
             holdings = self.kite.holdings()
-            response = {"data":holdings, "status":"success"}
+            response = {"data": holdings, "status": "success"}
         except Exception as e:
             logging.error(e)
-            response = {"data":None, "status":"failure", "message":str(e)}
+            response = {"data": None, "status": "failure", "message": str(e)}
         return response
     
     def get_available_margin(self):
+        """Get available margin from Zerodha"""
         try:
             margins = self.kite.margins()
-            # Below response hirarchy might have issue please checkthe response first
+            # Below response hierarchy might have issue please check the response first
             response = {"data": margins['equity']['available']['live_balance'], "status": "success"}
         except Exception as e:
             logging.error(e)
             response = {"data": None, "status": "failure", "message": str(e)}
         return response
 
-    def get_current_balance_including_margin(self,user_id,dummy):
-        used_amrgin = float(Trade.get_total_margin(user_id,dummy))
-        if(dummy):
-            shown_balance = float(DummyAccount.get_attribute(user_id,"current_balance"))
-            current_balance = shown_balance -used_amrgin
-            return current_balance
-        else:
-            shown_balance =  self.get_available_margin()
-            current_balance = shown_balance -used_amrgin
-            return current_balance
-
-
-    def get_positions(self, params):
+    def get_positions(self, params=None):
+        """Get user positions from Zerodha"""
         try:
             positions = self.kite.positions()
-            response = {"data":positions, "status":"success"}
+            response = {"data": positions, "status": "success"}
         except Exception as e:
             logging.error(e)
-            response = {"data":None, "status":"failure", "message":str(e)}
+            response = {"data": None, "status": "failure", "message": str(e)}
         return response
 
-    def get_orders(self, params):
+    def get_orders(self, params=None):
+        """Get user orders from Zerodha"""
         try:
-            positions = self.kite.orders()
-            response = {"data":positions, "status":"success"}
+            orders = self.kite.orders()
+            response = {"data": orders, "status": "success"}
         except Exception as e:
             logging.error(e)
-            response = {"data":None, "status":"failure", "message":str(e)}
+            response = {"data": None, "status": "failure", "message": str(e)}
         return response
 
     def get_order_trades(self, params):
+        """Get trades for a specific order"""
         try:
             order_id = params["order_id"]
-            positions = self.kite.order_trades(order_id)
-            response = {"data":positions, "status":"success"}
+            trades = self.kite.order_trades(order_id)
+            response = {"data": trades, "status": "success"}
         except Exception as e:
             logging.error(e)
-            response = {"data":None, "status":"failure", "message":str(e)}
+            response = {"data": None, "status": "failure", "message": str(e)}
         return response
 
     def get_order_history(self, params):
+        """Get history for a specific order"""
         try:
             order_id = params["order_id"]
-            positions = self.kite.order_history(order_id)
-            response = {"data":positions, "status":"success"}
+            history = self.kite.order_history(order_id)
+            response = {"data": history, "status": "success"}
         except Exception as e:
             logging.error(e)
-            response = {"data":None, "status":"failure", "message":str(e)}
+            response = {"data": None, "status": "failure", "message": str(e)}
         return response
     
     def place_order(self, params):
+        """Place an order on Zerodha"""
         try:
             # Validate the parameters and raise an exception if any of them is invalid or missing
             self._validate_params(params)
@@ -124,14 +116,15 @@ class Portfolio:
             )
 
             # Return a success response with the order id
-            response = {"order_id":order_id, "status":"success"}
+            response = {"order_id": order_id, "status": "success"}
         except Exception as e:
             logging.error(e)
             # Return a failure response with the error message
-            response = {"data":None, "status":"failure", "message":str(e)}
+            response = {"data": None, "status": "failure", "message": str(e)}
         return response
 
     def _validate_params(self, params):
+        """Validate order parameters"""
         # Check if the params dictionary is empty or None
         if not params or not isinstance(params, dict):
             raise ValueError("params must be a non-empty dictionary")
@@ -239,4 +232,4 @@ class Portfolio:
             # Convert the parameter to the required type using the built-in function
             value = type(value)
         
-        return value
+        return value 

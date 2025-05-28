@@ -8,39 +8,42 @@ from trade_management_unit.models.Order import Order
 from trade_management_unit.models.Trade import Trade
 from trade_management_unit.models.DummyAccount import DummyAccount
 from trade_management_unit.Constants.TmuConstants import *
-from trade_management_unit.lib.Instruments.historical_data.FetchData import FetchData
 from trade_management_unit.models.AlgoUdtsScanRecord import AlgoUdtsScanRecord
 from trade_management_unit.lib.TradeSession.RiskManager import RiskManager
-from trade_management_unit.lib.Portfolio.Portfolio import Portfolio
+from trade_management_unit.lib.common.balance_helper import BalanceHelper
 import pandas as pd
 import threading
 from trade_management_unit.lib.common.Utils.Utils import *
 from trade_management_unit.lib.TradeSession.TradeSessionMeta import TradeSessionMeta
+import requests
+from django.conf import settings
 
 
 class UDTSScanner(metaclass=ScannerSingletonMeta):
-    def __init__(self,trade_freq,tracking_algorithm):
-        self.trade_sessions = {} # Stores All the KiteUser instace refs
-        self.trade_freqency = trade_freq
+    def __init__(self, trade_freq, tracking_algorithm):
+        self.trade_sessions = {} # Stores All the KiteUser instance refs
+        self.trade_frequency = trade_freq
         self.tracking_algorithm = tracking_algorithm
+        self.balance_helper = BalanceHelper()
+        self.integration_service_url = getattr(settings, 'INTEGRATION_SERVICE_URL', 'http://localhost:8000/integration_service')
      
     def __str__(self):
-        idintifier = self.trade_freqency+"__"+self.tracking_algorithm
-        return idintifier
+        identifier = self.trade_frequency + "__" + self.tracking_algorithm
+        return identifier
 
-    def register_trade_session(self,trade_sesion):
-        log("Regieserd session")
-        self.trade_sessions[str(trade_sesion)] = trade_sesion
+    def register_trade_session(self, trade_session):
+        log("Registered session")
+        self.trade_sessions[str(trade_session)] = trade_session
 
-    def unregister_trade_session(self, trade_sesion):
-        trade_session_key = str(trade_sesion)
+    def unregister_trade_session(self, trade_session):
+        trade_session_key = str(trade_session)
         if trade_session_key in self.trade_sessions:
             del self.trade_sessions[trade_session_key]
 
-    def scan_in_seperate_trhread(self,all_instruments,user_id,dummy):
-        tm.sleep(4) # let  Trade session be created
+    def scan_in_separate_thread(self, all_instruments, user_id, dummy):
+        tm.sleep(4) # let Trade session be created
         counter = 0
-        while(True):
+        while True:
             counter += 1
             eligible_instruments = []
             instrument_counter = 0
@@ -48,46 +51,46 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
             scan_start_time = current_ist()
             for instrument in all_instruments:
                 working_trade_sessions_count = len(TradeSessionMeta.get_working_trade_sessions(TradeSessionMeta))
-                if(working_trade_sessions_count <= 0):
+                if working_trade_sessions_count <= 0:
                     print("No Active Trade Session To Scan For")
                     return
-                instrument_counter+=1
+                instrument_counter += 1
                 symbol = instrument["trading_symbol"]
                 token = instrument["instrument_token"]
                 print("\n\n\n")
-                current_balance = Portfolio().get_current_balance_including_margin(user_id,dummy)
-                if(current_balance < MINIMUM_REQUIRED_BALANCE):
-                    print("Not Enough Balance to place Trades ",current_balance)
+                current_balance = self.balance_helper.get_current_balance_including_margin(user_id, dummy)
+                if current_balance < MINIMUM_REQUIRED_BALANCE:
+                    print("Not Enough Balance to place Trades ", current_balance)
                     tm.sleep(120)
                     continue
                 log(f'Scanning {instrument["trading_symbol"]} now')
-                is_eligible,eligibility_obj = self.is_eligible(symbol)
-                print("Instrument Number",instrument_counter)
+                is_eligible, eligibility_obj = self.is_eligible(symbol)
+                print("Instrument Number", instrument_counter)
                 sleep_time = max(working_trade_sessions_count, 1)
-                print("Sleeping Time",sleep_time)
+                print("Sleeping Time", sleep_time)
                 tm.sleep(sleep_time)
-                if (is_eligible):
+                if is_eligible:
                     instrument_id = token
                     eligible_instrument_counter += 1
                     log(f"found next eligible instrument -- {eligible_instrument_counter} {symbol}")
-                    symbol_data_points = eligibility_obj[self.trade_freqency]["chart"]
+                    symbol_data_points = eligibility_obj[self.trade_frequency]["chart"]
                     instrument = {
-                        "instrument_id":instrument_id,
-                        "trading_symbol":symbol,
-                        "instrument_token":token,
-                        "trade_freqency" : self.trade_freqency,
-                        "effective_trend" : eligibility_obj["effective_trend"],
-                        "support_price" : symbol_data_points.trading_pair["support"],
-                        "resistance_price" : symbol_data_points.trading_pair["resistance"],
-                        "support_strength" : symbol_data_points.trading_pair["support_strength"],
-                        "resistance_strength" : symbol_data_points.trading_pair["resistance_strength"],
-                        "movement_potential" : symbol_data_points.average_candle_span,
-                        "market_data" : {
-                            "volume" : symbol_data_points.volume,
-                            "market_price" : symbol_data_points.market_price,
-                            "last_quantity" : symbol_data_points.last_quantity
+                        "instrument_id": instrument_id,
+                        "trading_symbol": symbol,
+                        "instrument_token": token,
+                        "trade_frequency": self.trade_frequency,
+                        "effective_trend": eligibility_obj["effective_trend"],
+                        "support_price": symbol_data_points.trading_pair["support"],
+                        "resistance_price": symbol_data_points.trading_pair["resistance"],
+                        "support_strength": symbol_data_points.trading_pair["support_strength"],
+                        "resistance_strength": symbol_data_points.trading_pair["resistance_strength"],
+                        "movement_potential": symbol_data_points.average_candle_span,
+                        "market_data": {
+                            "volume": symbol_data_points.volume,
+                            "market_price": symbol_data_points.market_price,
+                            "last_quantity": symbol_data_points.last_quantity
                         }
-                        }
+                    }
                     instrument["required_action"] = self.__get_required_actions__(instrument)
                     # eligible_instruments.append(instrument)
                     self.add_tokens_to_subscribed_trade_sessions([instrument])
@@ -96,25 +99,44 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
                     log(f"Active Threads {threading.active_count()}")
             scan_end_time = current_ist()
             tm.sleep(30)
-            log(f"restrting Scan - {counter} Last Scan Time {scan_end_time - scan_start_time}")
+            log(f"restarting Scan - {counter} Last Scan Time {scan_end_time - scan_start_time}")
 
-    def mark_into_scan_records(self,trade_id,tracking_algo_name,instrument):
+    def _place_order_via_api(self, params, user_id):
+        """Place order via integration service API"""
+        try:
+            api_url = f"{self.integration_service_url}/place_order/"
+            params['user_id'] = user_id
+            
+            response = requests.post(api_url, json=params)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('status') == 'success':
+                    return data.get('order_id')
+            
+            return None
+            
+        except Exception as e:
+            log(f"Error placing order via API: {str(e)}")
+            return None
 
+    def mark_into_scan_records(self, trade_id, tracking_algo_name, instrument):
        AlgoUdtsScanRecord.add_entry(
-            instrument_id = instrument["instrument_id"],
+            instrument_id=instrument["instrument_id"],
             market_price=instrument["market_data"]["market_price"],
             support_price=instrument["support_price"],
             resistance_price=instrument["resistance_price"],
             support_strength=instrument["support_strength"],
             resistance_strength=instrument["resistance_strength"],
             effective_trend=instrument["effective_trend"].value,
-            trade_candle_interval=instrument["trade_freqency"],
+            trade_candle_interval=instrument["trade_frequency"],
             movement_potential=instrument["movement_potential"],
             trade_id=trade_id,
             tracking_algo_name=tracking_algo_name,
             volume=instrument["market_data"]["volume"]
         )
-    def process_scanner_actions(self,instrument,user_id,dummy,trade_session_id):
+
+    def process_scanner_actions(self, instrument, user_id, dummy, trade_session_id):
         order = None
         trade = None
         trading_symbol = instrument["trading_symbol"]
@@ -123,78 +145,76 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
             instrument_id = instrument["instrument_id"]
             market_price = instrument["market_data"]["market_price"]
             risk_manager = RiskManager()
-            quantity,frictional_losses = risk_manager.get_quantity_and_frictional_losses(action,market_price,instrument["support_price"],instrument["resistance_price"],user_id,dummy,trade_session_id)
-            if(quantity>0):
+            quantity, frictional_losses = risk_manager.get_quantity_and_frictional_losses(action, market_price, instrument["support_price"], instrument["resistance_price"], user_id, dummy, trade_session_id)
+            if quantity > 0:
                 log(f'Processing {instrument["required_action"]} for quantity of {quantity}')
-                margin = self.get_trade_margin(action,market_price,instrument["support_price"],instrument["resistance_price"],quantity)
-                trade = Trade.initiate_trade(instrument_id, action,trade_session_id,user_id,dummy,margin)
+                margin = self.get_trade_margin(action, market_price, instrument["support_price"], instrument["resistance_price"], quantity)
+                trade = Trade.initiate_trade(instrument_id, action, trade_session_id, user_id, dummy, margin)
                 trade_id = trade.id
-                if(not self.has_active_position(trade_id)):
+                if not self.has_active_position(trade_id):
                     log(f"Found not active positions for trade_id {trade_id}")
-                    kite_order_id = self.place_order_on_kite(trading_symbol,quantity,action,instrument["support_price"],instrument["resistance_price"],instrument["market_data"]["market_price"],user_id,dummy)
-                    order = Order.initiate_order(action, instrument_id, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity,market_price,trade_session_id)
-        return (trade,order)
+                    kite_order_id = self.place_order_on_kite(trading_symbol, quantity, action, instrument["support_price"], instrument["resistance_price"], instrument["market_data"]["market_price"], user_id, dummy)
+                    order = Order.initiate_order(action, instrument_id, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity, market_price, trade_session_id)
+        return (trade, order)
 
-    def has_active_position(self,trade_id):
+    def has_active_position(self, trade_id):
         orders = Order.objects.filter(trade_id=trade_id)
-        if(len(orders)>0):
+        if len(orders) > 0:
             return True
         return False
 
-    def get_trade_margin(self,action,market_price,support_price,resistance_price,quantity):
-        if(action == OrderType.SELL.value):
+    def get_trade_margin(self, action, market_price, support_price, resistance_price, quantity):
+        if action == OrderType.SELL.value:
             risk = (resistance_price - market_price) * quantity
-            margin = MARGIN_FACTOR*risk
+            margin = MARGIN_FACTOR * risk
             return margin
         else:
             return 0
 
-
-    def place_order_on_kite(self,trading_symbol,qunatity,action,support_price,resistance_price,market_price,user_id,dummy):
-        stoploss = market_price - 0.99*support_price if action == OrderType.BUY else  1.01*support_price - market_price
-        squareoff = 1.01*resistance_price - market_price if action == OrderType.BUY else market_price - 0.99*support_price
-        if (dummy):
+    def place_order_on_kite(self, trading_symbol, quantity, action, support_price, resistance_price, market_price, user_id, dummy):
+        stoploss = market_price - 0.99 * support_price if action == OrderType.BUY else 1.01 * support_price - market_price
+        squareoff = 1.01 * resistance_price - market_price if action == OrderType.BUY else market_price - 0.99 * support_price
+        if dummy:
             dummy_account = DummyAccount.objects.get(user_id=user_id)
             current_balance = (dummy_account.current_balance)
-            order_amount = qunatity * market_price
+            order_amount = quantity * market_price
             new_balance = float(current_balance) - order_amount
-            dummy_account.current_balance = round(new_balance,2)
+            dummy_account.current_balance = round(new_balance, 2)
             dummy_account.save()
-            log(f'Deducted Amount is {order_amount} and remainig amount is {new_balance}')
-            return user_id+"__"+str(current_ist())
+            log(f'Deducted Amount is {order_amount} and remaining amount is {new_balance}')
+            return user_id + "__" + str(current_ist())
         else:
             print("!!! Check Stoploss and squareoff values properly before this ")
-            params = {"trading_symbol":trading_symbol,
-                      "qunatity":qunatity,
-                      "order_type":action,
-                      "product":"BO",
-                      "squareoff":squareoff,
-                      "stoploss":stoploss,
-                      "validity":"IOC",
-                      "price":market_price
-                      }
-            resposne  = Portfolio().place_order(params)
-            return resposne.trade_id
+            params = {
+                "trading_symbol": trading_symbol,
+                "quantity": quantity,
+                "transaction_type": action,
+                "order_type": "MARKET",
+                "product": "BO",
+                "squareoff": squareoff,
+                "stoploss": stoploss,
+                "validity": "IOC",
+                "price": market_price
+            }
+            response = self._place_order_via_api(params, user_id)
+            return response
 
-
-
-    def __get_required_actions__(self,instrument):
-        required_action =None
-        if (instrument["effective_trend"] == Trends.UPTREND):
+    def __get_required_actions__(self, instrument):
+        required_action = None
+        if instrument["effective_trend"] == Trends.UPTREND:
             required_action = OrderType.BUY.value
-        elif(instrument["effective_trend"] == Trends.DOWNTREND):
+        elif instrument["effective_trend"] == Trends.DOWNTREND:
             required_action = OrderType.SELL.value
         else:
             required_action = None
         return required_action
     
-    def add_tokens_to_subscribed_trade_sessions(self,eligible_instruments):
-        log(f'Adding New Tokens To subscribed trde Sessions')
+    def add_tokens_to_subscribed_trade_sessions(self, eligible_instruments):
+        log(f'Adding New Tokens To subscribed trade Sessions')
         for identifier in self.trade_sessions:
             trade_session = self.trade_sessions[identifier]
             log(f'Adding  {str(eligible_instruments)} to {str(trade_session)}')
-            trade_session.add_tokens(eligible_instruments)  
-
+            trade_session.add_tokens(eligible_instruments)
 
     def fetch_instruments_from_db(self):
         search_params = {"exchange": "NSE", "segment": "NSE", "instrument_type": "EQ", "page_length": 5000}
@@ -208,18 +228,15 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
         # ]
         return all_instruments
 
-
     def fetch_instrument_tokens_and_start_tracking(self,user_id,dummy):
         result = self.fetch_instruments_from_db()
         self.scan_and_add_instruments_for_tracking(result,user_id,dummy)
 
-
     def scan_and_add_instruments_for_tracking(self,all_instruments,user_id,dummy):
         thread_name = "scanner_thread"+'_'.join(self.trade_sessions.keys())
-        scanner_thread = threading.Thread(target=self.scan_in_seperate_trhread,args=(all_instruments,user_id,dummy),name=thread_name)
+        scanner_thread = threading.Thread(target=self.scan_in_separate_thread,args=(all_instruments,user_id,dummy),name=thread_name)
         scanner_thread.setDaemon(True)
         scanner_thread.start()
-
 
     def __get_effective_trend(self,eligibility_obj):
         trends = set()
@@ -248,7 +265,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
             return False, eligibility_obj
         token = quote["data"][key]["instrument_token"]
         quote_data = quote["data"][key]
-        trade_freq =  self.trade_freqency
+        trade_freq =  self.trade_frequency
         frq_steps = FREQUENCY_STEPS[trade_freq]
         number_of_candles = NUM_CANDLES_FOR_TREND_ANALYSIS
         is_volume_eligible = self.get_volume_eligibility(quote_data)
