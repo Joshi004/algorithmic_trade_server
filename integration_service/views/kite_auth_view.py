@@ -116,7 +116,23 @@ def get_profile_info(request, *args, **kwargs):
         
         kite_user = KiteUser(user_id)
         response = kite_user.get_profile_info()
-        return JsonResponse(response, status=200, content_type='application/json')
+        
+        # Check if the response contains an error
+        if isinstance(response, dict) and "error" in response:
+            # Return error response with appropriate status code
+            return JsonResponse({
+                "status": "error",
+                "error": response["error"],
+                "error_code": "KITE_NOT_CONNECTED",
+                "message": "Please connect to Zerodha first",
+                "action_required": "connect_to_zerodha"
+            }, status=400)
+        
+        # Success case - return profile data
+        return JsonResponse({
+            "status": "success",
+            "data": response
+        }, status=200, content_type='application/json')
         
     except Exception as e:
         return JsonResponse({
