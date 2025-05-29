@@ -10,11 +10,13 @@ logger = logging.getLogger(__name__)
 
 class JWTAuthMiddleware:
     """
-    Middleware to check JWT token in the Authorization header for protected endpoints.
+    Middleware to check JWT tokens in HTTP-only cookies for protected endpoints.
     
     Public endpoints like login and register are excluded from authentication.
     Compatible with both synchronous and asynchronous request handling.
-    Supports both long-lived and short-lived tokens.
+    Supports both long-lived and short-lived tokens:
+    - Long-lived tokens (from 'long_lived_token' cookie) are only accepted for token refresh
+    - Short-lived tokens (from 'short_lived_token' cookie) are used for regular API access
     """
     def __init__(self, get_response):
         self.get_response = get_response
@@ -34,24 +36,32 @@ class JWTAuthMiddleware:
         return False
     
     def extract_token(self, request):
-        """Extract and validate token from the authorization header"""
-        auth_header = request.headers.get('Authorization', '')
-        if not auth_header:
-            logger.info(f"Missing Authorization header | Path: {request.path}")
-            return None, JsonResponse({
-                'error': 'Missing Authorization header'
-            }, status=401)
-            
-        if not auth_header.startswith('Bearer '):
-            logger.info(f"Invalid Authorization format | Header: {auth_header[:15]}... | Path: {request.path}")
-            return None, JsonResponse({
-                'error': 'Authorization header must start with Bearer'
-            }, status=401)
-            
-        token = auth_header.split(' ')[1]
-        # Strip quotes if present
-        token = token.strip('"')
-        logger.info(f"Token received | Token prefix: {token[:15]}... | Path: {request.path}")
+        """Extract and validate token from HTTP-only cookies"""
+        # Check if this is the refresh-token endpoint
+        is_refresh_endpoint = bool(re.match(self.refresh_path, request.path))
+        
+        if is_refresh_endpoint:
+            # For refresh endpoint, extract long-lived token from cookie
+            token = request.COOKIES.get('long_lived_token')
+            if not token:
+                logger.info(f"Missing long_lived_token cookie for refresh endpoint | Path: {request.path}")
+                return None, JsonResponse({
+                    'error': 'Long-lived token cookie not found. Please login again.',
+                    'redirect_to_login': True
+                }, status=401)
+        else:
+            # For regular API endpoints, extract short-lived token from cookie
+            token = request.COOKIES.get('short_lived_token')
+            if not token:
+                logger.info(f"Missing short_lived_token cookie for API endpoint | Path: {request.path}")
+                return None, JsonResponse({
+                    'error': 'Authentication required. Please login.',
+                    'redirect_to_login': True
+                }, status=401)
+        
+        # Strip quotes if present (though cookies shouldn't have them)
+        token = token.strip('"') if token else None
+        logger.info(f"Token extracted from cookie | Token prefix: {token[:15] if token else 'None'}... | Path: {request.path}")
         return token, None
     
     def process_refresh_endpoint(self, token, request, is_async=False):

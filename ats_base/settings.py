@@ -28,6 +28,8 @@ DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
 
 ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
+# Disable automatic slash appending to prevent trailing slash issues
+APPEND_SLASH = False
 
 # Application definition
 
@@ -152,14 +154,15 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'ats_gateway.User'
 
 # CORS Configuration
-CORS_ALLOW_ALL_ORIGINS = True  # Updated setting name for newer django-cors-headers
+CORS_ALLOW_ALL_ORIGINS = False  # Changed to False for better security with credentials
 CORS_ALLOW_CREDENTIALS = True  # Allow credentials in CORS requests
 
-# Specific origins (commented out since we're allowing all origins above)
-# CORS_ALLOWED_ORIGINS = [
-#     'http://localhost:3000',
-#     'http://127.0.0.1:3000',
-# ]
+# Specific origins for frontend
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'http://localhost:18000',  # Add backend URL in case of self-referencing requests
+]
 
 CORS_ALLOW_METHODS = [
     'DELETE',
