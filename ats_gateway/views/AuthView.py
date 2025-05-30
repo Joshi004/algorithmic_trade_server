@@ -7,8 +7,9 @@ from ..serializers.RegistrationSerializer import RegistrationSerializer
 from ..serializers.LoginSerializer import LoginSerializer
 # No longer needed as we use the header token validated by middleware
 # from ..serializers.TokenRefreshSerializer import TokenRefreshSerializer
-from ..utils.jwt_utils import generate_long_lived_token, generate_short_lived_token
+from ..utils.jwt_utils import generate_llt, generate_slt, SLT_EXPIRY_MINUTES
 import logging
+import datetime
 
 # Get logger
 logger = logging.getLogger(__name__)
@@ -42,25 +43,33 @@ def login(request):
         logger.info(f"Login successful for user: {user_data['email']}")
         
         # Generate both JWT tokens
-        long_lived_token = generate_long_lived_token(user_data)
-        short_lived_token = generate_short_lived_token(user_data)
+        llt = generate_llt(user_data)
+        slt = generate_slt(user_data)
         
-        logger.info(f"Generated tokens - Long-lived: {long_lived_token[:20]}..., Short-lived: {short_lived_token[:20]}...")
+        logger.info(f"Generated tokens - LLT: {llt[:20]}..., SLT: {slt[:20]}...")
         
-        # Create response
+        # Calculate token expiry times for the frontend
+        slt_expires_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=SLT_EXPIRY_MINUTES)
+        slt_expires_in_seconds = SLT_EXPIRY_MINUTES * 60  # Convert minutes to seconds
+        
+        # Create response with expiry information
         response = Response({
             "message": "Login successful",
             "user": {
                 "email": user_data["email"],
                 "public_id": user_data["public_id"]
+            },
+            "token_info": {
+                "slt_expires_in_seconds": slt_expires_in_seconds,
+                "slt_expires_at": slt_expires_at.isoformat() + "Z"
             }
         }, status=status.HTTP_200_OK)
         
         # Set HTTP-only cookies for tokens
-        # Long-lived token cookie (for refresh)
+        # LLT cookie (for refresh)
         response.set_cookie(
-            'long_lived_token',
-            long_lived_token,
+            'llt',
+            llt,
             max_age=30 * 24 * 60 * 60,  # 30 days
             httponly=True,
             secure=getattr(settings, 'SECURE_COOKIES', False),  # Use HTTPS in production
@@ -68,11 +77,11 @@ def login(request):
             path='/'  # Ensure cookie is sent for all paths
         )
         
-        # Short-lived token cookie (for API access) - Extended duration for better UX
+        # SLT cookie (for API access)
         response.set_cookie(
-            'short_lived_token',
-            short_lived_token,
-            max_age=2 * 60 * 60,  # 2 hours (was 15 minutes)
+            'slt',
+            slt,
+            max_age=slt_expires_in_seconds,  # Use the same expiry as the token
             httponly=True,
             secure=getattr(settings, 'SECURE_COOKIES', False),  # Use HTTPS in production
             samesite='Lax',
@@ -89,8 +98,8 @@ def login(request):
 @api_view(['GET'])
 def refresh_token(request):
     """
-    Endpoint to refresh a short-lived token using a valid long-lived token.
-    If the long-lived token is invalid or expired, returns a 401 response
+    Endpoint to refresh an SLT using a valid LLT.
+    If the LLT is invalid or expired, returns a 401 response
     that can trigger a redirect to the login page on the client.
     
     The token is validated by the middleware before this view is called.
@@ -113,19 +122,27 @@ def refresh_token(request):
     
     logger.info(f"Refreshing token for user: {user_data['email']}")
     
-    # Generate new short-lived token
-    short_lived_token = generate_short_lived_token(user_data)
+    # Generate new SLT
+    slt = generate_slt(user_data)
     
-    # Create response
+    # Calculate token expiry times for the frontend
+    slt_expires_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=SLT_EXPIRY_MINUTES)
+    slt_expires_in_seconds = SLT_EXPIRY_MINUTES * 60  # Convert minutes to seconds
+    
+    # Create response with expiry information
     response = Response({
-        "message": "Token refreshed successfully"
+        "message": "Token refreshed successfully",
+        "token_info": {
+            "slt_expires_in_seconds": slt_expires_in_seconds,
+            "slt_expires_at": slt_expires_at.isoformat() + "Z"
+        }
     }, status=status.HTTP_200_OK)
-    
-    # Update the short-lived token cookie
+
+    # Update the SLT cookie
     response.set_cookie(
-        'short_lived_token',
-        short_lived_token,
-        max_age=2 * 60 * 60,  # 2 hours (was 15 minutes)
+        'slt',
+        slt,
+        max_age=slt_expires_in_seconds,  # Use the same expiry as the token
         httponly=True,
         secure=getattr(settings, 'SECURE_COOKIES', False),  # Use HTTPS in production
         samesite='Lax',
@@ -148,8 +165,8 @@ def logout(request):
     }, status=status.HTTP_200_OK)
     
     # Clear authentication cookies
-    response.delete_cookie('long_lived_token')
-    response.delete_cookie('short_lived_token')
+    response.delete_cookie('llt')
+    response.delete_cookie('slt')
     
     logger.info("Logout successful, cookies cleared")
     return response

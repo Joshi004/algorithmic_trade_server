@@ -1,6 +1,6 @@
 from django.http import JsonResponse
 import re
-from ..utils.jwt_utils import decode_long_lived_token, decode_short_lived_token
+from ..utils.jwt_utils import decode_llt, decode_slt
 import asyncio
 import logging
 import jwt
@@ -14,9 +14,9 @@ class JWTAuthMiddleware:
     
     Public endpoints like login and register are excluded from authentication.
     Compatible with both synchronous and asynchronous request handling.
-    Supports both long-lived and short-lived tokens:
-    - Long-lived tokens (from 'long_lived_token' cookie) are only accepted for token refresh
-    - Short-lived tokens (from 'short_lived_token' cookie) are used for regular API access
+    Supports both LLT and SLT:
+    - LLT (from 'llt' cookie) are only accepted for token refresh
+    - SLT (from 'slt' cookie) are used for regular API access
     """
     def __init__(self, get_response):
         self.get_response = get_response
@@ -25,7 +25,7 @@ class JWTAuthMiddleware:
             r'^/login/?$',
             r'^/register/?$',
         ]
-        # Refresh token endpoint - only accessible with long-lived token
+        # Refresh token endpoint - only accessible with LLT
         self.refresh_path = r'^/refresh-token/?$'
     
     def is_public_path(self, path):
@@ -41,19 +41,19 @@ class JWTAuthMiddleware:
         is_refresh_endpoint = bool(re.match(self.refresh_path, request.path))
         
         if is_refresh_endpoint:
-            # For refresh endpoint, extract long-lived token from cookie
-            token = request.COOKIES.get('long_lived_token')
+            # For refresh endpoint, extract LLT from cookie
+            token = request.COOKIES.get('llt')
             if not token:
-                logger.info(f"Missing long_lived_token cookie for refresh endpoint | Path: {request.path}")
+                logger.info(f"Missing llt cookie for refresh endpoint | Path: {request.path}")
                 return None, JsonResponse({
-                    'error': 'Long-lived token cookie not found. Please login again.',
+                    'error': 'LLT cookie not found. Please login again.',
                     'redirect_to_login': True
                 }, status=401)
         else:
-            # For regular API endpoints, extract short-lived token from cookie
-            token = request.COOKIES.get('short_lived_token')
+            # For regular API endpoints, extract SLT from cookie
+            token = request.COOKIES.get('slt')
             if not token:
-                logger.info(f"Missing short_lived_token cookie for API endpoint | Path: {request.path}")
+                logger.info(f"Missing slt cookie for API endpoint | Path: {request.path}")
                 return None, JsonResponse({
                     'error': 'Authentication required. Please login.',
                     'redirect_to_login': True
@@ -68,23 +68,23 @@ class JWTAuthMiddleware:
         """Process a request to the refresh token endpoint"""
         log_prefix = "(async) " if is_async else ""
         
-        # Attempt to decode as a long-lived token
-        payload = decode_long_lived_token(token)
+        # Attempt to decode as an LLT
+        payload = decode_llt(token)
         
         if payload:
-            logger.info(f"Long-lived token validated for refresh endpoint {log_prefix}| Path: {request.path}")
+            logger.info(f"LLT validated for refresh endpoint {log_prefix}| Path: {request.path}")
             request.user_data = payload
             return True, None
             
-        # If we couldn't decode as a long-lived token, check if it's a short-lived token
-        short_lived_payload = decode_short_lived_token(token)
-        if short_lived_payload:
-            logger.info(f"Short-lived token used for refresh endpoint (not allowed) {log_prefix}| Path: {request.path}")
+        # If we couldn't decode as an LLT, check if it's an SLT
+        slt_payload = decode_slt(token)
+        if slt_payload:
+            logger.info(f"SLT used for refresh endpoint (not allowed) {log_prefix}| Path: {request.path}")
             return False, JsonResponse({
-                'error': 'Short-lived tokens cannot be used for token refresh. Use your long-lived token instead.',
+                'error': 'SLT cannot be used for token refresh. Use your LLT instead.',
             }, status=401)
         
-        # Token is neither valid long-lived nor short-lived
+        # Token is neither valid LLT nor SLT
         logger.info(f"Invalid token for refresh endpoint {log_prefix}| Path: {request.path}")
         return False, JsonResponse({
             'error': 'Invalid or expired token',
@@ -95,24 +95,24 @@ class JWTAuthMiddleware:
         """Process a request to a regular API endpoint"""
         log_prefix = "(async) " if is_async else ""
         
-        # Attempt to decode as a short-lived token
-        payload = decode_short_lived_token(token)
+        # Attempt to decode as an SLT
+        payload = decode_slt(token)
         
         if payload:
-            logger.info(f"Short-lived token validated successfully {log_prefix}| Path: {request.path}")
+            logger.info(f"SLT validated successfully {log_prefix}| Path: {request.path}")
             request.user_data = payload
             return True, None
             
-        # If we couldn't decode as a short-lived token, check if it's a long-lived token
-        long_lived_payload = decode_long_lived_token(token)
-        if long_lived_payload:
-            logger.info(f"Long-lived token used for API access (not allowed) {log_prefix}| Path: {request.path}")
+        # If we couldn't decode as an SLT, check if it's an LLT
+        llt_payload = decode_llt(token)
+        if llt_payload:
+            logger.info(f"LLT used for API access (not allowed) {log_prefix}| Path: {request.path}")
             return False, JsonResponse({
-                'error': 'Long-lived tokens can only be used for token refresh. Please use a short-lived token instead.',
+                'error': 'LLT can only be used for token refresh. Please use an SLT instead.',
                 'please_refresh': True
             }, status=401)
         
-        # Token is neither valid short-lived nor long-lived
+        # Token is neither valid SLT nor LLT
         logger.info(f"Invalid token for API endpoint {log_prefix}| Path: {request.path}")
         return False, JsonResponse({
             'error': 'Invalid or expired token',
