@@ -20,7 +20,7 @@ class TradeSession(models.Model):
         ]
   
     id = models.BigAutoField(auto_created=True, primary_key=True, blank=False,)
-    user_id = models.ForeignKey(User, to_field='public_id', on_delete=models.CASCADE)
+    user_id = models.ForeignKey(User, to_field='public_id', on_delete=models.CASCADE, db_column='user_id')
     STATUS_CHOICES = [
         ('started', 'Started'),
         ('paused', 'Paused'),
@@ -29,12 +29,12 @@ class TradeSession(models.Model):
     status = EnumField(choices=STATUS_CHOICES, default="started")
     started_at = models.DateTimeField(blank=False)
     closed_at = models.DateTimeField(blank=True, null=True)
+    dummy = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
     initiation_algorithm = models.ForeignKey(InitiationAlgorithm, on_delete=models.CASCADE)
     termination_algorithm = models.ForeignKey(TerminationAlgorithm, on_delete=models.CASCADE)
     scanning_algorithm = models.ForeignKey(ScanningAlgorithm, on_delete=models.CASCADE)
     TRADING_FREQUENCY_CHOICES = [(freq, freq) for freq in FREQUENCY]
-
-    is_dummy = models.BooleanField(default=False)
 
     TRADING_FREQUENCY_CHOICES = [(freq, freq) for freq in FREQUENCY]
     trading_frequency = EnumField(choices=TRADING_FREQUENCY_CHOICES, default="10minute")
@@ -56,7 +56,7 @@ class TradeSession(models.Model):
                 initiation_algorithm_id=initiation_algo_id,
                 termination_algorithm_id=termination_algo_id,
                 trading_frequency=trading_freq,
-                is_dummy=is_dummy
+                dummy=is_dummy
             )
             # If session already exists, return it with a message
             return trade_session, "Session already exists"
@@ -71,7 +71,7 @@ class TradeSession(models.Model):
                 status='started',  # Set status to started
                 started_at=current_ist(),  # Set started_at to current timestamp
                 closed_at=None,  # Set closed_at to None
-                is_dummy=is_dummy  # Set is_dummy based on the parameter
+                dummy=is_dummy  # Set is_dummy based on the parameter
             )
             trade_session.save()  # Save the new trade session to the database
             return trade_session, "New session created"
@@ -101,7 +101,7 @@ class TradeSession(models.Model):
                 initiation_algorithm_id=initiation_algo_id,
                 termination_algorithm_id=termination_algo_id,
                 trading_frequency=trading_freq,
-                is_dummy=is_dummy,
+                dummy=is_dummy,
                 status='started'
             )
             return trade_session
@@ -128,7 +128,7 @@ class TradeSession(models.Model):
             status='started',  # Set status to started
             started_at=current_ist(),  # Set started_at to current timestamp
             closed_at=None,  # Set closed_at to None
-            is_dummy=is_dummy  # Set is_dummy based on the parameter
+            dummy=is_dummy  # Set is_dummy based on the parameter
         )
         trade_session.save()  # Save the new trade session to the database
         return trade_session
