@@ -189,6 +189,9 @@ CORS_ALLOW_HEADERS = [
 # Additional CORS settings for better compatibility
 CORS_PREFLIGHT_MAX_AGE = 86400  # 24 hours
 
+# Revert to simpler cookie configuration that works with HTTP
+SECURE_COOKIES = False  # Must be False for HTTP in development
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
