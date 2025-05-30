@@ -4,7 +4,9 @@ from . import Trade
 from . import Order
 from . import TradeSession
 from . import Instrument
-from . import Algorithm
+from . import ScanningAlgorithm
+from . import InitiationAlgorithm
+from . import TerminationAlgorithm
 from . import AlgoSltoTrackRecord
 from . import AlgoUdtsScanRecord
 from . import DummyAccount
