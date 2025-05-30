@@ -11,12 +11,11 @@ from django.db import transaction
 from django.db import connection
 import json
 
-from trade_management_unit.lib.Kite.KiteUser import KiteUser
 
 class Instruments:
     def __init__(self):
         logging.basicConfig(level=logging.DEBUG)
-        self.kite = KiteUser().get_instance()
+
 
 
     def fetch_instruments(self, req_params):

@@ -17,7 +17,7 @@ from django.test import TestCase, Client
 from django.urls import reverse
 from rest_framework import status
 from ..models.User import User
-from ..utils.jwt_utils import decode_long_lived_token, decode_short_lived_token
+from ..utils.jwt_utils import decode_llt, decode_slt
 
 
 class AuthenticationFlowTestCase(TestCase):
@@ -96,8 +96,8 @@ class AuthenticationFlowTestCase(TestCase):
         short_lived_token = login_response.data['short_lived_token']
         
         # Step 2: Decode and verify tokens
-        llt_payload = decode_long_lived_token(long_lived_token)
-        slt_payload = decode_short_lived_token(short_lived_token)
+        llt_payload = decode_llt(long_lived_token)
+        slt_payload = decode_slt(short_lived_token)
         
         # Verify token payloads
         self.assertIsNotNone(llt_payload)
@@ -121,7 +121,7 @@ class AuthenticationFlowTestCase(TestCase):
         
         # Extract and verify new short-lived token
         new_short_lived_token = refresh_response.data['short_lived_token']
-        new_slt_payload = decode_short_lived_token(new_short_lived_token)
+        new_slt_payload = decode_slt(new_short_lived_token)
         
         self.assertIsNotNone(new_slt_payload)
         self.assertEqual(new_slt_payload["public_id"], str(self.test_public_id))

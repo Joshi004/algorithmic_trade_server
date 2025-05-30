@@ -16,10 +16,10 @@ import unittest
 from unittest.mock import patch
 from django.test import TestCase
 from ..utils.jwt_utils import (
-    generate_token, generate_long_lived_token, generate_short_lived_token,
-    decode_token, decode_long_lived_token, decode_short_lived_token,
-    verify_token, verify_long_lived_token, verify_short_lived_token,
-    LLT_SECRET_KEY, SLT_SECRET_KEY, LLT_EXPIRY, SLT_EXPIRY
+    generate_token, generate_llt, generate_slt,
+    decode_token, decode_llt, decode_slt,
+    verify_token, verify_llt, verify_slt,
+    LLT_SECRET_KEY, SLT_SECRET_KEY, LLT_EXPIRY_HOURS, SLT_EXPIRY_MINUTES
 )
 
 
@@ -27,16 +27,15 @@ class JWTUtilsTestCase(TestCase):
     """Test cases for JWT utility functions.
     
     This test case validates all JWT token operations including:
-    - Generation of long-lived tokens (24-hour expiry)
-    - Generation of short-lived tokens (5-minute expiry)
-    - Token decoding and payload extraction
-    - Token verification
-    - Handling of expired tokens
-    - Handling of invalid tokens
-    - Token type validation
+    - Generation of LLT (24-hour expiry)
+    - Generation of SLT (1-minute expiry)
+    - Token decoding and validation
+    - Token expiry handling
+    - Token type enforcement
+    - Error handling for malformed tokens
     
-    The tests ensure that tokens contain the right information, have the correct
-    expiration times, and maintain proper token type differentiation.
+    The tests use mock payloads and verify that tokens can be generated,
+    decoded, and validated correctly under various conditions.
     """
 
     def setUp(self):
@@ -49,16 +48,16 @@ class JWTUtilsTestCase(TestCase):
             "email": "test@example.com"
         }
 
-    def test_generate_long_lived_token(self):
-        """Test generation of long-lived token.
+    def test_generate_llt(self):
+        """Test generation of LLT (24-hour expiry).
         
-        Verifies that a long-lived token:
+        Verifies that an LLT:
         1. Is generated as a string
         2. Contains the correct payload data
         3. Has the correct token type
         4. Has the correct expiration time (24 hours)
         """
-        token = generate_long_lived_token(self.test_payload)
+        token = generate_llt(self.test_payload)
         
         # Verify token is a string
         self.assertIsInstance(token, str)
@@ -85,16 +84,16 @@ class JWTUtilsTestCase(TestCase):
         # But don't make assumptions about the exact time value
         self.assertIsNotNone(decoded["exp"], "Token should have an expiration")
 
-    def test_generate_short_lived_token(self):
-        """Test generation of short-lived token.
+    def test_generate_slt(self):
+        """Test generation of SLT (1-minute expiry).
         
-        Verifies that a short-lived token:
+        Verifies that an SLT:
         1. Is generated as a string
         2. Contains the correct payload data
         3. Has the correct token type
-        4. Has the correct expiration time (5 minutes)
+        4. Has the correct expiration time (1 minute)
         """
-        token = generate_short_lived_token(self.test_payload)
+        token = generate_slt(self.test_payload)
         
         # Verify token is a string
         self.assertIsInstance(token, str)
@@ -125,11 +124,11 @@ class JWTUtilsTestCase(TestCase):
         """Test generate_token legacy function compatibility.
         
         Ensures that the legacy generate_token function correctly wraps
-        generate_long_lived_token to maintain backwards compatibility.
+        generate_llt to maintain backwards compatibility.
         Both tokens should be structurally identical.
         """
         token1 = generate_token(self.test_payload)
-        token2 = generate_long_lived_token(self.test_payload)
+        token2 = generate_llt(self.test_payload)
         
         # Decode both tokens to compare their structure
         decoded1 = jwt.decode(token1, LLT_SECRET_KEY, algorithms=['HS256'])
@@ -139,36 +138,36 @@ class JWTUtilsTestCase(TestCase):
         self.assertEqual(decoded1["token_type"], "long_lived")
         self.assertEqual(decoded2["token_type"], "long_lived")
 
-    def test_decode_long_lived_token(self):
-        """Test decoding of a long-lived token.
+    def test_decode_llt(self):
+        """Test decoding of a LLT (24-hour expiry).
         
-        Verifies that the decode_long_lived_token function:
-        1. Successfully decodes a valid long-lived token
+        Verifies that the decode_llt function:
+        1. Successfully decodes a valid LLT
         2. Correctly extracts the payload data
         3. Properly validates the token type
         """
         # Generate a token
-        token = generate_long_lived_token(self.test_payload)
+        token = generate_llt(self.test_payload)
         
         # Decode and verify
-        decoded = decode_long_lived_token(token)
+        decoded = decode_llt(token)
         self.assertEqual(decoded["public_id"], self.test_payload["public_id"])
         self.assertEqual(decoded["email"], self.test_payload["email"])
         self.assertEqual(decoded["token_type"], "long_lived")
 
-    def test_decode_short_lived_token(self):
-        """Test decoding of a short-lived token.
+    def test_decode_slt(self):
+        """Test decoding of a SLT (1-minute expiry).
         
-        Verifies that the decode_short_lived_token function:
-        1. Successfully decodes a valid short-lived token
+        Verifies that the decode_slt function:
+        1. Successfully decodes a valid SLT
         2. Correctly extracts the payload data
         3. Properly validates the token type
         """
         # Generate a token
-        token = generate_short_lived_token(self.test_payload)
+        token = generate_slt(self.test_payload)
         
         # Decode and verify
-        decoded = decode_short_lived_token(token)
+        decoded = decode_slt(token)
         self.assertEqual(decoded["public_id"], self.test_payload["public_id"])
         self.assertEqual(decoded["email"], self.test_payload["email"])
         self.assertEqual(decoded["token_type"], "short_lived")
@@ -177,29 +176,29 @@ class JWTUtilsTestCase(TestCase):
         """Test token type validation during decoding.
         
         Ensures that:
-        1. Attempting to decode a long-lived token with decode_short_lived_token returns None
-        2. Attempting to decode a short-lived token with decode_long_lived_token returns None
+        1. Attempting to decode a LLT with decode_slt returns None
+        2. Attempting to decode a SLT with decode_llt returns None
         This verifies the token type enforcement mechanism.
         """
         # Generate tokens
-        llt = generate_long_lived_token(self.test_payload)
-        slt = generate_short_lived_token(self.test_payload)
+        llt = generate_llt(self.test_payload)
+        slt = generate_slt(self.test_payload)
         
         # Try to decode with wrong function
-        self.assertIsNone(decode_short_lived_token(llt))
-        self.assertIsNone(decode_long_lived_token(slt))
+        self.assertIsNone(decode_slt(llt))
+        self.assertIsNone(decode_llt(slt))
 
     def test_decode_token_combines_both_types(self):
         """Test the generic decode_token function.
         
         Verifies that the decode_token function works with both token types by:
-        1. Successfully decoding a long-lived token
-        2. Successfully decoding a short-lived token
+        1. Successfully decoding a LLT
+        2. Successfully decoding a SLT
         This ensures backward compatibility with code that doesn't check token types.
         """
         # Generate tokens
-        llt = generate_long_lived_token(self.test_payload)
-        slt = generate_short_lived_token(self.test_payload)
+        llt = generate_llt(self.test_payload)
+        slt = generate_slt(self.test_payload)
         
         # Both should decode
         self.assertIsNotNone(decode_token(llt))
@@ -209,22 +208,22 @@ class JWTUtilsTestCase(TestCase):
         """Test all token verification functions.
         
         Checks that:
-        1. verify_long_lived_token correctly validates a long-lived token
-        2. verify_short_lived_token correctly validates a short-lived token
+        1. verify_llt correctly validates a LLT
+        2. verify_slt correctly validates a SLT
         3. verify_token (legacy) correctly validates both token types
         4. Each verification function rejects tokens of the wrong type
         """
         # Generate tokens
-        llt = generate_long_lived_token(self.test_payload)
-        slt = generate_short_lived_token(self.test_payload)
+        llt = generate_llt(self.test_payload)
+        slt = generate_slt(self.test_payload)
         
         # Verify correct tokens
-        self.assertTrue(verify_long_lived_token(llt))
-        self.assertTrue(verify_short_lived_token(slt))
+        self.assertTrue(verify_llt(llt))
+        self.assertTrue(verify_slt(slt))
         
         # Verify with wrong function should fail
-        self.assertFalse(verify_long_lived_token(slt))
-        self.assertFalse(verify_short_lived_token(llt))
+        self.assertFalse(verify_llt(slt))
+        self.assertFalse(verify_slt(llt))
         
         # Generic verify should work for both
         self.assertTrue(verify_token(llt))
@@ -254,8 +253,8 @@ class JWTUtilsTestCase(TestCase):
         )
         
         # Decode should return None for expired token
-        self.assertIsNone(decode_long_lived_token(expired_token))
-        self.assertFalse(verify_long_lived_token(expired_token))
+        self.assertIsNone(decode_llt(expired_token))
+        self.assertFalse(verify_llt(expired_token))
 
     def test_invalid_token(self):
         """Test handling of invalid tokens.
@@ -272,14 +271,14 @@ class JWTUtilsTestCase(TestCase):
         invalid_token2 = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.INVALID_SIGNATURE"
         
         # Decode and verify should fail
-        self.assertIsNone(decode_long_lived_token(invalid_token1))
-        self.assertIsNone(decode_short_lived_token(invalid_token1))
+        self.assertIsNone(decode_llt(invalid_token1))
+        self.assertIsNone(decode_slt(invalid_token1))
         self.assertIsNone(decode_token(invalid_token1))
         
-        self.assertIsNone(decode_long_lived_token(invalid_token2))
-        self.assertIsNone(decode_short_lived_token(invalid_token2))
+        self.assertIsNone(decode_llt(invalid_token2))
+        self.assertIsNone(decode_slt(invalid_token2))
         self.assertIsNone(decode_token(invalid_token2))
         
-        self.assertFalse(verify_long_lived_token(invalid_token1))
-        self.assertFalse(verify_short_lived_token(invalid_token1))
+        self.assertFalse(verify_llt(invalid_token1))
+        self.assertFalse(verify_slt(invalid_token1))
         self.assertFalse(verify_token(invalid_token1))

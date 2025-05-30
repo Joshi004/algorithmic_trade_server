@@ -4,13 +4,16 @@
 # Runs Django tests inside Docker container with improved error handling
 # Usage: ./docker_run_tests.sh [app_name.tests.test_module] [--keepdb]
 
-# Set default values
-TEST_PATH=${1:-"ats_gateway.tests"}
-OPTIONS=${2:-""}
-
 # Get the script directory
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"  # Change to script directory
+
+# Default test paths for each app - used when no specific path is provided
+DEFAULT_TEST_PATHS="ats_gateway.tests integration_service.tests.views trade_management_unit.tests"
+
+# Set default values
+TEST_PATH=${1:-""}
+OPTIONS=${2:-""}
 
 # Check if Docker is available
 if ! command -v docker &> /dev/null; then
@@ -56,15 +59,26 @@ if [ -z "$CONTAINER_ID" ]; then
     fi
 fi
 
+# Display what we're running
 echo "==========================================="
 echo "Running tests in Docker container"
 echo "Container ID: $CONTAINER_ID"
-echo "Test path: $TEST_PATH"
+if [ -z "$TEST_PATH" ]; then
+    echo "Test path: All tests in default paths"
+else
+    echo "Test path: $TEST_PATH"
+fi
 echo "Options: $OPTIONS"
 echo "==========================================="
 
 # Run the tests in the container with test settings
-docker exec -it $CONTAINER_ID bash -c "DJANGO_SETTINGS_MODULE=ats_base.test_settings python manage.py test $TEST_PATH $OPTIONS"
+if [ -z "$TEST_PATH" ]; then
+    # Run all tests if no specific path is provided
+    docker exec -it $CONTAINER_ID bash -c "DJANGO_SETTINGS_MODULE=ats_base.test_settings python manage.py test $DEFAULT_TEST_PATHS $OPTIONS"
+else
+    # Run specific tests
+    docker exec -it $CONTAINER_ID bash -c "DJANGO_SETTINGS_MODULE=ats_base.test_settings python manage.py test $TEST_PATH $OPTIONS"
+fi
 
 # Store the exit code
 EXIT_CODE=$?

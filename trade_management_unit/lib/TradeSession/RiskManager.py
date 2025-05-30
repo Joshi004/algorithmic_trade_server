@@ -1,41 +1,39 @@
 from trade_management_unit.models.DummyAccount import DummyAccount
 from trade_management_unit.models.UserConfiguration import UserConfiguration
-from trade_management_unit.lib.Portfolio.Portfolio import Portfolio
+from trade_management_unit.lib.common.balance_helper import BalanceHelper
 from trade_management_unit.models.Trade import Trade
-from  trade_management_unit.Constants.TmuConstants import *
+from trade_management_unit.Constants.TmuConstants import *
+
 class RiskManager:
     def __init__(self):
-        pass
+        self.balance_helper = BalanceHelper()
 
-    def get_quantity_and_frictional_losses(self,action,market_price,support_price,resistance_price,user_id,dummy,trade_session_id):
-        unit_loss_potential =( market_price - support_price) if action == "buy" else (resistance_price-market_price) 
-        orignal_balance_amount = Portfolio().get_current_balance_including_margin(user_id,dummy)
-        number_of_active_trades = len(Trade.objects.filter(trade_session_id=trade_session_id,is_active=1))
-        prefered_trades_per_session = UserConfiguration.get_attribute(user_id,"trades_per_session")
-        division_factor  = (prefered_trades_per_session - number_of_active_trades) if (prefered_trades_per_session - number_of_active_trades) != 0 else 1
-        balance_amount = orignal_balance_amount//division_factor
-        risk_appetite  = self.get_risk_appetite(user_id)
-        risk_amount = risk_appetite/100 * balance_amount
+    def get_quantity_and_frictional_losses(self, action, market_price, support_price, resistance_price, user_id, dummy, trade_session_id):
+        unit_loss_potential = (market_price - support_price) if action == "buy" else (resistance_price - market_price) 
+        original_balance_amount = self.balance_helper.get_current_balance_including_margin(user_id, dummy)
+        number_of_active_trades = len(Trade.objects.filter(trade_session_id=trade_session_id, is_active=1))
+        preferred_trades_per_session = UserConfiguration.get_attribute(user_id, "trades_per_session")
+        division_factor = (preferred_trades_per_session - number_of_active_trades) if (preferred_trades_per_session - number_of_active_trades) != 0 else 1
+        balance_amount = original_balance_amount // division_factor
+        risk_appetite = self.get_risk_appetite(user_id)
+        risk_amount = risk_appetite / 100 * balance_amount
         quantity_from_risk = risk_amount // unit_loss_potential
         quantity_for_balance = balance_amount // market_price
-        quantity = min(quantity_from_risk,quantity_for_balance)
+        quantity = min(quantity_from_risk, quantity_for_balance)
 
-        
-        frictional_losses = self.get_frictional_losses(TRADE_TYPE["intraday"],market_price,quantity,action=="buy")
-        while(quantity>0):
-             if ((unit_loss_potential*quantity + frictional_losses) < risk_amount):
+        frictional_losses = self.get_frictional_losses(TRADE_TYPE["intraday"], market_price, quantity, action == "buy")
+        while quantity > 0:
+             if ((unit_loss_potential * quantity + frictional_losses) < risk_amount):
                  break
              else:
                  quantity -= 1
-                 frictional_losses = self.get_frictional_losses(TRADE_TYPE["intraday"],market_price,quantity,action=="buy")
-        return quantity,frictional_losses
+                 frictional_losses = self.get_frictional_losses(TRADE_TYPE["intraday"], market_price, quantity, action == "buy")
+        return quantity, frictional_losses
 
-
-    def get_risk_appetite(self,user_id):
-        return UserConfiguration.get_attribute(user_id,"risk_appetite")
+    def get_risk_appetite(self, user_id):
+        return UserConfiguration.get_attribute(user_id, "risk_appetite")
     
-
-    def get_frictional_losses(self,trade_type,price, quantity, is_buy):
+    def get_frictional_losses(self, trade_type, price, quantity, is_buy):
         brokerage = {
             "equity_delivery": 0,
             "equity_intraday": min(20, 0.0003 * price * quantity),

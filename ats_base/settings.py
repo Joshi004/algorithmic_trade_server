@@ -28,6 +28,8 @@ DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
 
 ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
+# Disable automatic slash appending to prevent trailing slash issues
+APPEND_SLASH = False
 
 # Application definition
 
@@ -43,13 +45,14 @@ INSTALLED_APPS = [
     'corsheaders',
     'trade_management_unit',
     'ats_gateway',
+    'integration_service',
 ]
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
+    # 'django.middleware.common.CommonMiddleware',
     # 'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
@@ -150,12 +153,15 @@ MEDIA_URL = '/media/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'ats_gateway.User'
 
-CORS_ORIGIN_ALLOW_ALL = True  # This allows all origins
+# CORS Configuration
+CORS_ALLOW_ALL_ORIGINS = False  # Changed to False for better security with credentials
+CORS_ALLOW_CREDENTIALS = True  # Allow credentials in CORS requests
 
-# If you want to be more restrictive in the future, use this instead:
+# Specific origins for frontend
 CORS_ALLOWED_ORIGINS = [
-    'http://localhost:3001',
-    'http://127.0.0.1:3001',
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'http://localhost:18000',  # Add backend URL in case of self-referencing requests
 ]
 
 CORS_ALLOW_METHODS = [
@@ -170,8 +176,8 @@ CORS_ALLOW_METHODS = [
 CORS_ALLOW_HEADERS = [
     'accept',
     'accept-encoding',
-    'authorization',
-    'content-type',
+    'Authorization',
+    'Content-Type',
     'dnt',
     'origin',
     'user-agent',
@@ -179,6 +185,12 @@ CORS_ALLOW_HEADERS = [
     'x-requested-with',
     'x-trace-id',
 ]
+
+# Additional CORS settings for better compatibility
+CORS_PREFLIGHT_MAX_AGE = 86400  # 24 hours
+
+# Revert to simpler cookie configuration that works with HTTP
+SECURE_COOKIES = False  # Must be False for HTTP in development
 
 LOGGING = {
     'version': 1,
