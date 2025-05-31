@@ -14,60 +14,68 @@ from ats_gateway.models.User import User
 from trade_management_unit.Constants.TmuConstants import *
 
 
-def initiate_trade_session(request,*args,**kwvrgs):
-        query_paramas  =  request.GET
-        trading_frequency = query_paramas.get("trading_frequency")
-        is_dummy = bool(query_paramas.get("dummy"))
+def initiate_trade_session(request, *args, **kwargs):
+    """
+    API endpoint to initiate a trade session.
+    Thin view layer - delegates business logic to TradeSessionHelper.
+    """
+    
+    # Extract query parameters
+    query_params = request.GET
+    trading_frequency = query_params.get("trading_frequency")
+    is_dummy = bool(query_params.get("dummy"))
+    scanning_algorithm_id = query_params.get("scanning_algorithm_id")
+    initiation_algorithm_id = query_params.get("initiation_algorithm_id")
+    termination_algorithm_id = query_params.get("termination_algorithm_id")
+
+    # Check authentication
+    if not hasattr(request, 'user_data') or not request.user_data.get('public_id'):
+        error_response = {
+            'error': 'Authentication required',
+            'message': 'User must be authenticated to create a trade session'
+        }
+        return JsonResponse(error_response, status=401, content_type='application/json')
+    
+    user_id_str = request.user_data.get('public_id')
+
+    # Validate required parameters
+    if not all([scanning_algorithm_id, initiation_algorithm_id, termination_algorithm_id, trading_frequency]):
+        error_response = {
+            'error': 'Missing required parameters',
+            'required_params': ['scanning_algorithm_id', 'initiation_algorithm_id', 'termination_algorithm_id', 'trading_frequency']
+        }
+        return JsonResponse(error_response, status=400, content_type='application/json')
+
+    try:
+        # Delegate business logic to helper class
+        helper = TradeSessionHelper()
+        result = helper.initiate_trade_session(
+            user_id_str=user_id_str,
+            scanning_algorithm_id=scanning_algorithm_id,
+            initiation_algorithm_id=initiation_algorithm_id,
+            termination_algorithm_id=termination_algorithm_id,
+            trading_frequency=trading_frequency,
+            is_dummy=is_dummy
+        )
         
-        # Updated to use algorithm IDs instead of names
-        scanning_algorithm_id = query_paramas.get("scanning_algorithm_id")
-        initiation_algorithm_id = query_paramas.get("initiation_algorithm_id")
-        termination_algorithm_id = query_paramas.get("termination_algorithm_id")
-
-        # Get user_id from middleware (JWT authentication)
-        if not hasattr(request, 'user_data') or not request.user_data.get('public_id'):
-            error_response = {
-                'error': 'Authentication required',
-                'message': 'User must be authenticated to create a trade session'
-            }
-            return JsonResponse(error_response, status=401, content_type='application/json')
+        # Return success response
+        return JsonResponse(result, status=200, content_type='application/json')
         
-        user_id_str = request.user_data.get('public_id')
-
-        # Validate required parameters
-        if not all([scanning_algorithm_id, initiation_algorithm_id, termination_algorithm_id, trading_frequency]):
-            error_response = {
-                'error': 'Missing required parameters',
-                'required_params': ['scanning_algorithm_id', 'initiation_algorithm_id', 'termination_algorithm_id', 'trading_frequency']
-            }
-            return JsonResponse(error_response, status=400, content_type='application/json')
-
-        try:
-            # Fetch the User instance from the authenticated user's UUID
-            try:
-                user = User.objects.get(public_id=user_id_str)
-            except User.DoesNotExist:
-                error_response = {
-                    'error': f'Authenticated user does not exist in database',
-                    'message': 'User account issue - please contact support'
-                }
-                return JsonResponse(error_response, status=400, content_type='application/json')
-            
-            trade_session = TradeSession(str(user.public_id), scanning_algorithm_id, initiation_algorithm_id, termination_algorithm_id, trading_frequency, is_dummy)
-            response = {"trade_session_id": trade_session.trade_session_id}
-            return JsonResponse(response, status=200, content_type='application/json')
-        except ValueError as e:
-            error_response = {
-                'error': str(e),
-                'message': 'Invalid algorithm ID provided'
-            }
-            return JsonResponse(error_response, status=400, content_type='application/json')
-        except Exception as e:
-            error_response = {
-                'error': str(e),
-                'message': 'Failed to initiate trade session'
-            }
-            return JsonResponse(error_response, status=500, content_type='application/json')
+    except ValueError as e:
+        # Handle validation errors (400 Bad Request)
+        error_response = {
+            'error': str(e),
+            'message': 'Invalid input provided'
+        }
+        return JsonResponse(error_response, status=400, content_type='application/json')
+        
+    except Exception as e:
+        # Handle unexpected errors (500 Internal Server Error)
+        error_response = {
+            'error': str(e),
+            'message': 'Failed to initiate trade session'
+        }
+        return JsonResponse(error_response, status=500, content_type='application/json')
 
 
 def get_new_session_param_options(request, *args, **kwargs):

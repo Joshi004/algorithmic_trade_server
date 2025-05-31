@@ -79,7 +79,8 @@ class TradeSession(metaclass=TradeSessionMeta):
         else:
             # Session already exists, could raise an exception or return meaningful response
             log(f"Trade session already exists for user {self.user_id} with the same parameters")
-        
+            raise ValueError("Failed to create or fetch trade session")
+            
         return trade_session.id
 
 

@@ -7,6 +7,7 @@ from trade_management_unit.models.Trade import Trade as TradeModel
 from trade_management_unit.models.ScanningAlgorithm import ScanningAlgorithm
 from trade_management_unit.models.InitiationAlgorithm import InitiationAlgorithm
 from trade_management_unit.models.TerminationAlgorithm import TerminationAlgorithm
+from ats_gateway.models.User import User
 from trade_management_unit.Constants.TmuConstants import *
 from trade_management_unit.lib.common.Utils.Utils import *
 from django.forms.models import model_to_dict
@@ -15,6 +16,64 @@ from django.forms.models import model_to_dict
 class TradeSessionHelper():
     def __init__(self):
         pass
+
+    def initiate_trade_session(self, user_id_str, scanning_algorithm_id, initiation_algorithm_id, termination_algorithm_id, trading_frequency, is_dummy):
+        """
+        Core business logic for trade session initiation.
+        Handles both new session creation and existing session scenarios.
+        
+        Args:
+            user_id_str (str): User's public ID from JWT authentication
+            scanning_algorithm_id (str): Scanning algorithm ID from request
+            initiation_algorithm_id (str): Initiation algorithm ID from request
+            termination_algorithm_id (str): Termination algorithm ID from request
+            trading_frequency (str): Trading frequency parameter
+            is_dummy (bool): Whether this is a dummy/paper trading session
+            
+        Returns:
+            dict: Response with success status, trade_session_id, message, and status
+            
+        Raises:
+            ValueError: For validation errors
+            Exception: For other errors
+        """
+        
+        # Fetch the User instance from the authenticated user's UUID
+        try:
+            user = User.objects.get(public_id=user_id_str)
+        except User.DoesNotExist:
+            raise ValueError(f'Authenticated user does not exist in database')
+        
+        # Convert and validate algorithm IDs to integers
+        try:
+            scanning_algorithm_id = int(scanning_algorithm_id)
+            initiation_algorithm_id = int(initiation_algorithm_id)
+            termination_algorithm_id = int(termination_algorithm_id)
+        except (ValueError, TypeError):
+            raise ValueError('Algorithm IDs must be valid integers')
+        
+        # Use the model's fetch_or_create method which handles both new and existing sessions
+        trade_session, message = TradeSession.fetch_or_create_trade_session(
+            scanning_algorithm_id, 
+            initiation_algorithm_id, 
+            termination_algorithm_id, 
+            trading_frequency, 
+            is_dummy, 
+            user
+        )
+        
+        if trade_session is None:
+            raise ValueError(message)  # This will contain the specific error message
+        
+        # Build success response - works for both new and existing sessions
+        response = {
+            "success": True,
+            "trade_session_id": trade_session.id,
+            "message": message,  # Either "New session created" or "Session already exists"
+            "status": "new" if message == "New session created" else "existing"
+        }
+        
+        return response
 
     def get_session_param_options(self):
         """
