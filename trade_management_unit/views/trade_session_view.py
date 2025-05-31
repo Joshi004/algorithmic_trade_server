@@ -4,81 +4,95 @@ from trade_management_unit.lib.TradeSession.TradeSession import TradeSession
 from trade_management_unit.lib.TradeSession.TradeSessionHelper import TradeSessionHelper
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.forms.models import model_to_dict
-from trade_management_unit.models.Algorithm import Algorithm
+# from trade_management_unit.models.Algorithm import Algorithm
 from trade_management_unit.lib.Kite.KiteTickhandler import KiteTickhandler
+from trade_management_unit.models.ScanningAlgorithm import ScanningAlgorithm
+from trade_management_unit.models.InitiationAlgorithm import InitiationAlgorithm
+from trade_management_unit.models.TerminationAlgorithm import TerminationAlgorithm
+from ats_gateway.models.User import User
 
 from trade_management_unit.Constants.TmuConstants import *
 
 
-def initiate_trade_session(request,*args,**kwvrgs):
-        query_paramas  =  request.GET
-        trading_frequency = query_paramas.get("trading_frequency")
-        user_id = query_paramas.get("user_id")
-        dummy = bool(query_paramas.get("dummy"))
-        scanning_algorithm_name = query_paramas.get("scanning_algorithm_name")
-        tracking_algorithm_name = query_paramas.get("tracking_algorithm_name")
-        print("!!! Add UserS PRofile And also add cotracint in all tables using user id ")
-        kite_tick_handler = KiteTickhandler()
-        kit_connect_object = kite_tick_handler.get_kite_ticker_instance()
-        kit_connect_object.connect(threaded=True)
-
-        trade_session_identifier = str(dummy)+ "__" +user_id + "__" + scanning_algorithm_name + "__" + tracking_algorithm_name + "__" + trading_frequency
-        trade_session = TradeSession(user_id,scanning_algorithm_name,tracking_algorithm_name,trading_frequency,dummy,kite_tick_handler,kit_connect_object)
-        response = {"trade_session_id":trade_session.trade_session_id}
-        return JsonResponse(response,status=200, content_type='application/json')
-
-def get_new_session_param_options(request):
-        scanning_algorithms  = list(Algorithm.objects.filter(type="scanning").values())
-        tracking_algorithms  = list(Algorithm.objects.filter(type="tracking").values())
-        trading_frequencies =list( FREQUENCY_STEPS.keys())
-        response = {
-                "scanning_algorithms":scanning_algorithms,
-                "tracking_algorithms":tracking_algorithms,
-                "trading_frequencies":trading_frequencies,
-                }
-        return JsonResponse(response,status=200, content_type='application/json')
-
-def get_trade_sessions(request):
-        query_params = request.GET
-        response = TradeSessionHelper().fetch_trade_session_info(query_params)
-        return JsonResponse(response, status=200, content_type='application/json')
-
-
-def resume_trade_session(request):
-        query_paramas  =  request.GET
-        trade_session_id = query_paramas.get("trade_session_id")
-        response = TradeSessionHelper().resume_trade_session(trade_session_id)
-        return JsonResponse(response, status=200, content_type='application/json')
-
-
-def session_active(request):
-        query_params = request.GET
-        trade_session_ids = query_params.get("trade_session_id")
-        # Split the comma-separated string into a list of IDs
-        trade_session_ids = [int(id) for id in trade_session_ids.split(',')]
-        responses = TradeSessionHelper().are_sessions_active(trade_session_ids)
-        return JsonResponse(responses, status=200, safe=False)
-
-def terminate_trade_session(request):
-        query_paramas  =  request.GET
-        trade_session_id = query_paramas.get("trade_session_id")
-        response = TradeSessionHelper().terminate_trade_session(trade_session_id)
-        status = response["status"] if "status" in response else 200
-        return JsonResponse(response, status=status, content_type='application/json')
-
-def get_all_trades_info(request, *args, **kwargs):
+def initiate_trade_session(request, *args, **kwargs):
+    """
+    API endpoint to initiate a trade session.
+    Thin view layer - delegates business logic to TradeSessionHelper.
+    """
+    
+    # Extract query parameters
     query_params = request.GET
+    trading_frequency = query_params.get("trading_frequency")
+    is_dummy = bool(query_params.get("dummy"))
+    scanning_algorithm_id = query_params.get("scanning_algorithm_id")
+    initiation_algorithm_id = query_params.get("initiation_algorithm_id")
+    termination_algorithm_id = query_params.get("termination_algorithm_id")
+
+    # Check authentication
+    if not hasattr(request, 'user_data') or not request.user_data.get('public_id'):
+        error_response = {
+            'error': 'Authentication required',
+            'message': 'User must be authenticated to create a trade session'
+        }
+        return JsonResponse(error_response, status=401, content_type='application/json')
     
-    # Extract user_id from the request (assuming it's set by auth middleware)
-    user_id = request.user_data.get('public_id') if hasattr(request, 'user_data') else query_params.get('user_id')
-    
-    trade = Trade(user_id)
-    trade_session_id = query_params.get("trade_session_id", "")
-    response = trade.fetch_all_trades_info(trade_session_id)
-    return JsonResponse(response, status=200, content_type='application/json')
+    user_id_str = request.user_data.get('public_id')
+
+    # Validate required parameters
+    if not all([scanning_algorithm_id, initiation_algorithm_id, termination_algorithm_id, trading_frequency]):
+        error_response = {
+            'error': 'Missing required parameters',
+            'required_params': ['scanning_algorithm_id', 'initiation_algorithm_id', 'termination_algorithm_id', 'trading_frequency']
+        }
+        return JsonResponse(error_response, status=400, content_type='application/json')
+
+    try:
+        # Delegate business logic to helper class
+        helper = TradeSessionHelper()
+        result = helper.initiate_trade_session(
+            user_id_str=user_id_str,
+            scanning_algorithm_id=scanning_algorithm_id,
+            initiation_algorithm_id=initiation_algorithm_id,
+            termination_algorithm_id=termination_algorithm_id,
+            trading_frequency=trading_frequency,
+            is_dummy=is_dummy
+        )
+        
+        # Return success response
+        return JsonResponse(result, status=200, content_type='application/json')
+        
+    except ValueError as e:
+        # Handle validation errors (400 Bad Request)
+        error_response = {
+            'error': str(e),
+            'message': 'Invalid input provided'
+        }
+        return JsonResponse(error_response, status=400, content_type='application/json')
+        
+    except Exception as e:
+        # Handle unexpected errors (500 Internal Server Error)
+        error_response = {
+            'error': str(e),
+            'message': 'Failed to initiate trade session'
+        }
+        return JsonResponse(error_response, status=500, content_type='application/json')
 
 
-
-
-
-
+def get_new_session_param_options(request, *args, **kwargs):
+    """
+    API endpoint to get dynamic parameters for trade session initialization.
+    Returns available algorithms and trading frequencies for the frontend form.
+    """
+    try:
+        # Use the library method to get session parameters
+        trade_session_helper = TradeSessionHelper()
+        response_data = trade_session_helper.get_session_param_options()
+        
+        return JsonResponse(response_data, status=200, content_type='application/json')
+        
+    except Exception as e:
+        error_response = {
+            'error': str(e),
+            'message': 'Failed to fetch session parameter options'
+        }
+        return JsonResponse(error_response, status=500, content_type='application/json')

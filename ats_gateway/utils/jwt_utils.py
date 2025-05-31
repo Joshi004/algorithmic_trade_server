@@ -8,7 +8,7 @@ SLT_SECRET_KEY = "9876ZYXW"  # SLT (Short Lived Token) secret key
 
 # Expiration times - Declared constants
 LLT_EXPIRY_HOURS = 24  # 24 hours for LLT
-SLT_EXPIRY_MINUTES = 1  # 1 minute for SLT
+SLT_EXPIRY_MINUTES = 15  # 1 minute for SLT
 
 def generate_token(payload: Dict[str, Any]) -> str:
     """
