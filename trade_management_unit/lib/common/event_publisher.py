@@ -12,7 +12,7 @@ class TradeSessionEventPublisher:
     """
     
     # Stream names as constants
-    INITIATION_QUEUE = "initiation_queue"
+    SCANNING_QUEUE = "scanning_queue"
     
     def __init__(self):
         """Initialize the event publisher"""
@@ -40,7 +40,7 @@ class TradeSessionEventPublisher:
             
             # Publish to Redis stream
             success = self.redis_client.publish_to_stream(
-                self.INITIATION_QUEUE, 
+                self.SCANNING_QUEUE, 
                 event_data
             )
             

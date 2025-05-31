@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     'trade_management_unit',
     'ats_gateway',
     'integration_service',
+    'scanning_service',
 ]
 
 MIDDLEWARE = [

@@ -15,5 +15,5 @@ python manage.py migrate
 echo "Applying seed data..."
 python manage.py seed_data
 
-# Start server
-exec python manage.py runserver 0.0.0.0:8000 
+# Execute the command passed to the container
+exec "$@" 
