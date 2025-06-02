@@ -6,6 +6,8 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 
 from scanning_service.lib.utils.logger import log
+from scanning_service.lib.Algorithms.ScannerAlgos.ScannerAlgoFactory import ScannerAlgoFactory
+from scanning_service.lib.data_providers import IntegrationServiceProvider, TMUServiceProvider
 
 
 class ScanningQueueConsumer:
@@ -27,6 +29,8 @@ class ScanningQueueConsumer:
         
         self._client = None
         self._running = False
+        self._scanner_factory = ScannerAlgoFactory()
+        self._active_scanners = {}  # Track active scanner instances
         
         log(f"Initialized ScanningQueueConsumer with consumer name: {self.consumer_name}")
     
@@ -92,26 +96,123 @@ class ScanningQueueConsumer:
             
             log(f"Processing event {event_id}: {event_type} for trade session {trade_session_id}")
             
-            # Basic event validation
-            if event_type != 'trade_session_initiated':
+            # Handle different event types
+            if event_type == 'trade_session_initiated':
+                return self._handle_trade_session_initiated(event_data)
+            elif event_type == 'trade_session_terminated':
+                return self._handle_trade_session_terminated(event_data)
+            else:
                 log(f"Skipping unknown event type: {event_type}", level="warning")
                 return True
             
-            # TODO: Implement actual business logic here
-            # For now, just log the event details
-            log(f"Successfully processed trade session scanning:")
-            log(f"  - Event ID: {event_id}")
-            log(f"  - Trade Session ID: {trade_session_id}")
+        except Exception as e:
+            log(f"Error processing event: {str(e)}", level="error")
+            return False
+    
+    def _handle_trade_session_initiated(self, event_data: Dict[str, Any]) -> bool:
+        """
+        Handle trade session initiated event by creating and starting a scanner.
+        
+        Args:
+            event_data: The event data containing trade session details
+            
+        Returns:
+            bool: True if scanner started successfully, False otherwise
+        """
+        try:
+            # Extract necessary information
+            trade_session_id = event_data.get('trade_session_id')
+            user_id = event_data.get('user_id')
+            trading_frequency = event_data.get('trading_frequency')
+            is_dummy = event_data.get('is_dummy', False)
+            
+            # Extract algorithm configuration
+            algo_config = event_data.get('algorithm', {}) or event_data.get('algorithm_config', {})
+            scanning_algo_name = algo_config.get('scanning', {}).get('name', 'udts')
+            tracking_algo_name = algo_config.get('tracking', {}).get('name', 'udts_slto')
+            
+            log(f"Starting scanner for trade session {trade_session_id}:")
             log(f"  - User ID: {user_id}")
-            log(f"  - Timestamp: {timestamp}")
-            log(f"  - Trading Frequency: {event_data.get('trading_frequency', 'unknown')}")
-            log(f"  - Is Dummy: {event_data.get('is_dummy', 'unknown')}")
-            log(f"  - Status: {event_data.get('session_status', 'unknown')}")
+            log(f"  - Trading Frequency: {trading_frequency}")
+            log(f"  - Scanning Algorithm: {scanning_algo_name}")
+            log(f"  - Tracking Algorithm: {tracking_algo_name}")
+            log(f"  - Is Dummy: {is_dummy}")
+            
+            # Check if scanner already exists for this session
+            scanner_key = f"{trade_session_id}_{user_id}"
+            if scanner_key in self._active_scanners:
+                existing_scanner = self._active_scanners[scanner_key]
+                if existing_scanner.is_running():
+                    log(f"Scanner already running for trade session {trade_session_id}", level="warning")
+                    return True
+                else:
+                    # Remove the stopped scanner
+                    del self._active_scanners[scanner_key]
+            
+            # Create data providers
+            integration_provider = IntegrationServiceProvider(user_id)
+            tmu_provider = TMUServiceProvider(user_id)
+            
+            # Create scanner instance with trade_session_id
+            scanner = self._scanner_factory.get_scanner(
+                scanning_algo_name=scanning_algo_name,
+                tracking_algo_name=tracking_algo_name,
+                trade_freq=trading_frequency,
+                user_id=user_id,
+                integration_provider=integration_provider,
+                tmu_provider=tmu_provider,
+                trade_session_id=trade_session_id  # Pass trade session ID
+            )
+            
+            if scanner is None:
+                log(f"Unknown scanning algorithm: {scanning_algo_name}", level="error")
+                return False
+            
+            # Store scanner reference
+            self._active_scanners[scanner_key] = scanner
+            
+            # Start scanning in a separate thread
+            scanner.fetch_instrument_tokens_and_start_tracking(user_id, is_dummy)
+            
+            log(f"Successfully started scanner for trade session {trade_session_id}")
+            return True
+            
+        except Exception as e:
+            log(f"Error starting scanner: {str(e)}", level="error")
+            return False
+    
+    def _handle_trade_session_terminated(self, event_data: Dict[str, Any]) -> bool:
+        """
+        Handle trade session terminated event by stopping the scanner.
+        
+        Args:
+            event_data: The event data containing trade session details
+            
+        Returns:
+            bool: True if scanner stopped successfully, False otherwise
+        """
+        try:
+            trade_session_id = event_data.get('trade_session_id')
+            user_id = event_data.get('user_id')
+            
+            scanner_key = f"{trade_session_id}_{user_id}"
+            
+            if scanner_key in self._active_scanners:
+                scanner = self._active_scanners[scanner_key]
+                
+                # Stop the scanner gracefully
+                scanner.stop_scanning()
+                
+                # Remove from active scanners
+                del self._active_scanners[scanner_key]
+                log(f"Stopped and removed scanner for trade session {trade_session_id}")
+            else:
+                log(f"No active scanner found for trade session {trade_session_id}", level="warning")
             
             return True
             
         except Exception as e:
-            log(f"Error processing event: {str(e)}", level="error")
+            log(f"Error stopping scanner: {str(e)}", level="error")
             return False
     
     def _unflatten_event_data(self, flattened_data: Dict[str, str]) -> Dict[str, Any]:
@@ -221,9 +322,22 @@ class ScanningQueueConsumer:
             log("ScanningQueueConsumer stopped")
     
     def stop_consuming(self):
-        """Stop the consumer gracefully"""
+        """Stop the consumer and all active scanners gracefully"""
         log("Stopping ScanningQueueConsumer...")
         self._running = False
+        
+        # Stop all active scanners
+        for scanner_key, scanner in list(self._active_scanners.items()):
+            try:
+                log(f"Stopping scanner: {scanner_key}")
+                scanner.stop_scanning()
+            except Exception as e:
+                log(f"Error stopping scanner {scanner_key}: {str(e)}", level="error")
+            finally:
+                # Remove the scanner regardless of stop result
+                del self._active_scanners[scanner_key]
+        
+        log(f"All {len(self._active_scanners)} scanners stopped")
     
     def health_check(self) -> bool:
         """Check if the consumer can connect to Redis"""

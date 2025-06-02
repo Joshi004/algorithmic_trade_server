@@ -208,3 +208,20 @@ LOGGING = {
         'level': 'DEBUG',
     },
 }
+
+# Service URLs Configuration
+# These URLs are used for inter-service communication in the microservices architecture
+INTEGRATION_SERVICE_URL = os.environ.get('INTEGRATION_SERVICE_URL', 'http://localhost:8000/integration_service')
+TMU_SERVICE_URL = os.environ.get('TMU_SERVICE_URL', 'http://localhost:8000/tmu')
+SCANNING_SERVICE_URL = os.environ.get('SCANNING_SERVICE_URL', 'http://localhost:8000/scanning_service')
+
+# Redis Configuration
+# Used for message queuing, caching, and inter-service communication
+REDIS_HOST = os.environ.get('REDIS_HOST', 'localhost')
+REDIS_PORT = int(os.environ.get('REDIS_PORT', 6379))
+REDIS_DB = int(os.environ.get('REDIS_DB', 0))
+
+# Redis Stream Configuration
+REDIS_STREAM_SCANNING_QUEUE = os.environ.get('REDIS_STREAM_SCANNING_QUEUE', 'scanning_queue')
+REDIS_STREAM_ELIGIBLE_INSTRUMENTS = os.environ.get('REDIS_STREAM_ELIGIBLE_INSTRUMENTS', 'eligible_instruments_stream')
+REDIS_STREAM_SCANNER_STATUS = os.environ.get('REDIS_STREAM_SCANNER_STATUS', 'scanner_status_stream')

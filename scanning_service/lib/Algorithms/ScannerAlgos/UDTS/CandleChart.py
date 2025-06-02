@@ -1,6 +1,6 @@
-from trade_management_unit.lib.Algorithms.ScannerAlgos.UDTS.Candle import Candle
+from scanning_service.lib.Algorithms.ScannerAlgos.UDTS.Candle import Candle
 import pandas as pd
-from trade_management_unit.Constants.TmuConstants import *
+from scanning_service.constants import *
 class CandleChart:
     def __init__(self,token,symbol,market_price,trade_volume,last_quantity,trade_freq,price_list):
         self.price_list = price_list
