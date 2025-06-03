@@ -144,25 +144,34 @@ The scanning service has been successfully decoupled from the Trade Management U
 
 ## Usage Example
 
-### Starting a Scanner
+### Starting a Scanner (New Pattern)
 ```python
 from scanning_service.lib.data_providers import IntegrationServiceProvider, TMUServiceProvider
 from scanning_service.lib.Algorithms.ScannerAlgos.ScannerAlgoFactory import ScannerAlgoFactory
 
-# Create providers
+# Create factory
+factory = ScannerAlgoFactory()
+
+# Create scanner instance (bare, unconfigured)
+scanner = factory.get_scanner(scanning_algo_name="udts")
+
+# Configure the scanner with required parameters
+scanner.configure(
+    trade_freq="5minute",
+    user_id="user_123",
+    trade_session_id="session_456"
+)
+
+# Alternatively, provide custom providers
 integration_provider = IntegrationServiceProvider(user_id="user_123")
 tmu_provider = TMUServiceProvider(user_id="user_123")
 
-# Create scanner
-factory = ScannerAlgoFactory()
-scanner = factory.get_scanner(
-    scanning_algo_name="udts",
-    tracking_algo_name="udts_slto",
+scanner.configure(
     trade_freq="5minute",
     user_id="user_123",
+    trade_session_id="session_456",
     integration_provider=integration_provider,
-    tmu_provider=tmu_provider,
-    trade_session_id="session_456"
+    tmu_provider=tmu_provider
 )
 
 # Start scanning
@@ -171,6 +180,12 @@ scanner.fetch_instrument_tokens_and_start_tracking("user_123", is_dummy=False)
 # Stop scanning when done
 scanner.stop_scanning()
 ```
+
+### Factory Benefits (New Pattern)
+- **Minimal Factory**: Factory only needs algorithm name
+- **Flexible Configuration**: Each scanner can accept different configuration
+- **Lazy Loading**: Dependencies imported only when needed
+- **Easy Extension**: Add new scanners without changing factory signature
 
 ## Testing
 

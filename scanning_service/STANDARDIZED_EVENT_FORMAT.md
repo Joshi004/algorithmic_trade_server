@@ -52,7 +52,26 @@ All scanner algorithms in the scanning service must emit events in a **standardi
 from scanning_service.lib.Algorithms.ScannerAlgos.BaseScannerInterface import BaseScannerInterface
 
 class MyCustomScanner(BaseScannerInterface):
+    def __init__(self):
+        super().__init__()
+        self.custom_analyzer = None
+    
+    def configure(self, trade_freq: str, user_id: str = None, trade_session_id: str = None, **kwargs):
+        """Configure the custom scanner with required parameters."""
+        # Call parent configure
+        super().configure(trade_freq, user_id, trade_session_id, **kwargs)
+        
+        # Import dependencies only when needed
+        from my_custom_service import CustomAnalyzer
+        from scanning_service.lib.utils.event_publisher import get_scanning_event_publisher
+        
+        # Initialize scanner-specific dependencies
+        self.custom_analyzer = CustomAnalyzer(user_id)
+        self.event_publisher = get_scanning_event_publisher()
+    
     def process_eligible_instrument(self, symbol, token, market_price):
+        self._ensure_configured()  # Ensure scanner is configured
+        
         # Prepare raw instrument data
         raw_instrument_data = {
             "instrument_id": token,
@@ -72,6 +91,12 @@ class MyCustomScanner(BaseScannerInterface):
             instrument_data=instrument_data,
             scanner_type="my_custom"
         )
+
+# Usage:
+factory = ScannerAlgoFactory()
+scanner = factory.get_scanner("my_custom")
+scanner.configure(trade_freq="5minute", user_id="user_123", trade_session_id="session_456")
+scanner.start_scanning()
 ```
 
 ## Algorithm-Specific Guidelines

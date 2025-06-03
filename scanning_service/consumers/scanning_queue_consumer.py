@@ -98,8 +98,6 @@ class ScanningQueueConsumer:
             event_id = event_data.get('event_id', 'unknown')
             event_type = event_data.get('event_type', 'unknown')
             trade_session_id = event_data.get('trade_session_id', 'unknown')
-            user_id = event_data.get('user_id', 'unknown')
-            timestamp = event_data.get('timestamp', 'unknown')
             
             log(f"Processing event {event_id}: {event_type} for trade session {trade_session_id}")
             
@@ -160,20 +158,21 @@ class ScanningQueueConsumer:
             integration_provider = IntegrationServiceProvider(user_id)
             tmu_provider = TMUServiceProvider(user_id)
             
-            # Create scanner instance with trade_session_id
-            scanner = self._scanner_factory.get_scanner(
-                scanning_algo_name=scanning_algo_name,
-                tracking_algo_name=tracking_algo_name,
-                trade_freq=trading_frequency,
-                user_id=user_id,
-                integration_provider=integration_provider,
-                tmu_provider=tmu_provider,
-                trade_session_id=trade_session_id  # Pass trade session ID
-            )
+            # Create scanner instance using new factory pattern
+            scanner = self._scanner_factory.get_scanner(scanning_algo_name)
             
             if scanner is None:
                 log(f"Unknown scanning algorithm: {scanning_algo_name}", level="error")
                 return False
+            
+            # Configure the scanner with required parameters
+            scanner.configure(
+                trade_freq=trading_frequency,
+                user_id=user_id,
+                trade_session_id=trade_session_id,
+                integration_provider=integration_provider,
+                tmu_provider=tmu_provider
+            )
             
             # Store scanner reference
             self._active_scanners[scanner_key] = scanner

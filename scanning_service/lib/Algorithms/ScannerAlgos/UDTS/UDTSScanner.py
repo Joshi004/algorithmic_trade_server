@@ -14,13 +14,38 @@ from django.conf import settings
 
 
 class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
-    def __init__(self, trade_freq, user_id=None, integration_provider=None, tmu_provider=None, trade_session_id=None):
+    def __init__(self):
         # Initialize base class
-        super().__init__(trade_freq, user_id, trade_session_id)
+        super().__init__()
         
-        # Use provided data providers or create default ones
-        self.integration_provider = integration_provider or IntegrationServiceProvider(user_id)
-        self.tmu_provider = tmu_provider or TMUServiceProvider(user_id)
+        # Initialize scanner-specific attributes
+        self.integration_provider = None
+        self.tmu_provider = None
+        self.data_provider = None
+        self.event_publisher = None
+        
+        # Thread management
+        self._scanner_thread = None
+        self._stop_event = threading.Event()
+        self._is_running = False
+    
+    def configure(self, trade_freq: str, user_id: str = None, trade_session_id: str = None, **kwargs):
+        """
+        Configure the UDTS scanner with required parameters and dependencies.
+        
+        Args:
+            trade_freq: Trading frequency (e.g., "5minute")
+            user_id: User ID for the scanner
+            trade_session_id: Trade session ID for event correlation
+            **kwargs: Additional configuration (integration_provider, tmu_provider)
+        """
+        # Call parent configure
+        super().configure(trade_freq, user_id, trade_session_id, **kwargs)
+        
+        
+        # Use provided providers or create default ones
+        self.integration_provider = kwargs.get('integration_provider') or IntegrationServiceProvider(user_id)
+        self.tmu_provider = kwargs.get('tmu_provider') or TMUServiceProvider(user_id)
         
         # Keep data_provider for backward compatibility (points to integration provider)
         self.data_provider = self.integration_provider
@@ -28,16 +53,15 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
         # Event publisher
         self.event_publisher = get_scanning_event_publisher()
         
-        # Thread management
-        self._scanner_thread = None
-        self._stop_event = threading.Event()
-        self._is_running = False
+        log(f"UDTS Scanner configured for frequency: {trade_freq}, user: {user_id}, session: {trade_session_id}")
      
     def __str__(self):
         identifier = f"{self.trade_frequency}__udts_scanner"
         return identifier
 
     def scan_in_separate_thread(self, all_instruments, user_id, dummy):
+        self._ensure_configured()
+        
         tm.sleep(4) # let Trade session be created
         counter = 0
         self._is_running = True
@@ -134,6 +158,8 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
         Args:
             eligible_instruments: List of eligible instrument dictionaries in standardized format
         """
+        self._ensure_configured()
+        
         if not self.event_publisher:
             log("Event publisher not available, cannot publish eligible instruments", level="error")
             return
@@ -155,17 +181,19 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
             except Exception as e:
                 log(f"Error publishing eligible instrument {instrument.get('trading_symbol', 'unknown')}: {str(e)}", level="error")
 
-    def __get_required_actions__(self, instrument):
+    def __get_required_actions__(self, effective_trend):
         required_action = None
-        if instrument == Trends.UPTREND:
+        if effective_trend == Trends.UPTREND:
             required_action = OrderType.BUY.value
-        elif instrument == Trends.DOWNTREND:
+        elif effective_trend == Trends.DOWNTREND:
             required_action = OrderType.SELL.value
         else:
             required_action = None
         return required_action
 
     def fetch_instruments_from_db(self):
+        self._ensure_configured()
+        
         search_params = {"exchange": "NSE", "segment": "NSE", "instrument_type": "EQ", "page_length": 5000}
         
         # Fetch Instruments using TMU service provider
@@ -180,11 +208,15 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
         log(f"Successfully fetched {len(instruments)} instruments from TMU")
         return instruments
 
-    def fetch_instrument_tokens_and_start_tracking(self,user_id,dummy):
+    def fetch_instrument_tokens_and_start_tracking(self, user_id, dummy):
+        self._ensure_configured()
+        
         result = self.fetch_instruments_from_db()
-        self.scan_and_add_instruments_for_tracking(result,user_id,dummy)
+        self.scan_and_add_instruments_for_tracking(result, user_id, dummy)
 
     def scan_and_add_instruments_for_tracking(self, all_instruments, user_id, dummy):
+        self._ensure_configured()
+        
         # Store the thread reference
         thread_name = f"scanner_thread_udts_{self.trade_frequency}"
         self._scanner_thread = threading.Thread(
@@ -213,7 +245,9 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
         average_candle_span = price_list_df["diff"].mean()
         return float(average_candle_span)
 
-    def is_eligible(self,symbol):
+    def is_eligible(self, symbol):
+        self._ensure_configured()
+        
         eligibility_obj = {"message": str(symbol) + " : Eligible"}
         
         # Fetch Quotes using data provider
@@ -298,6 +332,8 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
             
             
     def get_udts_eligibility(self,symbol,trade_freq):
+        self._ensure_configured()
+        
         print("get token and send hereh !!! nOt Working !!!!")
         is_tradable,eligibility_obj =  self.is_eligible(symbol)
         result = eligibility_obj[trade_freq]["chart"]

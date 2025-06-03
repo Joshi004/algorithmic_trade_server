@@ -22,18 +22,51 @@ class BaseScannerInterface(ABC):
         'market_price'        # Required: Current market price
     ]
     
-    def __init__(self, trade_freq, user_id=None, trade_session_id=None):
+    def __init__(self):
         """
-        Initialize the scanner with common parameters.
+        Initialize the scanner with minimal setup.
+        Use configure() method to set up the scanner with required parameters.
+        """
+        self.trade_frequency = None
+        self.user_id = None
+        self.trade_session_id = None
+        self._configured = False
+    
+    @abstractmethod
+    def configure(self, trade_freq: str, user_id: str = None, trade_session_id: str = None, **kwargs):
+        """
+        Configure the scanner with required parameters and dependencies.
+        Each scanner implementation can accept different configuration parameters.
         
         Args:
             trade_freq: Trading frequency (e.g., "5minute")
             user_id: User ID for the scanner
             trade_session_id: Trade session ID for event correlation
+            **kwargs: Additional scanner-specific configuration parameters
         """
         self.trade_frequency = trade_freq
         self.user_id = user_id
         self.trade_session_id = trade_session_id
+        self._configured = True
+    
+    def is_configured(self) -> bool:
+        """
+        Check if the scanner has been properly configured.
+        
+        Returns:
+            bool: True if configured, False otherwise
+        """
+        return self._configured
+    
+    def _ensure_configured(self):
+        """
+        Ensure the scanner is configured before running operations.
+        
+        Raises:
+            RuntimeError: If scanner is not configured
+        """
+        if not self.is_configured():
+            raise RuntimeError(f"Scanner {self.__class__.__name__} must be configured before use. Call configure() first.")
     
     @abstractmethod
     def is_eligible(self, symbol: str) -> tuple[bool, Dict[str, Any]]:
