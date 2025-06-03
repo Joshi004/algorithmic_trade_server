@@ -145,18 +145,3 @@ class BaseScannerInterface(ABC):
         
         return standardized_data
     
-    def get_standard_event_format(self) -> Dict[str, str]:
-        """
-        Get the standard event format documentation.
-        
-        Returns:
-            dict: Field descriptions for the standard format
-        """
-        return {
-            'instrument_id': 'Unique identifier for the instrument (string)',
-            'trading_symbol': 'Trading symbol like RELIANCE, HDFCBANK (string)',
-            'support_price': 'Support price level or None if not applicable (float|None)',
-            'resistance_price': 'Resistance price level or None if not applicable (float|None)',
-            'required_action': '"buy", "sell", or None based on analysis (string|None)',
-            'market_price': 'Current market price (float)'
-        } 
