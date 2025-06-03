@@ -8,7 +8,7 @@ import django.utils.timezone
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('trade_management_unit', '0006_tradesession_trading_frequency'),
+        ('trade_management_unit', '0006_create_trade_sessions_table'),
     ]
 
     operations = [
@@ -25,18 +25,6 @@ class Migration(migrations.Migration):
             ],
             options={
                 'db_table': 'dummy_users',
-            },
-        ),
-        migrations.CreateModel(
-            name='UserConfiguration',
-            fields=[
-                ('id', models.AutoField(primary_key=True, serialize=False)),
-                ('user_id', models.IntegerField(unique=True)),
-                ('risk_appetite', models.FloatField(default=5, validators=[django.core.validators.MinValueValidator(0), django.core.validators.MaxValueValidator(100)])),
-                ('risk_reward_ratio', models.FloatField(default=0.5)),
-            ],
-            options={
-                'db_table': 'user_configurations',
             },
         ),
         migrations.AddField(
