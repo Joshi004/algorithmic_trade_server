@@ -7,6 +7,7 @@ from typing import Dict, Any, Optional
 
 from django.conf import settings
 from scanning_service.lib.utils.logger import log
+from scanning_service.lib.utils.redis_data_utils import restore_from_redis_stream
 from scanning_service.lib.Algorithms.ScannerAlgos.ScannerAlgoFactory import ScannerAlgoFactory
 from scanning_service.lib.data_providers import IntegrationServiceProvider, TMUServiceProvider
 
@@ -221,38 +222,6 @@ class ScanningQueueConsumer:
             log(f"Error stopping scanner: {str(e)}", level="error")
             return False
     
-    def _unflatten_event_data(self, flattened_data: Dict[str, str]) -> Dict[str, Any]:
-        """
-        Convert flattened Redis stream data back to nested structure.
-        
-        Args:
-            flattened_data: Flattened data from Redis stream
-            
-        Returns:
-            dict: Reconstructed nested data
-        """
-        result = {}
-        
-        for key, value in flattened_data.items():
-            if '_' in key:
-                # Handle nested keys (e.g., "algorithm_config_scanning_algorithm_id")
-                parts = key.split('_')
-                current = result
-                
-                # Navigate/create nested structure
-                for part in parts[:-1]:
-                    if part not in current:
-                        current[part] = {}
-                    current = current[part]
-                
-                # Set the final value
-                current[parts[-1]] = value
-            else:
-                # Direct key
-                result[key] = value
-        
-        return result
-    
     def start_consuming(self):
         """Start consuming messages from the scanning queue"""
         try:
@@ -291,7 +260,7 @@ class ScanningQueueConsumer:
                             for message_id, fields in stream_messages:
                                 try:
                                     # Unflatten the event data
-                                    event_data = self._unflatten_event_data(fields)
+                                    event_data = restore_from_redis_stream(fields)
                                     
                                     # Process the event
                                     success = self._process_event(event_data)

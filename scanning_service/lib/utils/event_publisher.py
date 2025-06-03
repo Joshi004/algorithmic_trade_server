@@ -2,7 +2,6 @@
 Event publisher for the scanning service.
 Publishes scanner-related events to Redis streams for consumption by other services.
 """
-import json
 import time
 import uuid
 from datetime import datetime
@@ -10,6 +9,7 @@ from typing import Dict, Any, Optional
 
 from django.conf import settings
 from scanning_service.lib.utils.redis_client import get_redis_client
+from scanning_service.lib.utils.redis_data_utils import prepare_for_redis_stream
 from scanning_service.lib.utils.logger import log
 from scanning_service.lib.utils.common import current_ist
 
@@ -39,37 +39,6 @@ class ScanningEventPublisher:
     def _generate_event_id(self) -> str:
         """Generate a unique event ID."""
         return f"evt_{int(time.time() * 1000)}_{uuid.uuid4().hex[:8]}"
-    
-    def _flatten_dict(self, data: Dict[str, Any], parent_key: str = '') -> Dict[str, str]:
-        """
-        Flatten nested dictionary for Redis stream.
-        Redis streams require flat key-value pairs.
-        
-        Args:
-            data: Dictionary to flatten
-            parent_key: Parent key for nested items
-            
-        Returns:
-            Flattened dictionary with string values
-        """
-        items = []
-        for key, value in data.items():
-            new_key = f"{parent_key}_{key}" if parent_key else key
-            
-            if isinstance(value, dict):
-                # Recursively flatten nested dictionaries
-                items.extend(self._flatten_dict(value, new_key).items())
-            elif isinstance(value, (list, tuple)):
-                # Convert lists to JSON strings
-                items.append((new_key, json.dumps(value)))
-            elif value is None:
-                # Convert None to empty string
-                items.append((new_key, ''))
-            else:
-                # Convert everything else to string
-                items.append((new_key, str(value)))
-        
-        return dict(items)
     
     def publish_eligible_instrument(
         self,
@@ -117,8 +86,8 @@ class ScanningEventPublisher:
                 'market_price': instrument_data.get('market_price')
             }
             
-            # Flatten the data for Redis stream
-            flat_data = self._flatten_dict(event_data)
+            # Flatten the data for Redis stream using centralized utility
+            flat_data = prepare_for_redis_stream(event_data)
             
             # Publish to stream
             message_id = self.redis_client.xadd(
@@ -173,8 +142,8 @@ class ScanningEventPublisher:
             if details:
                 event_data['details'] = details
             
-            # Flatten the data for Redis stream
-            flat_data = self._flatten_dict(event_data)
+            # Flatten the data for Redis stream using centralized utility
+            flat_data = prepare_for_redis_stream(event_data)
             
             # Publish to stream
             message_id = self.redis_client.xadd(

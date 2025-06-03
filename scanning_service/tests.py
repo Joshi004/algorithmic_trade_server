@@ -5,6 +5,7 @@ from django.test import TestCase
 from unittest.mock import patch, MagicMock
 from scanning_service.consumers.scanning_queue_consumer import ScanningQueueConsumer
 from scanning_service.lib.utils.logger import log
+from scanning_service.lib.utils.redis_data_utils import restore_from_redis_stream
 
 
 class ScanningQueueConsumerTest(TestCase):
@@ -37,7 +38,7 @@ class ScanningQueueConsumerTest(TestCase):
     
     def test_event_data_unflattening(self):
         """Test that flattened event data is correctly reconstructed"""
-        result = self.consumer._unflatten_event_data(self.test_event_data)
+        result = restore_from_redis_stream(self.test_event_data)
         
         # Check basic fields
         self.assertEqual(result['event_id'], 'test-event-123')
