@@ -45,26 +45,6 @@ class Migration(migrations.Migration):
             name='scanning_alogo_id',
         ),
         migrations.AddField(
-            model_name='order',
-            name='dummy',
-            field=models.BooleanField(default=False),
-        ),
-        migrations.AddField(
-            model_name='order',
-            name='frictional_losses',
-            field=models.FloatField(blank=True, null=True),
-        ),
-        migrations.AddField(
-            model_name='order',
-            name='kite_order_id',
-            field=models.CharField(blank=True, max_length=64, null=True),
-        ),
-        migrations.AddField(
-            model_name='order',
-            name='user_id',
-            field=models.CharField(default='1', max_length=64),
-        ),
-        migrations.AddField(
             model_name='trade',
             name='dummy',
             field=models.BooleanField(default=False),

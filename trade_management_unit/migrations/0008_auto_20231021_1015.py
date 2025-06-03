@@ -27,11 +27,6 @@ class Migration(migrations.Migration):
                 'db_table': 'dummy_users',
             },
         ),
-        migrations.AddField(
-            model_name='order',
-            name='quantity',
-            field=models.IntegerField(default=1),
-        ),
         migrations.AddIndex(
             model_name='tradesession',
             index=models.Index(fields=['user_id'], name='trade_sessi_user_id_bed6cb_idx'),
