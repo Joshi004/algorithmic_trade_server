@@ -1,6 +1,7 @@
 import redis
 import json
 import os
+from django.conf import settings
 from trade_management_unit.lib.common.Utils.custome_logger import log
 
 
@@ -12,12 +13,14 @@ class RedisStreamClient:
     """
     
     def __init__(self):
-        """Initialize Redis connection using environment variables"""
-        self.redis_host = os.environ.get('REDIS_HOST', 'localhost')
-        self.redis_port = int(os.environ.get('REDIS_PORT', 6379))
-        self.redis_db = 0
-        # Socket timeout (in seconds) - If Redis operations like connect/read/write take longer than this, they will timeout
-        self.connection_timeout = 5  # Both socket_timeout and socket_connect_timeout in Redis client
+        """Initialize Redis connection using Django settings with fallbacks"""
+        # Get Redis configuration from Django settings with fallbacks
+        self.redis_host = getattr(settings, 'REDIS_HOST', 'localhost')
+        self.redis_port = getattr(settings, 'REDIS_PORT', 6379)
+        self.redis_db = getattr(settings, 'REDIS_DB', 0)
+        self.socket_timeout = getattr(settings, 'REDIS_SOCKET_TIMEOUT', 5)
+        self.socket_connect_timeout = getattr(settings, 'REDIS_SOCKET_CONNECT_TIMEOUT', 5)
+        self.health_check_interval = getattr(settings, 'REDIS_HEALTH_CHECK_INTERVAL', 30)
         self._client = None
     
     def _get_redis_client(self):
@@ -28,10 +31,10 @@ class RedisStreamClient:
                     host=self.redis_host,
                     port=self.redis_port,
                     db=self.redis_db,
-                    socket_timeout=self.connection_timeout,
-                    socket_connect_timeout=self.connection_timeout,
+                    socket_timeout=self.socket_timeout,
+                    socket_connect_timeout=self.socket_connect_timeout,
                     decode_responses=True,
-                    health_check_interval=30
+                    health_check_interval=self.health_check_interval
                 )
             return self._client
         except Exception as e:

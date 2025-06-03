@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from django.conf import settings
 from trade_management_unit.lib.common.Utils.redis_stream_client import get_redis_stream_client
 from trade_management_unit.lib.common.Utils.custome_logger import log
 from trade_management_unit.lib.common.Utils.Utils import current_ist
@@ -11,11 +12,10 @@ class TradeSessionEventPublisher:
     Handles formatting and publishing of events to Redis streams.
     """
     
-    # Stream names as constants
-    SCANNING_QUEUE = "scanning_queue"
-    
     def __init__(self):
         """Initialize the event publisher"""
+        # Get stream names from Django settings
+        self.scanning_queue = getattr(settings, 'REDIS_STREAM_SCANNING_QUEUE', 'scanning_queue')
         self.redis_client = get_redis_stream_client()
     
     def publish_trade_session_initiated(self, trade_session_obj, message="New session created"):
@@ -40,7 +40,7 @@ class TradeSessionEventPublisher:
             
             # Publish to Redis stream
             success = self.redis_client.publish_to_stream(
-                self.SCANNING_QUEUE, 
+                self.scanning_queue, 
                 event_data
             )
             

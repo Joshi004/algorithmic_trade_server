@@ -222,6 +222,20 @@ REDIS_PORT = int(os.environ.get('REDIS_PORT', 6379))
 REDIS_DB = int(os.environ.get('REDIS_DB', 0))
 
 # Redis Stream Configuration
+# Stream names for different event types
 REDIS_STREAM_SCANNING_QUEUE = os.environ.get('REDIS_STREAM_SCANNING_QUEUE', 'scanning_queue')
-REDIS_STREAM_ELIGIBLE_INSTRUMENTS = os.environ.get('REDIS_STREAM_ELIGIBLE_INSTRUMENTS', 'eligible_instruments_stream')
+REDIS_STREAM_INITIATION_QUEUE = os.environ.get('REDIS_STREAM_INITIATION_QUEUE', 'initiation_queue')
 REDIS_STREAM_SCANNER_STATUS = os.environ.get('REDIS_STREAM_SCANNER_STATUS', 'scanner_status_stream')
+
+# Service Communication Timeouts (in seconds)
+SERVICE_REQUEST_TIMEOUT = int(os.environ.get('SERVICE_REQUEST_TIMEOUT', 30))
+SERVICE_CONNECT_TIMEOUT = int(os.environ.get('SERVICE_CONNECT_TIMEOUT', 10))
+
+# Redis Connection Configuration
+REDIS_SOCKET_TIMEOUT = int(os.environ.get('REDIS_SOCKET_TIMEOUT', 5))
+REDIS_SOCKET_CONNECT_TIMEOUT = int(os.environ.get('REDIS_SOCKET_CONNECT_TIMEOUT', 5))
+REDIS_HEALTH_CHECK_INTERVAL = int(os.environ.get('REDIS_HEALTH_CHECK_INTERVAL', 30))
+
+# Consumer Configuration
+REDIS_CONSUMER_BATCH_SIZE = int(os.environ.get('REDIS_CONSUMER_BATCH_SIZE', 10))
+REDIS_CONSUMER_TIMEOUT = int(os.environ.get('REDIS_CONSUMER_TIMEOUT', 1000))  # milliseconds

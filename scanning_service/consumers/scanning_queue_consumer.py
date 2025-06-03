@@ -5,6 +5,7 @@ import os
 from datetime import datetime
 from typing import Dict, Any, Optional
 
+from django.conf import settings
 from scanning_service.lib.utils.logger import log
 from scanning_service.lib.Algorithms.ScannerAlgos.ScannerAlgoFactory import ScannerAlgoFactory
 from scanning_service.lib.data_providers import IntegrationServiceProvider, TMUServiceProvider
@@ -18,14 +19,20 @@ class ScanningQueueConsumer:
     
     def __init__(self):
         """Initialize the consumer with Redis connection and configuration"""
-        self.redis_host = os.environ.get('REDIS_HOST', 'localhost')
-        self.redis_port = int(os.environ.get('REDIS_PORT', 6379))
-        self.redis_db = 0
-        self.stream_name = "scanning_queue"
+        # Get configuration from Django settings
+        self.redis_host = getattr(settings, 'REDIS_HOST', 'localhost')
+        self.redis_port = getattr(settings, 'REDIS_PORT', 6379)
+        self.redis_db = getattr(settings, 'REDIS_DB', 0)
+        self.socket_timeout = getattr(settings, 'REDIS_SOCKET_TIMEOUT', 5)
+        self.socket_connect_timeout = getattr(settings, 'REDIS_SOCKET_CONNECT_TIMEOUT', 5)
+        self.health_check_interval = getattr(settings, 'REDIS_HEALTH_CHECK_INTERVAL', 30)
+        
+        # Stream and consumer configuration
+        self.stream_name = getattr(settings, 'REDIS_STREAM_SCANNING_QUEUE', 'scanning_queue')
         self.consumer_group = "scanning_service_group"
         self.consumer_name = f"scanning_consumer_{int(time.time())}"
-        self.batch_size = 10
-        self.timeout = 1000  # 1 second timeout
+        self.batch_size = getattr(settings, 'REDIS_CONSUMER_BATCH_SIZE', 10)
+        self.timeout = getattr(settings, 'REDIS_CONSUMER_TIMEOUT', 1000)  # milliseconds
         
         self._client = None
         self._running = False
@@ -42,10 +49,10 @@ class ScanningQueueConsumer:
                     host=self.redis_host,
                     port=self.redis_port,
                     db=self.redis_db,
-                    socket_timeout=5,
-                    socket_connect_timeout=5,
+                    socket_timeout=self.socket_timeout,
+                    socket_connect_timeout=self.socket_connect_timeout,
                     decode_responses=True,
-                    health_check_interval=30
+                    health_check_interval=self.health_check_interval
                 )
             return self._client
         except Exception as e:

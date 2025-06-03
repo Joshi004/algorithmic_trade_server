@@ -8,6 +8,7 @@ import uuid
 from datetime import datetime
 from typing import Dict, Any, Optional
 
+from django.conf import settings
 from scanning_service.lib.utils.redis_client import get_redis_client
 from scanning_service.lib.utils.logger import log
 from scanning_service.lib.utils.common import current_ist
@@ -18,12 +19,12 @@ class ScanningEventPublisher:
     Publishes scanning-related events to Redis streams.
     """
     
-    # Stream names
-    ELIGIBLE_INSTRUMENTS_STREAM = "eligible_instruments_stream"
-    SCANNER_STATUS_STREAM = "scanner_status_stream"
-    
     def __init__(self):
         """Initialize the event publisher."""
+        # Get stream names from Django settings
+        self.initiation_queue_stream = getattr(settings, 'REDIS_STREAM_INITIATION_QUEUE', 'initiation_queue')
+        self.scanner_status_stream = getattr(settings, 'REDIS_STREAM_SCANNER_STATUS', 'scanner_status_stream')
+        
         self.redis_client = None
         self._ensure_redis_connection()
     
@@ -72,37 +73,48 @@ class ScanningEventPublisher:
     
     def publish_eligible_instrument(
         self,
-        user_id: str,
         trade_session_id: str,
         instrument_data: Dict[str, Any],
         scanner_type: str = "udts"
     ) -> Optional[str]:
         """
-        Publish an eligible instrument found by scanner.
+        Publish an eligible instrument found by scanner using standardized format.
         
         Args:
-            user_id: User ID
             trade_session_id: Trade session ID
-            instrument_data: Dictionary containing instrument details
+            instrument_data: Dictionary containing standardized instrument details
             scanner_type: Type of scanner (default: "udts")
             
         Returns:
             Message ID if successful, None otherwise
+            
+        Expected instrument_data format:
+        {
+            "instrument_id": "738561",
+            "trading_symbol": "RELIANCE", 
+            "support_price": 2450.50,
+            "resistance_price": 2500.75,
+            "required_action": "buy",
+            "market_price": 2475.30
+        }
         """
         if not self.redis_client:
             log("Redis client not available, cannot publish event", level="error")
             return None
         
         try:
-            # Create event data
+            # Create standardized event data format
             event_data = {
                 'event_id': self._generate_event_id(),
                 'event_type': 'eligible_instrument_found',
-                'user_id': user_id,
                 'trade_session_id': trade_session_id,
-                'scanner_type': scanner_type,
                 'timestamp': current_ist().isoformat(),
-                'instrument': instrument_data
+                'instrument_id': instrument_data.get('instrument_id'),
+                'trading_symbol': instrument_data.get('trading_symbol'),
+                'support_price': instrument_data.get('support_price'),
+                'resistance_price': instrument_data.get('resistance_price'),
+                'required_action': instrument_data.get('required_action'),
+                'market_price': instrument_data.get('market_price')
             }
             
             # Flatten the data for Redis stream
@@ -110,7 +122,7 @@ class ScanningEventPublisher:
             
             # Publish to stream
             message_id = self.redis_client.xadd(
-                self.ELIGIBLE_INSTRUMENTS_STREAM,
+                self.initiation_queue_stream,
                 flat_data
             )
             
@@ -166,7 +178,7 @@ class ScanningEventPublisher:
             
             # Publish to stream
             message_id = self.redis_client.xadd(
-                self.SCANNER_STATUS_STREAM,
+                self.scanner_status_stream,
                 flat_data
             )
             
@@ -179,18 +191,16 @@ class ScanningEventPublisher:
     
     def publish_batch_eligible_instruments(
         self,
-        user_id: str,
         trade_session_id: str,
         instruments: list,
         scanner_type: str = "udts"
     ) -> int:
         """
-        Publish multiple eligible instruments in batch.
+        Publish multiple eligible instruments in batch using standardized format.
         
         Args:
-            user_id: User ID
             trade_session_id: Trade session ID
-            instruments: List of instrument data dictionaries
+            instruments: List of instrument data dictionaries in standardized format
             scanner_type: Type of scanner
             
         Returns:
@@ -200,7 +210,6 @@ class ScanningEventPublisher:
         
         for instrument in instruments:
             if self.publish_eligible_instrument(
-                user_id,
                 trade_session_id,
                 instrument,
                 scanner_type

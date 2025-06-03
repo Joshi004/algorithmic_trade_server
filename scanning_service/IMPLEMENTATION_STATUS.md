@@ -14,10 +14,11 @@ The scanning service has been successfully decoupled from the Trade Management U
 ### 2. **Event Publishing System**
 - Implemented `ScanningEventPublisher` for publishing events to Redis streams
 - Created two main event streams:
-  - `eligible_instruments_stream` - For publishing eligible instruments
+  - `initiation_queue` - For publishing eligible instruments (renamed from eligible_instruments_stream)
   - `scanner_status_stream` - For publishing scanner status updates
 - Added event flattening for Redis compatibility
 - Implemented batch publishing capabilities
+- Stream names now configurable via Django settings
 
 ### 3. **UDTS Scanner Improvements**
 - Removed tight coupling with TMU models (deleted UDTSHelper)
@@ -40,9 +41,13 @@ The scanning service has been successfully decoupled from the Trade Management U
 - Added trade_session_id passing for event correlation
 
 ### 6. **Configuration**
-- Added service URL configurations (TMU_SERVICE_URL, INTEGRATION_SERVICE_URL)
-- Added Redis configuration settings
-- Made all configurations environment-variable based
+- Added service URL configurations (TMU_SERVICE_URL, INTEGRATION_SERVICE_URL, SCANNING_SERVICE_URL)
+- Added comprehensive Redis configuration settings with timeouts and connection parameters
+- Added consumer configuration parameters (batch size, timeout)
+- Added service communication timeout settings
+- Made all configurations environment-variable based with proper fallbacks
+- Stream names now configurable via REDIS_STREAM_* environment variables
+- All configuration parameters consistent across Docker Compose and application settings
 
 ### 7. **Test Scripts**
 - Created `test_tmu_provider.py` for TMU service testing
@@ -61,8 +66,8 @@ The scanning service has been successfully decoupled from the Trade Management U
 - Prevent duplicate scanners across multiple containers
 - Add lock expiry and renewal mechanisms
 
-### 3. **Consumer Group for Eligible Instruments**
-- Create a consumer for the `eligible_instruments_stream`
+### 3. **Consumer Group for Initiation Queue**
+- Create a consumer for the `initiation_queue` stream (renamed from eligible_instruments_stream)
 - This consumer should trigger tracking algorithms
 - Handle event acknowledgment and retries
 
@@ -88,35 +93,35 @@ The scanning service has been successfully decoupled from the Trade Management U
 
 ## Event Formats
 
-### Eligible Instrument Event
+### Eligible Instrument Event (Standardized Format)
 ```json
 {
   "event_id": "evt_1234567890_abcd1234",
   "event_type": "eligible_instrument_found",
-  "user_id": "user_123",
   "trade_session_id": "session_456",
-  "scanner_type": "udts",
   "timestamp": "2024-01-15T10:30:45+05:30",
-  "instrument": {
-    "instrument_id": "738561",
-    "trading_symbol": "RELIANCE",
-    "instrument_token": "738561",
-    "trade_frequency": "5minute",
-    "effective_trend": "uptrend",
-    "support_price": 2450.50,
-    "resistance_price": 2500.75,
-    "support_strength": 0.85,
-    "resistance_strength": 0.92,
-    "movement_potential": 15.25,
-    "required_action": "buy",
-    "market_data": {
-      "volume": 1234567,
-      "market_price": 2475.30,
-      "last_quantity": 100
-    }
-  }
+  "instrument_id": "738561",
+  "trading_symbol": "RELIANCE",
+  "support_price": 2450.50,
+  "resistance_price": 2500.75,
+  "required_action": "buy",
+  "market_price": 2475.30
 }
 ```
+
+**Field Descriptions:**
+- `event_id`: Unique event identifier (format: `evt_<timestamp>_<uuid>`)
+- `event_type`: Always `"eligible_instrument_found"` for eligible instruments
+- `trade_session_id`: Associated trade session ID for correlation
+- `timestamp`: Event timestamp in IST (ISO format)
+- `instrument_id`: Unique identifier for the instrument (string)
+- `trading_symbol`: Trading symbol like "RELIANCE", "HDFCBANK" (string)
+- `support_price`: Support price level or `null` if not applicable (float|null)
+- `resistance_price`: Resistance price level or `null` if not applicable (float|null)
+- `required_action`: `"buy"`, `"sell"`, or `null` based on analysis (string|null)
+- `market_price`: Current market price (float)
+
+**Note:** This standardized format must be followed by all scanner algorithms. Fields not applicable to a specific algorithm should be set to `null`.
 
 ### Scanner Status Event
 ```json

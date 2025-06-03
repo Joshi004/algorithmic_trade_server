@@ -2,6 +2,7 @@ import time as tm
 from scanning_service.lib.utils.logger import log
 from scanning_service.lib.Algorithms.ScannerAlgos.UDTS.CandleChart import CandleChart
 from scanning_service.lib.Algorithms.ScannerAlgos.ScannerSingletonMeta import ScannerSingletonMeta
+from scanning_service.lib.Algorithms.ScannerAlgos.BaseScannerInterface import BaseScannerInterface
 from scanning_service.constants import *
 import pandas as pd
 import threading
@@ -12,11 +13,10 @@ import requests
 from django.conf import settings
 
 
-class UDTSScanner(metaclass=ScannerSingletonMeta):
+class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
     def __init__(self, trade_freq, user_id=None, integration_provider=None, tmu_provider=None, trade_session_id=None):
-        self.trade_frequency = trade_freq
-        self.user_id = user_id
-        self.trade_session_id = trade_session_id
+        # Initialize base class
+        super().__init__(trade_freq, user_id, trade_session_id)
         
         # Use provided data providers or create default ones
         self.integration_provider = integration_provider or IntegrationServiceProvider(user_id)
@@ -76,24 +76,18 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
                     log(f"found next eligible instrument -- {eligible_instrument_counter} {symbol}")
                     symbol_data_points = eligibility_obj[self.trade_frequency]["chart"]
                     
-                    instrument_data = {
+                    # Prepare raw instrument data
+                    raw_instrument_data = {
                         "instrument_id": instrument_id,
                         "trading_symbol": symbol,
-                        "instrument_token": token,
-                        "trade_frequency": self.trade_frequency,
-                        "effective_trend": eligibility_obj["effective_trend"].value,  # Convert enum to string
                         "support_price": float(symbol_data_points.trading_pair["support"]),
                         "resistance_price": float(symbol_data_points.trading_pair["resistance"]),
-                        "support_strength": float(symbol_data_points.trading_pair["support_strength"]),
-                        "resistance_strength": float(symbol_data_points.trading_pair["resistance_strength"]),
-                        "movement_potential": float(symbol_data_points.average_candle_span),
-                        "market_data": {
-                            "volume": int(symbol_data_points.volume),
-                            "market_price": float(symbol_data_points.market_price),
-                            "last_quantity": int(symbol_data_points.last_quantity)
-                        }
+                        "required_action": self.__get_required_actions__(eligibility_obj["effective_trend"]),
+                        "market_price": float(symbol_data_points.market_price)
                     }
-                    instrument_data["required_action"] = self.__get_required_actions__(instrument_data)
+                    
+                    # Format using base class method to ensure standardization
+                    instrument_data = self.format_eligible_instrument(raw_instrument_data)
                     
                     # Publish the eligible instrument immediately
                     self.add_tokens_to_subscribed_trade_sessions([instrument_data])
@@ -138,7 +132,7 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
         Publish eligible instruments to Redis stream for consumption by other services.
         
         Args:
-            eligible_instruments: List of eligible instrument dictionaries
+            eligible_instruments: List of eligible instrument dictionaries in standardized format
         """
         if not self.event_publisher:
             log("Event publisher not available, cannot publish eligible instruments", level="error")
@@ -146,9 +140,8 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
         
         for instrument in eligible_instruments:
             try:
-                # Publish the eligible instrument event
+                # Publish the eligible instrument event using standardized format
                 message_id = self.event_publisher.publish_eligible_instrument(
-                    user_id=self.user_id,
                     trade_session_id=self.trade_session_id,
                     instrument_data=instrument,
                     scanner_type="udts"
@@ -164,9 +157,9 @@ class UDTSScanner(metaclass=ScannerSingletonMeta):
 
     def __get_required_actions__(self, instrument):
         required_action = None
-        if instrument["effective_trend"] == Trends.UPTREND:
+        if instrument == Trends.UPTREND:
             required_action = OrderType.BUY.value
-        elif instrument["effective_trend"] == Trends.DOWNTREND:
+        elif instrument == Trends.DOWNTREND:
             required_action = OrderType.SELL.value
         else:
             required_action = None

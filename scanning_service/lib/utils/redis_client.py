@@ -23,20 +23,23 @@ def get_redis_client():
     
     if _redis_client is None:
         try:
-            # Get Redis configuration from settings or environment
-            redis_host = getattr(settings, 'REDIS_HOST', os.environ.get('REDIS_HOST', 'localhost'))
-            redis_port = int(getattr(settings, 'REDIS_PORT', os.environ.get('REDIS_PORT', 6379)))
-            redis_db = int(getattr(settings, 'REDIS_DB', os.environ.get('REDIS_DB', 0)))
+            # Get Redis configuration from Django settings with fallbacks
+            redis_host = getattr(settings, 'REDIS_HOST', 'localhost')
+            redis_port = getattr(settings, 'REDIS_PORT', 6379)
+            redis_db = getattr(settings, 'REDIS_DB', 0)
+            socket_timeout = getattr(settings, 'REDIS_SOCKET_TIMEOUT', 5)
+            socket_connect_timeout = getattr(settings, 'REDIS_SOCKET_CONNECT_TIMEOUT', 5)
+            health_check_interval = getattr(settings, 'REDIS_HEALTH_CHECK_INTERVAL', 30)
             
             _redis_client = redis.Redis(
                 host=redis_host,
                 port=redis_port,
                 db=redis_db,
                 decode_responses=True,
-                socket_timeout=5,
-                socket_connect_timeout=5,
+                socket_timeout=socket_timeout,
+                socket_connect_timeout=socket_connect_timeout,
                 socket_keepalive=True,
-                health_check_interval=30
+                health_check_interval=health_check_interval
             )
             
             # Test the connection

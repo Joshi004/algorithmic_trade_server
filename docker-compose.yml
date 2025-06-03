@@ -50,6 +50,7 @@ services:
     volumes:
       - .:/app
     environment:
+      # Database Configuration
       - DATABASE_ENGINE=django.db.backends.mysql
       - DATABASE_NAME=ats_db
       - DATABASE_USER=ats_user
@@ -57,8 +58,34 @@ services:
       - DATABASE_HOST=ats-db
       - DATABASE_PORT=3306
       - TEST_DATABASE_NAME=test_ats_db
+      
+      # Redis Configuration
       - REDIS_HOST=ats-redis
       - REDIS_PORT=6379
+      - REDIS_DB=0
+      - REDIS_SOCKET_TIMEOUT=5
+      - REDIS_SOCKET_CONNECT_TIMEOUT=5
+      - REDIS_HEALTH_CHECK_INTERVAL=30
+      
+      # Redis Stream Configuration
+      - REDIS_STREAM_SCANNING_QUEUE=scanning_queue
+      - REDIS_STREAM_INITIATION_QUEUE=initiation_queue
+      - REDIS_STREAM_SCANNER_STATUS=scanner_status_stream
+      
+      # Consumer Configuration
+      - REDIS_CONSUMER_BATCH_SIZE=10
+      - REDIS_CONSUMER_TIMEOUT=1000
+      
+      # Service URLs
+      - INTEGRATION_SERVICE_URL=http://ats-app:8000/integration_service
+      - TMU_SERVICE_URL=http://ats-app:8000/tmu
+      - SCANNING_SERVICE_URL=http://ats-app:8000/scanning_service
+      
+      # Service Timeouts
+      - SERVICE_REQUEST_TIMEOUT=30
+      - SERVICE_CONNECT_TIMEOUT=10
+      
+      # Django Configuration
       - DJANGO_DEBUG=True
       - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
       - DJANGO_SETTINGS_MODULE=ats_base.settings
@@ -76,14 +103,41 @@ services:
     volumes:
       - .:/app
     environment:
+      # Database Configuration
       - DATABASE_ENGINE=django.db.backends.mysql
       - DATABASE_NAME=ats_db
       - DATABASE_USER=ats_user
       - DATABASE_PASSWORD=ats_password
       - DATABASE_HOST=ats-db
       - DATABASE_PORT=3306
+      
+      # Redis Configuration
       - REDIS_HOST=ats-redis
       - REDIS_PORT=6379
+      - REDIS_DB=0
+      - REDIS_SOCKET_TIMEOUT=5
+      - REDIS_SOCKET_CONNECT_TIMEOUT=5
+      - REDIS_HEALTH_CHECK_INTERVAL=30
+      
+      # Redis Stream Configuration
+      - REDIS_STREAM_SCANNING_QUEUE=scanning_queue
+      - REDIS_STREAM_INITIATION_QUEUE=initiation_queue
+      - REDIS_STREAM_SCANNER_STATUS=scanner_status_stream
+      
+      # Consumer Configuration
+      - REDIS_CONSUMER_BATCH_SIZE=10
+      - REDIS_CONSUMER_TIMEOUT=1000
+      
+      # Service URLs
+      - INTEGRATION_SERVICE_URL=http://ats-app:8000/integration_service
+      - TMU_SERVICE_URL=http://ats-app:8000/tmu
+      - SCANNING_SERVICE_URL=http://ats-app:8000/scanning_service
+      
+      # Service Timeouts
+      - SERVICE_REQUEST_TIMEOUT=30
+      - SERVICE_CONNECT_TIMEOUT=10
+      
+      # Django Configuration
       - DJANGO_DEBUG=True
       - DJANGO_SETTINGS_MODULE=ats_base.settings
     command: python manage.py start_scanning_service --verbose

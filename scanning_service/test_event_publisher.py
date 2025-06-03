@@ -29,7 +29,6 @@ def test_event_publisher():
     publisher = get_scanning_event_publisher()
     
     # Test data
-    user_id = "test_user_123"
     trade_session_id = "session_456"
     
     # Test 1: Publish eligible instrument event
@@ -38,24 +37,13 @@ def test_event_publisher():
     instrument_data = {
         "instrument_id": "738561",
         "trading_symbol": "RELIANCE",
-        "instrument_token": "738561",
-        "trade_frequency": "5minute",
-        "effective_trend": "uptrend",
         "support_price": 2450.50,
         "resistance_price": 2500.75,
-        "support_strength": 0.85,
-        "resistance_strength": 0.92,
-        "movement_potential": 15.25,
         "required_action": "buy",
-        "market_data": {
-            "volume": 1234567,
-            "market_price": 2475.30,
-            "last_quantity": 100
-        }
+        "market_price": 2475.30
     }
     
     message_id = publisher.publish_eligible_instrument(
-        user_id=user_id,
         trade_session_id=trade_session_id,
         instrument_data=instrument_data,
         scanner_type="udts"
@@ -71,7 +59,7 @@ def test_event_publisher():
     
     # Scanner started
     status_id = publisher.publish_scanner_status(
-        user_id=user_id,
+        user_id="test_user_123",
         trade_session_id=trade_session_id,
         scanner_type="udts",
         status="started",
@@ -85,7 +73,7 @@ def test_event_publisher():
     
     # Scanner running
     status_id = publisher.publish_scanner_status(
-        user_id=user_id,
+        user_id="test_user_123",
         trade_session_id=trade_session_id,
         scanner_type="udts",
         status="running",
@@ -107,33 +95,22 @@ def test_event_publisher():
         {
             "instrument_id": "2885",
             "trading_symbol": "HDFCBANK",
-            "instrument_token": "2885",
-            "trade_frequency": "5minute",
-            "effective_trend": "uptrend",
             "support_price": 1650.00,
             "resistance_price": 1680.00,
-            "support_strength": 0.78,
-            "resistance_strength": 0.89,
-            "movement_potential": 10.50,
-            "required_action": "buy"
+            "required_action": "buy",
+            "market_price": 1665.50
         },
         {
             "instrument_id": "3045",
             "trading_symbol": "SBIN",
-            "instrument_token": "3045",
-            "trade_frequency": "5minute",
-            "effective_trend": "downtrend",
             "support_price": 620.00,
             "resistance_price": 635.00,
-            "support_strength": 0.72,
-            "resistance_strength": 0.85,
-            "movement_potential": 8.25,
-            "required_action": "sell"
+            "required_action": "sell",
+            "market_price": 627.75
         }
     ]
     
     published_count = publisher.publish_batch_eligible_instruments(
-        user_id=user_id,
         trade_session_id=trade_session_id,
         instruments=instruments,
         scanner_type="udts"
@@ -147,15 +124,15 @@ def test_event_publisher():
     try:
         redis_client = get_redis_client()
         
-        # Check eligible instruments stream
-        stream_info = redis_client.xinfo_stream('eligible_instruments_stream')
-        log(f"Eligible instruments stream - Length: {stream_info['length']}, Last ID: {stream_info['last-generated-id']}")
+        # Check initiation queue stream (renamed from eligible_instruments_stream)
+        stream_info = redis_client.xinfo_stream('initiation_queue')
+        log(f"Initiation queue stream - Length: {stream_info['length']}, Last ID: {stream_info['last-generated-id']}")
         
         # Read last few events
-        events = redis_client.xrevrange('eligible_instruments_stream', count=3)
-        log(f"Last 3 eligible instrument events:")
+        events = redis_client.xrevrange('initiation_queue', count=3)
+        log(f"Last 3 initiation queue events:")
         for event_id, data in events:
-            log(f"  - {event_id}: {data.get('instrument_trading_symbol')} ({data.get('instrument_required_action')})")
+            log(f"  - {event_id}: {data.get('trading_symbol')} ({data.get('required_action')}) @ {data.get('market_price')}")
         
         # Check scanner status stream
         stream_info = redis_client.xinfo_stream('scanner_status_stream')
