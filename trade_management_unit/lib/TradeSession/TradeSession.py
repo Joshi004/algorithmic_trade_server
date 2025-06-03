@@ -1,17 +1,13 @@
 import logging
 from trade_management_unit.lib.common.Communicator import Communicator
 from trade_management_unit.models.TradeSession import TradeSession as TradeSessionDB
-from trade_management_unit.lib.Algorithms.ScannerAlgos.ScannerAlgoFactory import ScannerAlgoFactory
-from trade_management_unit.lib.Algorithms.TrackerAlgos.TrackerAlgoFactory import TrackerAlgoFactory
 from trade_management_unit.lib.TradeSession.TradeSessionMeta import TradeSessionMeta
 from  trade_management_unit.Constants.TmuConstants import *
 from  trade_management_unit.models.Trade import Trade
 from trade_management_unit.models.ScanningAlgorithm import ScanningAlgorithm
 from trade_management_unit.models.InitiationAlgorithm import InitiationAlgorithm
 from trade_management_unit.models.TerminationAlgorithm import TerminationAlgorithm
-from django.db import connections
 from trade_management_unit.lib.common.Utils.Utils import *
-from trade_management_unit.lib.Kite.KiteTickhandler import KiteTickhandler
 from trade_management_unit.lib.common.Utils.custome_logger import log
 import time as tm
 

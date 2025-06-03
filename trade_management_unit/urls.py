@@ -1,7 +1,7 @@
 from django.urls import path, re_path
 # from django.urls import re_path
 
-from .views import instrument_view, scanner_algo_view, trade_session_view
+from .views import instrument_view, trade_session_view
 from .consumers import trade_session_consumer
 
 urlpatterns = [
@@ -19,10 +19,6 @@ urlpatterns = [
     # re_path(r'^session_active/?$', trade_session_view.session_active, name='session_active'),
     # re_path(r'^terminate_trade_session/?$', trade_session_view.terminate_trade_session, name='terminate_trade_session'),
     
-    # Scanner algorithm endpoints - handle both with and without trailing slash
-    re_path(r'^get_eligible_instruments/?$', scanner_algo_view.get_eligible_instruments, name='get_eligible_instruments'),
-    re_path(r'^get_udts_eligibility/?$', scanner_algo_view.get_udts_eligibility, name='get_udts_eligibility'),
-    re_path(r'^get_udts_redcord/?$', scanner_algo_view.get_udts_redcord, name='get_udts_redcord'),
 ]
 
 
