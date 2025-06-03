@@ -128,6 +128,7 @@ class ScanningQueueConsumer:
         try:
             # Extract necessary information
             trade_session_id = event_data.get('trade_session_id')
+            
             user_id = event_data.get('user_id')
             trading_frequency = event_data.get('trading_frequency')
             is_dummy = event_data.get('is_dummy', False)
