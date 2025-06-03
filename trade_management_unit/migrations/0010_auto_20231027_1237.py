@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('trade_management_unit', '0012_alter_trade_id'),
+        ('trade_management_unit', '0009_auto_20231026_1949'),
     ]
 
     operations = [
@@ -14,13 +14,8 @@ class Migration(migrations.Migration):
             old_name='DummyUser',
             new_name='DummyAccount',
         ),
-        migrations.AlterField(
-            model_name='trade',
-            name='id',
-            field=models.BigAutoField(auto_created=True, primary_key=True, serialize=False),
-        ),
         migrations.AlterModelTable(
             name='dummyaccount',
             table='dummy_accounts',
         ),
-    ]
+    ] 

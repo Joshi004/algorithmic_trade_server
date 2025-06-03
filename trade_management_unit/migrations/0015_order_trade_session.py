@@ -7,7 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('trade_management_unit', '0037_auto_20231111_1506'),
+        ('trade_management_unit', '0014_auto_20231111_1506'),
     ]
 
     operations = [
@@ -17,4 +17,4 @@ class Migration(migrations.Migration):
             field=models.ForeignKey(default=1, on_delete=django.db.models.deletion.CASCADE, to='trade_management_unit.tradesession', verbose_name='trade_session_id'),
             preserve_default=False,
         ),
-    ]
+    ] 

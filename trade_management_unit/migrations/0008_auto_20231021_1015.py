@@ -8,7 +8,7 @@ import django.utils.timezone
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('trade_management_unit', '0006_create_trade_sessions_table'),
+        ('trade_management_unit', '0007_create_trades_table'),
     ]
 
     operations = [
@@ -48,4 +48,4 @@ class Migration(migrations.Migration):
             model_name='tradesession',
             index=models.Index(fields=['trading_frequency'], name='trade_sessi_trading_ef3d16_idx'),
         ),
-    ]
+    ] 

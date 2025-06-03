@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('trade_management_unit', '0032_trade_margin'),
+        ('trade_management_unit', '0010_auto_20231027_1237'),
     ]
 
     operations = [
@@ -15,9 +15,4 @@ class Migration(migrations.Migration):
             name='volume',
             field=models.DecimalField(decimal_places=2, max_digits=20),
         ),
-        migrations.AlterField(
-            model_name='trade',
-            name='margin',
-            field=models.DecimalField(decimal_places=2, default=0.0, max_digits=9),
-        ),
-    ]
+    ] 
