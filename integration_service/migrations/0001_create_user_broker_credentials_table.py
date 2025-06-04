@@ -142,37 +142,37 @@ class Migration(migrations.Migration):
         migrations.RunSQL(
             """
             -- Primary indexes for user_broker_credentials
-            CREATE INDEX idx_user_broker_credentials_user_id ON user_broker_credentials(user_id);
-            CREATE INDEX idx_user_broker_credentials_broker_name ON user_broker_credentials(broker_name);
-            CREATE INDEX idx_user_broker_credentials_status ON user_broker_credentials(status);
-            CREATE INDEX idx_user_broker_credentials_is_default ON user_broker_credentials(is_default);
-            CREATE INDEX idx_user_broker_credentials_is_paper_trading ON user_broker_credentials(is_paper_trading);
-            CREATE INDEX idx_user_broker_credentials_created_at ON user_broker_credentials(created_at);
-            CREATE INDEX idx_user_broker_credentials_last_used_at ON user_broker_credentials(last_used_at);
-            CREATE INDEX idx_user_broker_credentials_token_expiry ON user_broker_credentials(token_expiry);
+            CREATE INDEX idx_usr_broker_user_id ON user_broker_credentials(user_id);
+            CREATE INDEX idx_usr_broker_name ON user_broker_credentials(broker_name);
+            CREATE INDEX idx_usr_broker_status ON user_broker_credentials(status);
+            CREATE INDEX idx_usr_broker_default ON user_broker_credentials(is_default);
+            CREATE INDEX idx_usr_broker_paper ON user_broker_credentials(is_paper_trading);
+            CREATE INDEX idx_usr_broker_created ON user_broker_credentials(created_at);
+            CREATE INDEX idx_usr_broker_used ON user_broker_credentials(last_used_at);
+            CREATE INDEX idx_usr_broker_expiry ON user_broker_credentials(token_expiry);
             
             -- Composite indexes for common query patterns
-            CREATE INDEX idx_user_broker_credentials_user_broker ON user_broker_credentials(user_id, broker_name);
-            CREATE INDEX idx_user_broker_credentials_user_status ON user_broker_credentials(user_id, status);
-            CREATE INDEX idx_user_broker_credentials_user_default ON user_broker_credentials(user_id, is_default);
-            CREATE INDEX idx_user_broker_credentials_status_expiry ON user_broker_credentials(status, token_expiry);
+            CREATE INDEX idx_usr_broker_user_name ON user_broker_credentials(user_id, broker_name);
+            CREATE INDEX idx_usr_broker_user_stat ON user_broker_credentials(user_id, status);
+            CREATE INDEX idx_usr_broker_user_def ON user_broker_credentials(user_id, is_default);
+            CREATE INDEX idx_usr_broker_stat_exp ON user_broker_credentials(status, token_expiry);
             """,
             reverse_sql="""
             -- Drop primary indexes
-            DROP INDEX IF EXISTS idx_user_broker_credentials_user_id;
-            DROP INDEX IF EXISTS idx_user_broker_credentials_broker_name;
-            DROP INDEX IF EXISTS idx_user_broker_credentials_status;
-            DROP INDEX IF EXISTS idx_user_broker_credentials_is_default;
-            DROP INDEX IF EXISTS idx_user_broker_credentials_is_paper_trading;
-            DROP INDEX IF EXISTS idx_user_broker_credentials_created_at;
-            DROP INDEX IF EXISTS idx_user_broker_credentials_last_used_at;
-            DROP INDEX IF EXISTS idx_user_broker_credentials_token_expiry;
+            DROP INDEX IF EXISTS idx_usr_broker_user_id;
+            DROP INDEX IF EXISTS idx_usr_broker_name;
+            DROP INDEX IF EXISTS idx_usr_broker_status;
+            DROP INDEX IF EXISTS idx_usr_broker_default;
+            DROP INDEX IF EXISTS idx_usr_broker_paper;
+            DROP INDEX IF EXISTS idx_usr_broker_created;
+            DROP INDEX IF EXISTS idx_usr_broker_used;
+            DROP INDEX IF EXISTS idx_usr_broker_expiry;
             
             -- Drop composite indexes
-            DROP INDEX IF EXISTS idx_user_broker_credentials_user_broker;
-            DROP INDEX IF EXISTS idx_user_broker_credentials_user_status;
-            DROP INDEX IF EXISTS idx_user_broker_credentials_user_default;
-            DROP INDEX IF EXISTS idx_user_broker_credentials_status_expiry;
+            DROP INDEX IF EXISTS idx_usr_broker_user_name;
+            DROP INDEX IF EXISTS idx_usr_broker_user_stat;
+            DROP INDEX IF EXISTS idx_usr_broker_user_def;
+            DROP INDEX IF EXISTS idx_usr_broker_stat_exp;
             """
         ),
 
@@ -180,17 +180,17 @@ class Migration(migrations.Migration):
         migrations.RunSQL(
             """
             -- Ensure only one default credential per user per broker
-            CREATE UNIQUE INDEX idx_user_broker_credentials_unique_default 
+            CREATE UNIQUE INDEX idx_usr_broker_uniq_def 
             ON user_broker_credentials(user_id, broker_name) 
             WHERE is_default = true;
             
             -- Ensure API key uniqueness per broker (to prevent credential sharing)
-            CREATE UNIQUE INDEX idx_user_broker_credentials_unique_api_key
+            CREATE UNIQUE INDEX idx_usr_broker_uniq_key
             ON user_broker_credentials(broker_name, api_key);
             """,
             reverse_sql="""
-            DROP INDEX IF EXISTS idx_user_broker_credentials_unique_default;
-            DROP INDEX IF EXISTS idx_user_broker_credentials_unique_api_key;
+            DROP INDEX IF EXISTS idx_usr_broker_uniq_def;
+            DROP INDEX IF EXISTS idx_usr_broker_uniq_key;
             """
         ),
     ] 

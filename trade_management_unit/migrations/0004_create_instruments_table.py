@@ -52,9 +52,9 @@ class Migration(migrations.Migration):
                 'ordering': ['trading_symbol'],
                 'indexes': [
                     # Composite indexes for common query patterns
-                    models.Index(fields=['trading_symbol', 'exchange'], name='idx_instruments_symbol_exchange'),
+                    models.Index(fields=['trading_symbol', 'exchange'], name='idx_instr_sym_exch'),
                     models.Index(fields=['instrument_type', 'segment'], name='idx_instruments_type_segment'),
-                    models.Index(fields=['exchange', 'is_active'], name='idx_instruments_exchange_active'),
+                    models.Index(fields=['exchange', 'is_active'], name='idx_instr_exch_active'),
                     models.Index(fields=['expiry'], name='idx_instruments_expiry'),
                     models.Index(fields=['is_active', 'instrument_type'], name='idx_instruments_active_type'),
                 ],
@@ -78,7 +78,7 @@ class Migration(migrations.Migration):
             CREATE INDEX idx_instruments_created_at ON instruments(created_at);
             
             -- Composite indexes for advanced queries
-            CREATE INDEX idx_instruments_symbol_type_exchange ON instruments(trading_symbol, instrument_type, exchange);
+            CREATE INDEX idx_instr_sym_type_exch ON instruments(trading_symbol, instrument_type, exchange);
             CREATE INDEX idx_instruments_active_expiry ON instruments(is_active, expiry);
             """,
             reverse_sql="""
@@ -96,7 +96,7 @@ class Migration(migrations.Migration):
             DROP INDEX IF EXISTS idx_instruments_created_at;
             
             -- Drop composite indexes
-            DROP INDEX IF EXISTS idx_instruments_symbol_type_exchange;
+            DROP INDEX IF EXISTS idx_instr_sym_type_exch;
             DROP INDEX IF EXISTS idx_instruments_active_expiry;
             """
         ),

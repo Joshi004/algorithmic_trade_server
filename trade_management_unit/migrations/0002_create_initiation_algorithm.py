@@ -36,17 +36,17 @@ class Migration(migrations.Migration):
         migrations.RunSQL(
             """
             -- Indexes for initiation_algorithms
-            CREATE INDEX idx_initiation_algorithms_name ON initiation_algorithms(name);
-            CREATE INDEX idx_initiation_algorithms_is_active ON initiation_algorithms(is_active);
-            CREATE INDEX idx_initiation_algorithms_created_at ON initiation_algorithms(created_at);
-            CREATE INDEX idx_initiation_algorithms_display_name ON initiation_algorithms(display_name);
+            CREATE INDEX idx_init_algo_name ON initiation_algorithms(name);
+            CREATE INDEX idx_init_algo_active ON initiation_algorithms(is_active);
+            CREATE INDEX idx_init_algo_created ON initiation_algorithms(created_at);
+            CREATE INDEX idx_init_algo_display ON initiation_algorithms(display_name);
             """,
             reverse_sql="""
             -- Drop indexes for initiation_algorithms
-            DROP INDEX IF EXISTS idx_initiation_algorithms_name;
-            DROP INDEX IF EXISTS idx_initiation_algorithms_is_active;
-            DROP INDEX IF EXISTS idx_initiation_algorithms_created_at;
-            DROP INDEX IF EXISTS idx_initiation_algorithms_display_name;
+            DROP INDEX IF EXISTS idx_init_algo_name;
+            DROP INDEX IF EXISTS idx_init_algo_active;
+            DROP INDEX IF EXISTS idx_init_algo_created;
+            DROP INDEX IF EXISTS idx_init_algo_display;
             """
         ),
     ] 

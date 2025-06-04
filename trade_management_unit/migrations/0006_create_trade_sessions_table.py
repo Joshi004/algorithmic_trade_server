@@ -14,13 +14,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        # Drop existing trade_sessions table if it exists to start fresh
-        migrations.RunSQL(
-            "DROP TABLE IF EXISTS trade_sessions;",
-            reverse_sql="-- Cannot reverse this operation safely"
-        ),
-
-        # Create optimized TradeSession table
+        # Create TradeSession table
         migrations.CreateModel(
             name='TradeSession',
             fields=[
@@ -35,70 +29,30 @@ class Migration(migrations.Migration):
                     help_text='References User.public_id'
                 )),
                 
-                # Session status with enhanced choices
+                # Session status and timing
                 ('status', EnumField(
                     choices=[
                         ('started', 'Started'),
                         ('paused', 'Paused'),
                         ('stopped', 'Stopped'),
-                        ('completed', 'Completed'),
-                        ('error', 'Error'),
-                        ('terminated', 'Terminated')
                     ],
                     default='started',
                     db_index=True,
                     help_text='Current status of the trading session'
                 )),
-                
-                # Algorithm references with proper foreign keys
-                ('scanning_algorithm', models.ForeignKey(
-                    'trade_management_unit.ScanningAlgorithm',
-                    on_delete=models.PROTECT,
-                    help_text='Scanning algorithm for this session'
-                )),
-                ('initiation_algorithm', models.ForeignKey(
-                    'trade_management_unit.InitiationAlgorithm',
-                    on_delete=models.PROTECT,
-                    help_text='Trade initiation algorithm for this session'
-                )),
-                ('termination_algorithm', models.ForeignKey(
-                    'trade_management_unit.TerminationAlgorithm',
-                    on_delete=models.PROTECT,
-                    help_text='Trade termination algorithm for this session'
-                )),
-                
-                # Trading configuration
-                ('trading_frequency', EnumField(
-                    choices=[
-                        ('minute', 'minute'),
-                        ('3minute', '3minute'),
-                        ('5minute', '5minute'),
-                        ('10minute', '10minute'),
-                        ('15minute', '15minute'),
-                        ('30minute', '30minute'),
-                        ('60minute', '60minute'),
-                        ('day', 'day')
-                    ],
-                    default='10minute',
-                    db_index=True,
-                    help_text='Trading frequency for this session'
-                )),
-                
-                # Session timing
                 ('started_at', models.DateTimeField(
                     blank=False,
-                    help_text='When the session was started'
+                    help_text='When the trading session was started'
                 )),
                 ('closed_at', models.DateTimeField(
                     blank=True,
                     null=True,
-                    help_text='When the session was closed'
+                    help_text='When the trading session was closed'
                 )),
                 
-                # Session flags
+                # Session configuration
                 ('dummy', models.BooleanField(
                     default=False,
-                    db_index=True,
                     help_text='Whether this is a paper trading session'
                 )),
                 ('is_active', models.BooleanField(
@@ -107,115 +61,85 @@ class Migration(migrations.Migration):
                     help_text='Whether the session is currently active'
                 )),
                 
-                # Performance tracking
-                ('total_trades', models.IntegerField(
-                    default=0,
-                    help_text='Total number of trades in this session'
+                # Algorithm references
+                ('initiation_algorithm', models.ForeignKey(
+                    'trade_management_unit.InitiationAlgorithm',
+                    on_delete=models.CASCADE,
+                    help_text='Algorithm used for trade initiation'
                 )),
-                ('successful_trades', models.IntegerField(
-                    default=0,
-                    help_text='Number of profitable trades'
+                ('termination_algorithm', models.ForeignKey(
+                    'trade_management_unit.TerminationAlgorithm',
+                    on_delete=models.CASCADE,
+                    help_text='Algorithm used for trade termination'
                 )),
-                ('net_profit', models.DecimalField(
-                    max_digits=12,
-                    decimal_places=2,
-                    default=0.00,
-                    help_text='Net profit/loss for this session'
-                )),
-                ('total_volume', models.DecimalField(
-                    max_digits=15,
-                    decimal_places=2,
-                    default=0.00,
-                    help_text='Total trading volume in this session'
+                ('scanning_algorithm', models.ForeignKey(
+                    'trade_management_unit.ScanningAlgorithm',
+                    on_delete=models.CASCADE,
+                    help_text='Algorithm used for market scanning'
                 )),
                 
-                # Risk management
-                ('max_drawdown', models.DecimalField(
-                    max_digits=12,
-                    decimal_places=2,
-                    default=0.00,
-                    help_text='Maximum drawdown during the session'
+                # Trading frequency
+                ('trading_frequency', EnumField(
+                    choices=[
+                        ('5minute', '5minute'),
+                        ('10minute', '10minute'),
+                        ('15minute', '15minute'),
+                        ('30minute', '30minute'),
+                        ('1hour', '1hour'),
+                        ('4hour', '4hour'),
+                        ('1day', '1day'),
+                    ],
+                    default='10minute',
+                    db_index=True,
+                    help_text='Frequency for trading decisions'
                 )),
-                ('current_exposure', models.DecimalField(
-                    max_digits=12,
-                    decimal_places=2,
-                    default=0.00,
-                    help_text='Current market exposure'
-                )),
-                
-                # Session metadata
-                ('session_notes', models.TextField(
-                    blank=True,
-                    null=True,
-                    help_text='Notes or comments about this session'
-                )),
-                ('error_message', models.TextField(
-                    blank=True,
-                    null=True,
-                    help_text='Error message if session encountered an error'
-                )),
-                
-                # Timestamps
-                ('created_at', models.DateTimeField(default=django.utils.timezone.now)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
             ],
             options={
                 'verbose_name': 'Trade Session',
                 'verbose_name_plural': 'Trade Sessions',
                 'db_table': 'trade_sessions',
-                'ordering': ['-created_at'],
+                'ordering': ['-started_at'],
+                'indexes': [
+                    models.Index(fields=['user_id'], name='idx_trade_sessions_user'),
+                    models.Index(fields=['scanning_algorithm'], name='idx_trade_sess_scan_algo'),
+                    models.Index(fields=['initiation_algorithm'], name='idx_trade_sess_init_algo'),
+                    models.Index(fields=['termination_algorithm'], name='idx_trade_sess_term_algo'),
+                    models.Index(fields=['trading_frequency'], name='idx_trade_sess_frequency'),
+                ],
             },
         ),
 
-        # Add performance indexes and constraints
+        # Add performance indexes for trade_sessions table
         migrations.RunSQL(
             """
             -- Primary indexes for trade_sessions
-            CREATE INDEX idx_trade_sessions_user_id ON trade_sessions(user_id);
-            CREATE INDEX idx_trade_sessions_status ON trade_sessions(status);
-            CREATE INDEX idx_trade_sessions_dummy ON trade_sessions(dummy);
-            CREATE INDEX idx_trade_sessions_is_active ON trade_sessions(is_active);
-            CREATE INDEX idx_trade_sessions_trading_frequency ON trade_sessions(trading_frequency);
-            CREATE INDEX idx_trade_sessions_started_at ON trade_sessions(started_at);
-            CREATE INDEX idx_trade_sessions_closed_at ON trade_sessions(closed_at);
-            CREATE INDEX idx_trade_sessions_created_at ON trade_sessions(created_at);
-            
-            -- Algorithm indexes
-            CREATE INDEX idx_trade_sessions_scanning_algorithm ON trade_sessions(scanning_algorithm_id);
-            CREATE INDEX idx_trade_sessions_initiation_algorithm ON trade_sessions(initiation_algorithm_id);
-            CREATE INDEX idx_trade_sessions_termination_algorithm ON trade_sessions(termination_algorithm_id);
+            CREATE INDEX idx_trade_sess_status ON trade_sessions(status);
+            CREATE INDEX idx_trade_sess_started ON trade_sessions(started_at);
+            CREATE INDEX idx_trade_sess_closed ON trade_sessions(closed_at);
+            CREATE INDEX idx_trade_sess_dummy ON trade_sessions(dummy);
+            CREATE INDEX idx_trade_sess_active ON trade_sessions(is_active);
             
             -- Composite indexes for common query patterns
-            CREATE INDEX idx_trade_sessions_user_status ON trade_sessions(user_id, status);
-            CREATE INDEX idx_trade_sessions_user_dummy ON trade_sessions(user_id, dummy);
-            CREATE INDEX idx_trade_sessions_user_active ON trade_sessions(user_id, is_active);
-            CREATE INDEX idx_trade_sessions_algorithms ON trade_sessions(scanning_algorithm_id, initiation_algorithm_id, termination_algorithm_id);
-            CREATE INDEX idx_trade_sessions_active_frequency ON trade_sessions(is_active, trading_frequency);
-            CREATE INDEX idx_trade_sessions_status_date ON trade_sessions(status, started_at);
+            CREATE INDEX idx_trade_sess_user_status ON trade_sessions(user_id, status);
+            CREATE INDEX idx_trade_sess_user_active ON trade_sessions(user_id, is_active);
+            CREATE INDEX idx_trade_sess_active_start ON trade_sessions(is_active, started_at);
+            CREATE INDEX idx_trade_sess_user_dummy ON trade_sessions(user_id, dummy);
+            CREATE INDEX idx_trade_sess_status_freq ON trade_sessions(status, trading_frequency);
             """,
             reverse_sql="""
             -- Drop primary indexes
-            DROP INDEX IF EXISTS idx_trade_sessions_user_id;
-            DROP INDEX IF EXISTS idx_trade_sessions_status;
-            DROP INDEX IF EXISTS idx_trade_sessions_dummy;
-            DROP INDEX IF EXISTS idx_trade_sessions_is_active;
-            DROP INDEX IF EXISTS idx_trade_sessions_trading_frequency;
-            DROP INDEX IF EXISTS idx_trade_sessions_started_at;
-            DROP INDEX IF EXISTS idx_trade_sessions_closed_at;
-            DROP INDEX IF EXISTS idx_trade_sessions_created_at;
-            
-            -- Drop algorithm indexes
-            DROP INDEX IF EXISTS idx_trade_sessions_scanning_algorithm;
-            DROP INDEX IF EXISTS idx_trade_sessions_initiation_algorithm;
-            DROP INDEX IF EXISTS idx_trade_sessions_termination_algorithm;
+            DROP INDEX IF EXISTS idx_trade_sess_status;
+            DROP INDEX IF EXISTS idx_trade_sess_started;
+            DROP INDEX IF EXISTS idx_trade_sess_closed;
+            DROP INDEX IF EXISTS idx_trade_sess_dummy;
+            DROP INDEX IF EXISTS idx_trade_sess_active;
             
             -- Drop composite indexes
-            DROP INDEX IF EXISTS idx_trade_sessions_user_status;
-            DROP INDEX IF EXISTS idx_trade_sessions_user_dummy;
-            DROP INDEX IF EXISTS idx_trade_sessions_user_active;
-            DROP INDEX IF EXISTS idx_trade_sessions_algorithms;
-            DROP INDEX IF EXISTS idx_trade_sessions_active_frequency;
-            DROP INDEX IF EXISTS idx_trade_sessions_status_date;
+            DROP INDEX IF EXISTS idx_trade_sess_user_status;
+            DROP INDEX IF EXISTS idx_trade_sess_user_active;
+            DROP INDEX IF EXISTS idx_trade_sess_active_start;
+            DROP INDEX IF EXISTS idx_trade_sess_user_dummy;
+            DROP INDEX IF EXISTS idx_trade_sess_status_freq;
             """
         ),
 
@@ -224,23 +148,11 @@ class Migration(migrations.Migration):
             """
             -- Ensure session dates are logical
             ALTER TABLE trade_sessions 
-            ADD CONSTRAINT chk_trade_sessions_date_order 
+            ADD CONSTRAINT chk_trade_sess_date_order 
             CHECK (closed_at IS NULL OR closed_at >= started_at);
-            
-            -- Ensure performance metrics are non-negative
-            ALTER TABLE trade_sessions 
-            ADD CONSTRAINT chk_trade_sessions_positive_trades 
-            CHECK (total_trades >= 0 AND successful_trades >= 0 AND successful_trades <= total_trades);
-            
-            -- Ensure exposure and drawdown are non-negative
-            ALTER TABLE trade_sessions 
-            ADD CONSTRAINT chk_trade_sessions_positive_amounts 
-            CHECK (current_exposure >= 0 AND max_drawdown >= 0 AND total_volume >= 0);
             """,
             reverse_sql="""
-            ALTER TABLE trade_sessions DROP CONSTRAINT IF EXISTS chk_trade_sessions_date_order;
-            ALTER TABLE trade_sessions DROP CONSTRAINT IF EXISTS chk_trade_sessions_positive_trades;
-            ALTER TABLE trade_sessions DROP CONSTRAINT IF EXISTS chk_trade_sessions_positive_amounts;
+            ALTER TABLE trade_sessions DROP CONSTRAINT IF EXISTS chk_trade_sess_date_order;
             """
         ),
     ] 

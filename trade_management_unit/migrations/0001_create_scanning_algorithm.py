@@ -38,17 +38,17 @@ class Migration(migrations.Migration):
         migrations.RunSQL(
             """
             -- Indexes for scanning_algorithms
-            CREATE INDEX idx_scanning_algorithms_name ON scanning_algorithms(name);
-            CREATE INDEX idx_scanning_algorithms_is_active ON scanning_algorithms(is_active);
-            CREATE INDEX idx_scanning_algorithms_created_at ON scanning_algorithms(created_at);
-            CREATE INDEX idx_scanning_algorithms_display_name ON scanning_algorithms(display_name);
+            CREATE INDEX idx_scan_algo_name ON scanning_algorithms(name);
+            CREATE INDEX idx_scan_algo_active ON scanning_algorithms(is_active);
+            CREATE INDEX idx_scan_algo_created ON scanning_algorithms(created_at);
+            CREATE INDEX idx_scan_algo_display ON scanning_algorithms(display_name);
             """,
             reverse_sql="""
             -- Drop indexes for scanning_algorithms
-            DROP INDEX IF EXISTS idx_scanning_algorithms_name;
-            DROP INDEX IF EXISTS idx_scanning_algorithms_is_active;
-            DROP INDEX IF EXISTS idx_scanning_algorithms_created_at;
-            DROP INDEX IF EXISTS idx_scanning_algorithms_display_name;
+            DROP INDEX IF EXISTS idx_scan_algo_name;
+            DROP INDEX IF EXISTS idx_scan_algo_active;
+            DROP INDEX IF EXISTS idx_scan_algo_created;
+            DROP INDEX IF EXISTS idx_scan_algo_display;
             """
         ),
     ] 

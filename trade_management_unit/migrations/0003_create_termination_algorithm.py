@@ -36,17 +36,17 @@ class Migration(migrations.Migration):
         migrations.RunSQL(
             """
             -- Indexes for termination_algorithms
-            CREATE INDEX idx_termination_algorithms_name ON termination_algorithms(name);
-            CREATE INDEX idx_termination_algorithms_is_active ON termination_algorithms(is_active);
-            CREATE INDEX idx_termination_algorithms_created_at ON termination_algorithms(created_at);
-            CREATE INDEX idx_termination_algorithms_display_name ON termination_algorithms(display_name);
+            CREATE INDEX idx_term_algo_name ON termination_algorithms(name);
+            CREATE INDEX idx_term_algo_active ON termination_algorithms(is_active);
+            CREATE INDEX idx_term_algo_created ON termination_algorithms(created_at);
+            CREATE INDEX idx_term_algo_display ON termination_algorithms(display_name);
             """,
             reverse_sql="""
             -- Drop indexes for termination_algorithms
-            DROP INDEX IF EXISTS idx_termination_algorithms_name;
-            DROP INDEX IF EXISTS idx_termination_algorithms_is_active;
-            DROP INDEX IF EXISTS idx_termination_algorithms_created_at;
-            DROP INDEX IF EXISTS idx_termination_algorithms_display_name;
+            DROP INDEX IF EXISTS idx_term_algo_name;
+            DROP INDEX IF EXISTS idx_term_algo_active;
+            DROP INDEX IF EXISTS idx_term_algo_created;
+            DROP INDEX IF EXISTS idx_term_algo_display;
             """
         ),
     ] 

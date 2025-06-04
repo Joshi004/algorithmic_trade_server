@@ -10,39 +10,20 @@ from decimal import Decimal
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('ats_gateway', '0001_create_users_table'),
         ('trade_management_unit', '0006_create_trade_sessions_table'),
     ]
 
     operations = [
-        # Drop existing trades table if it exists to start fresh
-        migrations.RunSQL(
-            "DROP TABLE IF EXISTS trades;",
-            reverse_sql="-- Cannot reverse this operation safely"
-        ),
-
-        # Create optimized Trade table
+        # Create Trade table
         migrations.CreateModel(
             name='Trade',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False)),
                 
-                # User reference - ForeignKey to User.public_id
-                ('user_id', models.ForeignKey(
-                    'ats_gateway.User',
-                    to_field='public_id',
-                    on_delete=models.CASCADE,
-                    db_column='user_id',
-                    help_text='References User.public_id'
-                )),
-                
-                # Trade status and lifecycle
-                ('is_active', models.BooleanField(
-                    default=True,
-                    db_index=True,
-                    help_text='Whether the trade is currently active'
-                )),
+                # Trade status and timing
+                ('is_active', models.BooleanField(default=True, db_index=True)),
                 ('started_at', models.DateTimeField(
+                    blank=False,
                     help_text='When the trade was initiated'
                 )),
                 ('closed_at', models.DateTimeField(
@@ -54,115 +35,55 @@ class Migration(migrations.Migration):
                 # Trade relationships
                 ('instrument', models.ForeignKey(
                     'trade_management_unit.Instrument',
-                    on_delete=models.PROTECT,
                     verbose_name='Ordered Instrument',
-                    help_text='The financial instrument being traded'
+                    on_delete=models.CASCADE,
+                    help_text='The financial instrument for this trade'
                 )),
                 ('trade_session', models.ForeignKey(
                     'trade_management_unit.TradeSession',
-                    on_delete=models.CASCADE,
                     verbose_name='Trade Session',
+                    on_delete=models.CASCADE,
+                    default=None,
                     help_text='The trading session this trade belongs to'
                 )),
                 
-                # Trade direction and performance
-                ('view', EnumField(
-                    choices=[('long', 'Long'), ('short', 'Short')],
-                    default='long',
-                    db_index=True,
-                    help_text='Trading direction: long (buy) or short (sell)'
-                )),
+                # Trade details
                 ('net_profit', models.DecimalField(
-                    max_digits=12,
+                    max_digits=9,
                     decimal_places=2,
                     blank=True,
                     null=True,
-                    help_text='Net profit/loss for this trade'
+                    help_text='Net profit/loss from this trade'
                 )),
-                
-                # Trade metadata
-                ('entry_price', models.DecimalField(
-                    max_digits=12,
-                    decimal_places=2,
-                    blank=True,
-                    null=True,
-                    help_text='Price at which the trade was entered'
+                ('view', EnumField(
+                    choices=[('long', 'long'), ('short', 'short')],
+                    default='long',
+                    help_text='Trade direction: long or short'
                 )),
-                ('exit_price', models.DecimalField(
-                    max_digits=12,
-                    decimal_places=2,
-                    blank=True,
-                    null=True,
-                    help_text='Price at which the trade was exited'
+                ('user_id', models.CharField(
+                    max_length=64,
+                    default='1',
+                    db_index=True,
+                    help_text='User identifier'
                 )),
-                ('quantity', models.IntegerField(
-                    default=0,
-                    help_text='Number of units traded'
-                )),
-                ('stop_loss_price', models.DecimalField(
-                    max_digits=12,
-                    decimal_places=2,
-                    blank=True,
-                    null=True,
-                    help_text='Stop loss price for risk management'
-                )),
-                ('take_profit_price', models.DecimalField(
-                    max_digits=12,
-                    decimal_places=2,
-                    blank=True,
-                    null=True,
-                    help_text='Take profit price target'
-                )),
-                
-                # Trade execution details
-                ('total_fees', models.DecimalField(
-                    max_digits=10,
-                    decimal_places=2,
-                    default=Decimal('0.00'),
-                    help_text='Total fees and charges for this trade'
-                )),
-                ('trade_value', models.DecimalField(
-                    max_digits=15,
-                    decimal_places=2,
-                    default=Decimal('0.00'),
-                    help_text='Total value of the trade'
-                )),
-                
-                # Trade notes and status
-                ('trade_notes', models.TextField(
-                    blank=True,
-                    null=True,
-                    help_text='Notes or comments about this trade'
-                )),
-                ('exit_reason', models.CharField(
-                    max_length=100,
-                    blank=True,
-                    null=True,
-                    help_text='Reason for trade exit (profit target, stop loss, manual, etc.)'
-                )),
-                
-                # Timestamps
-                ('created_at', models.DateTimeField(default=django.utils.timezone.now)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
             ],
             options={
                 'verbose_name': 'Trade',
                 'verbose_name_plural': 'Trades',
                 'db_table': 'trades',
-                'ordering': ['-created_at'],
+                'ordering': ['-started_at'],
             },
         ),
 
-        # Add performance indexes and constraints
+        # Add performance indexes for trades table
         migrations.RunSQL(
             """
             -- Primary indexes for trades
-            CREATE INDEX idx_trades_user_id ON trades(user_id);
             CREATE INDEX idx_trades_is_active ON trades(is_active);
             CREATE INDEX idx_trades_started_at ON trades(started_at);
             CREATE INDEX idx_trades_closed_at ON trades(closed_at);
+            CREATE INDEX idx_trades_user_id ON trades(user_id);
             CREATE INDEX idx_trades_view ON trades(view);
-            CREATE INDEX idx_trades_created_at ON trades(created_at);
             
             -- Relationship indexes
             CREATE INDEX idx_trades_instrument ON trades(instrument_id);
@@ -170,22 +91,17 @@ class Migration(migrations.Migration):
             
             -- Composite indexes for common query patterns
             CREATE INDEX idx_trades_user_active ON trades(user_id, is_active);
-            CREATE INDEX idx_trades_user_session ON trades(user_id, trade_session_id);
             CREATE INDEX idx_trades_session_active ON trades(trade_session_id, is_active);
-            CREATE INDEX idx_trades_user_instrument ON trades(user_id, instrument_id);
-            CREATE INDEX idx_trades_active_view ON trades(is_active, view);
-            CREATE INDEX idx_trades_date_range ON trades(started_at, closed_at);
-            CREATE INDEX idx_trades_profit_analysis ON trades(net_profit, view, is_active);
-            CREATE INDEX idx_trades_session_instrument ON trades(trade_session_id, instrument_id);
+            CREATE INDEX idx_trades_instrument_active ON trades(instrument_id, is_active);
+            CREATE INDEX idx_trades_active_started ON trades(is_active, started_at);
             """,
             reverse_sql="""
             -- Drop primary indexes
-            DROP INDEX IF EXISTS idx_trades_user_id;
             DROP INDEX IF EXISTS idx_trades_is_active;
             DROP INDEX IF EXISTS idx_trades_started_at;
             DROP INDEX IF EXISTS idx_trades_closed_at;
+            DROP INDEX IF EXISTS idx_trades_user_id;
             DROP INDEX IF EXISTS idx_trades_view;
-            DROP INDEX IF EXISTS idx_trades_created_at;
             
             -- Drop relationship indexes
             DROP INDEX IF EXISTS idx_trades_instrument;
@@ -193,13 +109,9 @@ class Migration(migrations.Migration):
             
             -- Drop composite indexes
             DROP INDEX IF EXISTS idx_trades_user_active;
-            DROP INDEX IF EXISTS idx_trades_user_session;
             DROP INDEX IF EXISTS idx_trades_session_active;
-            DROP INDEX IF EXISTS idx_trades_user_instrument;
-            DROP INDEX IF EXISTS idx_trades_active_view;
-            DROP INDEX IF EXISTS idx_trades_date_range;
-            DROP INDEX IF EXISTS idx_trades_profit_analysis;
-            DROP INDEX IF EXISTS idx_trades_session_instrument;
+            DROP INDEX IF EXISTS idx_trades_instrument_active;
+            DROP INDEX IF EXISTS idx_trades_active_started;
             """
         ),
 
@@ -210,32 +122,9 @@ class Migration(migrations.Migration):
             ALTER TABLE trades 
             ADD CONSTRAINT chk_trades_date_order 
             CHECK (closed_at IS NULL OR closed_at >= started_at);
-            
-            -- Ensure positive values
-            ALTER TABLE trades 
-            ADD CONSTRAINT chk_trades_positive_quantity 
-            CHECK (quantity >= 0);
-            
-            -- Ensure positive fees and trade value
-            ALTER TABLE trades 
-            ADD CONSTRAINT chk_trades_positive_amounts 
-            CHECK (total_fees >= 0 AND trade_value >= 0);
-            
-            -- Ensure prices are positive when set
-            ALTER TABLE trades 
-            ADD CONSTRAINT chk_trades_positive_prices 
-            CHECK (
-                (entry_price IS NULL OR entry_price > 0) AND
-                (exit_price IS NULL OR exit_price > 0) AND
-                (stop_loss_price IS NULL OR stop_loss_price > 0) AND
-                (take_profit_price IS NULL OR take_profit_price > 0)
-            );
             """,
             reverse_sql="""
             ALTER TABLE trades DROP CONSTRAINT IF EXISTS chk_trades_date_order;
-            ALTER TABLE trades DROP CONSTRAINT IF EXISTS chk_trades_positive_quantity;
-            ALTER TABLE trades DROP CONSTRAINT IF EXISTS chk_trades_positive_amounts;
-            ALTER TABLE trades DROP CONSTRAINT IF EXISTS chk_trades_positive_prices;
             """
         ),
     ] 

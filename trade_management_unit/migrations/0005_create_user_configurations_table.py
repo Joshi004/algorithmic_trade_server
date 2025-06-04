@@ -99,10 +99,10 @@ class Migration(migrations.Migration):
         migrations.RunSQL(
             """
             -- Indexes for user_configurations
-            CREATE INDEX idx_user_configurations_user_id ON user_configurations(user_id);
-            CREATE INDEX idx_user_configurations_is_active ON user_configurations(is_active);
-            CREATE INDEX idx_user_configurations_created_at ON user_configurations(created_at);
-            CREATE INDEX idx_user_configurations_risk_appetite ON user_configurations(risk_appetite);
+            CREATE INDEX idx_user_config_user_id ON user_configurations(user_id);
+            CREATE INDEX idx_user_config_active ON user_configurations(is_active);
+            CREATE INDEX idx_user_config_created ON user_configurations(created_at);
+            CREATE INDEX idx_user_config_risk ON user_configurations(risk_appetite);
             
             -- Constraints to ensure data integrity
             ALTER TABLE user_configurations 
@@ -115,10 +115,10 @@ class Migration(migrations.Migration):
             """,
             reverse_sql="""
             -- Drop indexes
-            DROP INDEX IF EXISTS idx_user_configurations_user_id;
-            DROP INDEX IF EXISTS idx_user_configurations_is_active;
-            DROP INDEX IF EXISTS idx_user_configurations_created_at;
-            DROP INDEX IF EXISTS idx_user_configurations_risk_appetite;
+            DROP INDEX IF EXISTS idx_user_config_user_id;
+            DROP INDEX IF EXISTS idx_user_config_active;
+            DROP INDEX IF EXISTS idx_user_config_created;
+            DROP INDEX IF EXISTS idx_user_config_risk;
             
             -- Drop constraints
             ALTER TABLE user_configurations DROP CONSTRAINT IF EXISTS chk_reward_risk_ratio_order;
