@@ -11,7 +11,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('ats_gateway', '0001_create_users_table'),
-        ('trade_management_unit', '0014_auto_20231111_1506'),
+        ('trade_management_unit', '0007_create_trades_table'),
     ]
 
     operations = [
