@@ -176,20 +176,14 @@ class Migration(migrations.Migration):
             """
         ),
 
-        # Add unique constraints and business logic constraints
+        # Add unique constraints - MySQL compatible version
         migrations.RunSQL(
             """
-            -- Ensure only one default credential per user per broker
-            CREATE UNIQUE INDEX idx_usr_broker_uniq_def 
-            ON user_broker_credentials(user_id, broker_name) 
-            WHERE is_default = true;
-            
             -- Ensure API key uniqueness per broker (to prevent credential sharing)
             CREATE UNIQUE INDEX idx_usr_broker_uniq_key
             ON user_broker_credentials(broker_name, api_key);
             """,
             reverse_sql="""
-            DROP INDEX IF EXISTS idx_usr_broker_uniq_def;
             DROP INDEX IF EXISTS idx_usr_broker_uniq_key;
             """
         ),
