@@ -5,6 +5,9 @@ import django.utils.timezone
 from django_mysql.models import EnumField
 import django.db.models.deletion
 
+# Import FREQUENCY constant to ensure single source of truth
+from trade_management_unit.Constants.TmuConstants import FREQUENCY
+
 
 class Migration(migrations.Migration):
 
@@ -80,16 +83,8 @@ class Migration(migrations.Migration):
                 
                 # Trading frequency
                 ('trading_frequency', EnumField(
-                    choices=[
-                        ('5minute', '5minute'),
-                        ('10minute', '10minute'),
-                        ('15minute', '15minute'),
-                        ('30minute', '30minute'),
-                        ('1hour', '1hour'),
-                        ('4hour', '4hour'),
-                        ('1day', '1day'),
-                    ],
-                    default='10minute',
+                    choices=[(freq, freq) for freq in FREQUENCY],
+                    default='10-minute',
                     db_index=True,
                     help_text='Frequency for trading decisions'
                 )),

@@ -38,7 +38,7 @@ class TradeSession(models.Model):
     TRADING_FREQUENCY_CHOICES = [(freq, freq) for freq in FREQUENCY]
 
     TRADING_FREQUENCY_CHOICES = [(freq, freq) for freq in FREQUENCY]
-    trading_frequency = EnumField(choices=TRADING_FREQUENCY_CHOICES, default="10minute")
+    trading_frequency = EnumField(choices=TRADING_FREQUENCY_CHOICES, default="10-minute")
 
     @classmethod
     def fetch_or_create_trade_session(cls, scanning_algo_id, initiation_algo_id, termination_algo_id, trading_freq, is_dummy, user_id):

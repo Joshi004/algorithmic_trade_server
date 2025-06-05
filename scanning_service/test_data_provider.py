@@ -49,7 +49,7 @@ def test_integration_provider():
     # Test 2: Get historical data
     log("\n=== Test 2: Get Historical Data ===")
     token = "738561"  # Example token for RELIANCE
-    interval = "5minute"
+    interval = "5-minute"
     num_candles = 10
     
     historical_data = provider.fetch_historical_candle_data_from_kite(

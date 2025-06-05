@@ -112,7 +112,7 @@ class TestRedisStreamIntegration:
             mock_trade_session.scanning_algorithm = mock_scanning_algo
             mock_trade_session.initiation_algorithm = mock_initiation_algo
             mock_trade_session.termination_algorithm = mock_termination_algo
-            mock_trade_session.trading_frequency = "5minute"
+            mock_trade_session.trading_frequency = "5-minute"
             mock_trade_session.dummy = True
             mock_trade_session.status = "started"
             mock_trade_session.started_at = None
@@ -168,7 +168,7 @@ class TestRedisStreamIntegration:
                 mock_trade_session.scanning_algorithm = mock_scanning_algo
                 mock_trade_session.initiation_algorithm = mock_initiation_algo
                 mock_trade_session.termination_algorithm = mock_termination_algo
-                mock_trade_session.trading_frequency = "5minute"
+                mock_trade_session.trading_frequency = "5-minute"
                 mock_trade_session.dummy = True
                 mock_trade_session.status = "started"
                 mock_trade_session.started_at = None

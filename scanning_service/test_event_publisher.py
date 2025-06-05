@@ -63,7 +63,7 @@ def test_event_publisher():
         trade_session_id=trade_session_id,
         scanner_type="udts",
         status="started",
-        details={"trade_frequency": "5minute", "instruments_count": 100}
+        details={"trade_frequency": "5-minute", "instruments_count": 100}
     )
     
     if status_id:
