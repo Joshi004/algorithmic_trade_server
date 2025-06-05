@@ -6,8 +6,6 @@ from .UserConfiguration import UserConfiguration
 from .TradeSession import TradeSession
 from .Trade import Trade
 from .SeedTracker import SeedTracker
-from . import user_profile
-from . import user_profile_mnager
 from . import Order
 
 __all__ = [
@@ -19,7 +17,5 @@ __all__ = [
     'TradeSession',
     'Trade',
     'SeedTracker',
-    'user_profile',
-    'user_profile_mnager',
     'Order',
 ]

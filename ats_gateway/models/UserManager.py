@@ -1,5 +1,4 @@
 import re
-import bcrypt
 from django.contrib.auth.models import BaseUserManager
 from django.core.exceptions import ValidationError
 
@@ -48,9 +47,9 @@ class UserManager(BaseUserManager):
         # Create the user instance
         user = self.model(email=email, **extra_fields)
         
-        # Hash the password using bcrypt
-        hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
-        user.password = hashed_password.decode('utf-8')
+        # Use Django's set_password method which will use our configured PASSWORD_HASHERS
+        # This ensures proper integration with Django's auth system while using bcrypt
+        user.set_password(password)
         
         # Set is_active to True by default
         user.is_active = True

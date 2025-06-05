@@ -63,10 +63,11 @@ class Migration(migrations.Migration):
                     null=True,
                     help_text="Refresh token for access token renewal"
                 )),
-                ('token_expiry', models.DateTimeField(
+                ('public_token', models.CharField(
+                    max_length=512, 
                     blank=True, 
                     null=True,
-                    help_text="When the access token expires"
+                    help_text="Public token from broker (encrypted)"
                 )),
                 
                 # Credential status
@@ -112,18 +113,12 @@ class Migration(migrations.Migration):
                     help_text="When the credentials were last used for trading"
                 )),
                 
-                # Rate limiting and usage tracking
-                ('daily_api_calls', models.IntegerField(
-                    default=0,
-                    help_text="Number of API calls made today"
-                )),
-                ('api_call_limit', models.IntegerField(
-                    default=3000,
-                    help_text="Daily API call limit for this broker"
-                )),
-                ('last_api_reset', models.DateField(
-                    default=django.utils.timezone.now,
-                    help_text="Last date when API call count was reset"
+                # Kite specific fields
+                ('kite_user_id', models.CharField(
+                    max_length=50, 
+                    blank=True, 
+                    null=True,
+                    help_text="User ID from Kite/Zerodha (e.g. OOD246)"
                 )),
                 
                 # Metadata
@@ -149,13 +144,12 @@ class Migration(migrations.Migration):
             CREATE INDEX idx_usr_broker_paper ON user_broker_credentials(is_paper_trading);
             CREATE INDEX idx_usr_broker_created ON user_broker_credentials(created_at);
             CREATE INDEX idx_usr_broker_used ON user_broker_credentials(last_used_at);
-            CREATE INDEX idx_usr_broker_expiry ON user_broker_credentials(token_expiry);
+            CREATE INDEX idx_usr_broker_kite_user ON user_broker_credentials(kite_user_id);
             
             -- Composite indexes for common query patterns
             CREATE INDEX idx_usr_broker_user_name ON user_broker_credentials(user_id, broker_name);
             CREATE INDEX idx_usr_broker_user_stat ON user_broker_credentials(user_id, status);
             CREATE INDEX idx_usr_broker_user_def ON user_broker_credentials(user_id, is_default);
-            CREATE INDEX idx_usr_broker_stat_exp ON user_broker_credentials(status, token_expiry);
             """,
             reverse_sql="""
             -- Drop primary indexes
@@ -166,13 +160,12 @@ class Migration(migrations.Migration):
             DROP INDEX IF EXISTS idx_usr_broker_paper;
             DROP INDEX IF EXISTS idx_usr_broker_created;
             DROP INDEX IF EXISTS idx_usr_broker_used;
-            DROP INDEX IF EXISTS idx_usr_broker_expiry;
+            DROP INDEX IF EXISTS idx_usr_broker_kite_user;
             
             -- Drop composite indexes
             DROP INDEX IF EXISTS idx_usr_broker_user_name;
             DROP INDEX IF EXISTS idx_usr_broker_user_stat;
             DROP INDEX IF EXISTS idx_usr_broker_user_def;
-            DROP INDEX IF EXISTS idx_usr_broker_stat_exp;
             """
         ),
 

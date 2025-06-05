@@ -21,7 +21,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/4.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-6@b!tg_a%y_-i#y#x89keub36fu6^fbx=-3a8d^4sa%y_qr)yf'
+# Use environment variable for security, fallback to development key
+SECRET_KEY = os.environ.get(
+    'DJANGO_SECRET_KEY', 
+    'django-insecure-6@b!tg_a%y_-i#y#x89keub36fu6^fbx=-3a8d^4sa%y_qr)yf'  # Development fallback
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
@@ -124,6 +128,15 @@ AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
+]
+
+# Password Hashers - Explicit bcrypt configuration for consistency
+# This ensures all password hashing uses bcrypt, matching our custom UserManager implementation
+PASSWORD_HASHERS = [
+    'django.contrib.auth.hashers.BCryptSHA256PasswordHasher',
+    'django.contrib.auth.hashers.BCryptPasswordHasher', 
+    'django.contrib.auth.hashers.PBKDF2PasswordHasher',  # Fallback for existing data
+    'django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher',  # Additional fallback
 ]
 
 

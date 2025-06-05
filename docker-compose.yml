@@ -59,6 +59,12 @@ services:
       - DATABASE_PORT=3306
       - TEST_DATABASE_NAME=test_ats_db
       
+      # Security Keys Configuration
+      - DJANGO_SECRET_KEY=prod-django-secret-key-change-in-production-make-it-50-chars-long
+      - JWT_LONG_LIVED_TOKEN_SECRET=jwt-llt-secret-key-32-chars-change-this
+      - JWT_SHORT_LIVED_TOKEN_SECRET=jwt-slt-secret-key-32-chars-change-this
+      - BROKER_API_ENCRYPTION_SECRET=broker-encryption-key-32-chars-change-this-for-production
+      
       # Django Configuration
       - DJANGO_DEBUG=True
       - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
@@ -95,6 +101,12 @@ services:
       - DATABASE_HOST=ats-db
       - DATABASE_PORT=3306
       - TEST_DATABASE_NAME=test_ats_db
+      
+      # Security Keys Configuration
+      - DJANGO_SECRET_KEY=prod-django-secret-key-change-in-production-make-it-50-chars-long
+      - JWT_LONG_LIVED_TOKEN_SECRET=jwt-llt-secret-key-32-chars-change-this
+      - JWT_SHORT_LIVED_TOKEN_SECRET=jwt-slt-secret-key-32-chars-change-this
+      - BROKER_API_ENCRYPTION_SECRET=broker-encryption-key-32-chars-change-this-for-production
       
       # Redis Configuration
       - REDIS_HOST=ats-redis
@@ -156,6 +168,12 @@ services:
       - DATABASE_PASSWORD=ats_password
       - DATABASE_HOST=ats-db
       - DATABASE_PORT=3306
+      
+      # Security Keys Configuration
+      - DJANGO_SECRET_KEY=prod-django-secret-key-change-in-production-make-it-50-chars-long
+      - JWT_LONG_LIVED_TOKEN_SECRET=jwt-llt-secret-key-32-chars-change-this
+      - JWT_SHORT_LIVED_TOKEN_SECRET=jwt-slt-secret-key-32-chars-change-this
+      - BROKER_API_ENCRYPTION_SECRET=broker-encryption-key-32-chars-change-this-for-production
       
       # Redis Configuration
       - REDIS_HOST=ats-redis

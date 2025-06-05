@@ -58,10 +58,11 @@ class UserBrokerCredential(models.Model):
         null=True,
         help_text="Refresh token for access token renewal"
     )
-    token_expiry = models.DateTimeField(
+    public_token = models.CharField(
+        max_length=512, 
         blank=True, 
         null=True,
-        help_text="When the access token expires"
+        help_text="Public token from broker (encrypted)"
     )
     
     # Credential status
@@ -108,18 +109,12 @@ class UserBrokerCredential(models.Model):
         help_text="When the credentials were last used for trading"
     )
     
-    # Rate limiting and usage tracking
-    daily_api_calls = models.IntegerField(
-        default=0,
-        help_text="Number of API calls made today"
-    )
-    api_call_limit = models.IntegerField(
-        default=3000,
-        help_text="Daily API call limit for this broker"
-    )
-    last_api_reset = models.DateField(
-        default=timezone.now,
-        help_text="Last date when API call count was reset"
+    # Kite specific fields
+    kite_user_id = models.CharField(
+        max_length=50, 
+        blank=True, 
+        null=True,
+        help_text="User ID from Kite/Zerodha (e.g. OOD246)"
     )
     
     # Metadata
@@ -139,7 +134,7 @@ class UserBrokerCredential(models.Model):
             models.Index(fields=['is_paper_trading']),
             models.Index(fields=['user_id', 'broker_name']),
             models.Index(fields=['user_id', 'status']),
-            models.Index(fields=['status', 'token_expiry']),
+            models.Index(fields=['kite_user_id']),
         ]
 
     def __str__(self):
@@ -198,9 +193,10 @@ class UserBrokerCredential(models.Model):
     @classmethod
     def get_default_credential(cls, user_id, broker_name=None, is_paper_trading=None):
         """
-        Get the default credential for a user, optionally filtered by broker and trading mode
+        Get the default credential for a user, optionally filtered by broker and trading mode.
+        Returns default credential regardless of status - validation happens during API calls.
         """
-        query = cls.objects.filter(user_id=user_id, is_default=True, status='active')
+        query = cls.objects.filter(user_id=user_id, is_default=True)
         
         if broker_name:
             query = query.filter(broker_name=broker_name)
@@ -240,83 +236,27 @@ class UserBrokerCredential(models.Model):
         
         self.save(update_fields=['status', 'last_validated_at', 'validation_error', 'updated_at'])
 
-    def update_token(self, access_token, refresh_token=None, expiry_time=None):
+    def update_token(self, access_token, refresh_token=None, public_token=None, kite_user_id=None):
         """
         Update access token and related information
         """
         self.access_token = access_token
         if refresh_token:
             self.refresh_token = refresh_token
-        if expiry_time:
-            self.token_expiry = expiry_time
+        if public_token:
+            self.public_token = public_token
+        if kite_user_id:
+            self.kite_user_id = kite_user_id
         
         self.last_used_at = timezone.now()
-        self.save(update_fields=['access_token', 'refresh_token', 'token_expiry', 'last_used_at', 'updated_at'])
-
-    def increment_api_calls(self, count=1):
-        """
-        Increment daily API call count and reset if needed
-        """
-        today = date.today()
-        
-        # Reset counter if it's a new day
-        if self.last_api_reset < today:
-            self.daily_api_calls = 0
-            self.last_api_reset = today
-        
-        self.daily_api_calls += count
-        self.save(update_fields=['daily_api_calls', 'last_api_reset', 'updated_at'])
-
-    def can_make_api_call(self, required_calls=1):
-        """
-        Check if we can make API calls without exceeding the limit
-        """
-        today = date.today()
-        
-        # Reset counter if it's a new day
-        if self.last_api_reset < today:
-            return True
-        
-        return (self.daily_api_calls + required_calls) <= self.api_call_limit
-
-    @property
-    def is_token_expired(self):
-        """
-        Check if the access token is expired
-        """
-        if not self.token_expiry:
-            return False
-        return timezone.now() > self.token_expiry
-
-    @property
-    def is_token_expiring_soon(self, minutes=30):
-        """
-        Check if token is expiring within the specified minutes
-        """
-        if not self.token_expiry:
-            return False
-        return timezone.now() + timedelta(minutes=minutes) > self.token_expiry
-
-    @property
-    def api_calls_remaining(self):
-        """
-        Get remaining API calls for today
-        """
-        today = date.today()
-        if self.last_api_reset < today:
-            return self.api_call_limit
-        return max(0, self.api_call_limit - self.daily_api_calls)
+        self.save(update_fields=['access_token', 'refresh_token', 'public_token', 'kite_user_id', 'last_used_at', 'updated_at'])
 
     @property
     def is_healthy(self):
         """
         Check if credential is in a healthy state for trading
         """
-        return (
-            self.status == 'active' and
-            not self.is_token_expired and
-            self.can_make_api_call()
-        )
+        return self.status == 'active'
 
     def deactivate(self, reason="Manual deactivation"):
         """
@@ -330,22 +270,6 @@ class UserBrokerCredential(models.Model):
     def cleanup_expired_tokens(cls):
         """
         Clean up expired tokens - utility method for maintenance
+        Note: This method is kept for compatibility but tokens don't expire automatically anymore
         """
-        now = timezone.now()
-        expired_count = cls.objects.filter(
-            token_expiry__lt=now,
-            status='active'
-        ).update(status='expired')
-        return expired_count
-
-    @classmethod
-    def get_credentials_needing_renewal(cls, hours_before_expiry=2):
-        """
-        Get credentials that need token renewal
-        """
-        threshold = timezone.now() + timedelta(hours=hours_before_expiry)
-        return cls.objects.filter(
-            status='active',
-            token_expiry__lt=threshold,
-            token_expiry__isnull=False
-        ) 
+        return 0 

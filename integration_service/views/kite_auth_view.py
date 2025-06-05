@@ -48,8 +48,8 @@ def set_session(request, *args, **kwargs):
 
 def get_login_url(request, *args, **kwargs):
     """
-    Get Kite login URL for a user
-    Updated to check if broker credentials exist first
+    Get Kite login URL for a user.
+    Returns login URL for any default credentials - validation happens during actual API calls.
     """
     if request.method != 'GET':
         return JsonResponse({
