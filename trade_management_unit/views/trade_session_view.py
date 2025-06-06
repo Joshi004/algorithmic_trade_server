@@ -11,7 +11,7 @@ from trade_management_unit.Constants.TmuConstants import *
 def initiate_trade_session(request, *args, **kwargs):
     """
     API endpoint to initiate a trade session.
-    Thin view layer - delegates business logic to TradeSessionHelper.
+    Thin view layer - delegates business logic to TradeSession library.
     """
     
     # Extract query parameters
@@ -24,26 +24,23 @@ def initiate_trade_session(request, *args, **kwargs):
 
     # Check authentication
     if not hasattr(request, 'user_data') or not request.user_data.get('public_id'):
-        error_response = {
+        return JsonResponse({
             'error': 'Authentication required',
             'message': 'User must be authenticated to create a trade session'
-        }
-        return JsonResponse(error_response, status=401, content_type='application/json')
+        }, status=401)
     
     user_id_str = request.user_data.get('public_id')
 
     # Validate required parameters
     if not all([scanning_algorithm_id, initiation_algorithm_id, termination_algorithm_id, trading_frequency]):
-        error_response = {
+        return JsonResponse({
             'error': 'Missing required parameters',
             'required_params': ['scanning_algorithm_id', 'initiation_algorithm_id', 'termination_algorithm_id', 'trading_frequency']
-        }
-        return JsonResponse(error_response, status=400, content_type='application/json')
+        }, status=400)
 
     try:
-        # Delegate business logic to helper class
-        trade_session = TradeSession()
-        result = trade_session.initiate_trade_session(
+        # Delegate business logic to library
+        result = TradeSession.initiate_trade_session(
             user_id_str=user_id_str,
             scanning_algorithm_id=scanning_algorithm_id,
             initiation_algorithm_id=initiation_algorithm_id,
@@ -52,24 +49,19 @@ def initiate_trade_session(request, *args, **kwargs):
             is_dummy=is_dummy
         )
         
-        # Return success response
-        return JsonResponse(result, status=200, content_type='application/json')
+        return JsonResponse(result, status=200)
         
     except ValueError as e:
-        # Handle validation errors (400 Bad Request)
-        error_response = {
+        return JsonResponse({
             'error': str(e),
             'message': 'Invalid input provided'
-        }
-        return JsonResponse(error_response, status=400, content_type='application/json')
+        }, status=400)
         
     except Exception as e:
-        # Handle unexpected errors (500 Internal Server Error)
-        error_response = {
+        return JsonResponse({
             'error': str(e),
             'message': 'Failed to initiate trade session'
-        }
-        return JsonResponse(error_response, status=500, content_type='application/json')
+        }, status=500)
 
 
 def get_new_session_param_options(request, *args, **kwargs):
@@ -78,15 +70,13 @@ def get_new_session_param_options(request, *args, **kwargs):
     Returns available algorithms and trading frequencies for the frontend form.
     """
     try:
-        # Use the library method to get session parameters
-        trade_session = TradeSession()
-        response_data = trade_session.get_session_param_options()
+        # Delegate to library method
+        response_data = TradeSession.get_session_param_options()
         
-        return JsonResponse(response_data, status=200, content_type='application/json')
+        return JsonResponse(response_data, status=200)
         
     except Exception as e:
-        error_response = {
+        return JsonResponse({
             'error': str(e),
             'message': 'Failed to fetch session parameter options'
-        }
-        return JsonResponse(error_response, status=500, content_type='application/json')
+        }, status=500)

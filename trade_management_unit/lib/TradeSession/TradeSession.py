@@ -1,18 +1,15 @@
-from  trade_management_unit.Constants.TmuConstants import *
+from trade_management_unit.Constants.TmuConstants import FREQUENCY
 from trade_management_unit.models.ScanningAlgorithm import ScanningAlgorithm
 from trade_management_unit.models.InitiationAlgorithm import InitiationAlgorithm
 from trade_management_unit.models.TerminationAlgorithm import TerminationAlgorithm
-from trade_management_unit.lib.common.Utils.Utils import *
-from trade_management_unit.models.TradeSession import TradeSession
+from trade_management_unit.models.TradeSession import TradeSession as TradeSessionModel
 from ats_gateway.models.User import User
 
-class TradeSession():
-   
-    def __init__(self):
-       pass
+
+class TradeSession:
     
-    
-    def initiate_trade_session(self, user_id_str, scanning_algorithm_id, initiation_algorithm_id, termination_algorithm_id, trading_frequency, is_dummy):
+    @staticmethod
+    def initiate_trade_session(user_id_str, scanning_algorithm_id, initiation_algorithm_id, termination_algorithm_id, trading_frequency, is_dummy):
         """
         Core business logic for trade session initiation.
         Handles both new session creation and existing session scenarios.
@@ -37,7 +34,7 @@ class TradeSession():
         try:
             user = User.objects.get(public_id=user_id_str)
         except User.DoesNotExist:
-            raise ValueError(f'Authenticated user does not exist in database')
+            raise ValueError('Authenticated user does not exist')
         
         # Convert and validate algorithm IDs to integers
         try:
@@ -48,7 +45,7 @@ class TradeSession():
             raise ValueError('Algorithm IDs must be valid integers')
         
         # Use the model's fetch_or_create method which handles both new and existing sessions
-        trade_session, message = TradeSession.fetch_or_create_trade_session(
+        trade_session, message = TradeSessionModel.fetch_or_create_trade_session(
             scanning_algorithm_id, 
             initiation_algorithm_id, 
             termination_algorithm_id, 
@@ -70,51 +67,39 @@ class TradeSession():
         
         return response
 
-    def get_session_param_options(self):
+    @staticmethod
+    def get_session_param_options():
         """
         Get all available parameters for creating a new trade session.
         Returns scanning algorithms, initiation algorithms, termination algorithms, 
         trading frequencies, and session types.
         """
         try:
-            # Fetch all available scanning algorithms
-            scanning_algorithms = ScanningAlgorithm.objects.all().values('id', 'name', 'display_name', 'description')
-            scanning_algorithms_list = [
-                {
-                    'id': algo['id'],
-                    'name': algo['name'],
-                    'display_name': algo['display_name'] or algo['name'],
-                    'description': algo['description'] or ''
-                }
-                for algo in scanning_algorithms
-            ]
+            # Fetch all available algorithms - evaluate QuerySets once with list()
+            scanning_algorithms = list(
+                ScanningAlgorithm.objects.values('id', 'name', 'display_name', 'description')
+            )
             
-            # Fetch all available initiation algorithms
-            initiation_algorithms = InitiationAlgorithm.objects.all().values('id', 'name', 'display_name', 'description')
-            initiation_algorithms_list = [
-                {
-                    'id': algo['id'],
-                    'name': algo['name'],
-                    'display_name': algo['display_name'] or algo['name'],
-                    'description': algo['description'] or ''
-                }
-                for algo in initiation_algorithms
-            ]
+            initiation_algorithms = list(
+                InitiationAlgorithm.objects.values('id', 'name', 'display_name', 'description')
+            )
             
-            # Fetch all available termination algorithms
-            termination_algorithms = TerminationAlgorithm.objects.all().values('id', 'name', 'display_name', 'description')
-            termination_algorithms_list = [
-                {
-                    'id': algo['id'],
-                    'name': algo['name'],
-                    'display_name': algo['display_name'] or algo['name'],
-                    'description': algo['description'] or ''
-                }
-                for algo in termination_algorithms
-            ]
+            termination_algorithms = list(
+                TerminationAlgorithm.objects.values('id', 'name', 'display_name', 'description')
+            )
             
-            # Get available trading frequencies from constants
-            trading_frequencies = FREQUENCY
+            # Process algorithms to ensure display_name and description fallbacks
+            for algo in scanning_algorithms:
+                algo['display_name'] = algo['display_name'] or algo['name']
+                algo['description'] = algo['description'] or ''
+                
+            for algo in initiation_algorithms:
+                algo['display_name'] = algo['display_name'] or algo['name']
+                algo['description'] = algo['description'] or ''
+                
+            for algo in termination_algorithms:
+                algo['display_name'] = algo['display_name'] or algo['name']
+                algo['description'] = algo['description'] or ''
             
             # Define session types
             session_types = [
@@ -125,17 +110,17 @@ class TradeSession():
             # Build response structure
             response_data = {
                 'data': {
-                    'scanning_algorithms': scanning_algorithms_list,
-                    'initiation_algorithms': initiation_algorithms_list,
-                    'termination_algorithms': termination_algorithms_list,
-                    'trading_frequencies': trading_frequencies,
+                    'scanning_algorithms': scanning_algorithms,
+                    'initiation_algorithms': initiation_algorithms,
+                    'termination_algorithms': termination_algorithms,
+                    'trading_frequencies': FREQUENCY,
                     'session_types': session_types
                 },
                 'meta': {
-                    'scanning_algorithms_count': len(scanning_algorithms_list),
-                    'initiation_algorithms_count': len(initiation_algorithms_list),
-                    'termination_algorithms_count': len(termination_algorithms_list),
-                    'trading_frequencies_count': len(trading_frequencies)
+                    'scanning_algorithms_count': len(scanning_algorithms),
+                    'initiation_algorithms_count': len(initiation_algorithms),
+                    'termination_algorithms_count': len(termination_algorithms),
+                    'trading_frequencies_count': len(FREQUENCY)
                 }
             }
             
