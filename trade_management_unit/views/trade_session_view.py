@@ -1,14 +1,8 @@
 from django.http import JsonResponse
-from trade_management_unit.lib.Trade.trade import Trade
 from trade_management_unit.lib.TradeSession.TradeSession import TradeSession
-from trade_management_unit.lib.TradeSession.TradeSessionHelper import TradeSessionHelper
-from channels.generic.websocket import AsyncWebsocketConsumer
-from django.forms.models import model_to_dict
-# from trade_management_unit.models.Algorithm import Algorithm
-from trade_management_unit.lib.Kite.KiteTickhandler import KiteTickhandler
-from trade_management_unit.models.ScanningAlgorithm import ScanningAlgorithm
-from trade_management_unit.models.InitiationAlgorithm import InitiationAlgorithm
-from trade_management_unit.models.TerminationAlgorithm import TerminationAlgorithm
+
+
+
 from ats_gateway.models.User import User
 
 from trade_management_unit.Constants.TmuConstants import *
@@ -48,8 +42,8 @@ def initiate_trade_session(request, *args, **kwargs):
 
     try:
         # Delegate business logic to helper class
-        helper = TradeSessionHelper()
-        result = helper.initiate_trade_session(
+        trade_session = TradeSession()
+        result = trade_session.initiate_trade_session(
             user_id_str=user_id_str,
             scanning_algorithm_id=scanning_algorithm_id,
             initiation_algorithm_id=initiation_algorithm_id,
@@ -85,8 +79,8 @@ def get_new_session_param_options(request, *args, **kwargs):
     """
     try:
         # Use the library method to get session parameters
-        trade_session_helper = TradeSessionHelper()
-        response_data = trade_session_helper.get_session_param_options()
+        trade_session = TradeSession()
+        response_data = trade_session.get_session_param_options()
         
         return JsonResponse(response_data, status=200, content_type='application/json')
         
