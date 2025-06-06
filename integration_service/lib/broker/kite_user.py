@@ -101,28 +101,50 @@ class KiteUser:
 
     @transaction.atomic
     def set_session(self, request_token):   
-        kite = KiteConnect(api_key=self.api_key)
-        user_data = kite.generate_session(request_token, api_secret=self.api_secret)
-        self.logger.info(f"User data post set session from Kite: {user_data}")
-        kite.set_access_token(user_data["access_token"])
-        
-        # Save the access token to the database (also validates credentials)
-        self._save_access_token(user_data)
-        
-        # Return public data
-        public_data = {
-            "avatar_url": user_data["avatar_url"],
-            "email": user_data["email"],
-            "exchanges": user_data["exchanges"],
-            "login_time": user_data["login_time"],
-            "order_types": user_data["order_types"],
-            "user_id": user_data["user_id"],
-            "products": user_data["products"],
-            "user_name": user_data["user_name"],
-            "user_shortname": user_data["user_shortname"],
-            "user_type": user_data["user_type"],
-        }
-        return public_data
+        try:
+            kite = KiteConnect(api_key=self.api_key)
+            user_data = kite.generate_session(request_token, api_secret=self.api_secret)
+            self.logger.info(f"User data post set session from Kite: {user_data}")
+            
+            # Validate that we received the required access_token
+            if not user_data or "access_token" not in user_data:
+                error_msg = "Failed to get access token from Kite session"
+                self.logger.error(error_msg)
+                # Update credential status to reflect the failure
+                if self.credential:
+                    self.credential.status = 'invalid'
+                    self.credential.validation_error = error_msg
+                    self.credential.save()
+                raise ValueError(error_msg)
+            
+            kite.set_access_token(user_data["access_token"])
+            
+            # Save the access token to the database (also validates credentials)
+            self._save_access_token(user_data)
+            
+            # Return public data with safe access
+            public_data = {
+                "avatar_url": user_data.get("avatar_url", ""),
+                "email": user_data.get("email", ""),
+                "exchanges": user_data.get("exchanges", []),
+                "login_time": user_data.get("login_time", ""),
+                "order_types": user_data.get("order_types", []),
+                "user_id": user_data.get("user_id", ""),
+                "products": user_data.get("products", []),
+                "user_name": user_data.get("user_name", ""),
+                "user_shortname": user_data.get("user_shortname", ""),
+                "user_type": user_data.get("user_type", ""),
+            }
+            return public_data
+            
+        except Exception as e:
+            self.logger.error(f"Error setting session: {str(e)}")
+            # Update credential status if available
+            if self.credential:
+                self.credential.status = 'invalid'
+                self.credential.validation_error = f"Session setup failed: {str(e)}"
+                self.credential.save()
+            raise
     
     def get_login_url(self):
         self.logger.info(f"Generating login URL with API key: '{self.api_key}' (length: {len(self.api_key) if self.api_key else 'None'})")
