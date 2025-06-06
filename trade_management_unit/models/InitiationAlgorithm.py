@@ -30,8 +30,4 @@ class InitiationAlgorithm(models.Model):
     @classmethod
     def get_active_algorithms(cls):
         """Get all active initiation algorithms"""
-        return cls.objects.filter(is_active=True)
-        
-    def get_parameters(self):
-        """Get algorithm parameters or empty dict if none"""
-        return {} 
+        return cls.objects.filter(is_active=True) 

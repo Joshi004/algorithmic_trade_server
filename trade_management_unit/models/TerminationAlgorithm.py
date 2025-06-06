@@ -30,8 +30,4 @@ class TerminationAlgorithm(models.Model):
     @classmethod
     def get_active_algorithms(cls):
         """Get all active termination algorithms"""
-        return cls.objects.filter(is_active=True)
-        
-    def get_parameters(self):
-        """Get algorithm parameters or empty dict if none"""
-        return {} 
+        return cls.objects.filter(is_active=True) 
