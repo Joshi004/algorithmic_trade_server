@@ -8,7 +8,6 @@ class ScanningAlgorithm(models.Model):
     display_name = models.CharField(max_length=255, db_index=True, null=True, blank=True)
     description = models.TextField()
     is_active = models.BooleanField(default=True, db_index=True)
-    parameters_schema = models.JSONField(default=dict, blank=True, help_text='Algorithm configuration parameters')
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -35,4 +34,4 @@ class ScanningAlgorithm(models.Model):
         
     def get_parameters(self):
         """Get algorithm parameters or empty dict if none"""
-        return self.parameters_schema or {} 
+        return {} 

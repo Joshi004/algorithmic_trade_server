@@ -85,7 +85,7 @@ class Command(BaseCommand):
             sql_content = f.read()
         
         # Split the SQL content into individual statements
-        statements = re.split(r';\s*$', sql_content, flags=re.MULTILINE)
+        statements = re.split(r';\s*(?:\n|$)', sql_content, flags=re.MULTILINE)
         statements = [stmt.strip() for stmt in statements if stmt.strip()]
         
         executed_count = 0
@@ -93,27 +93,40 @@ class Command(BaseCommand):
         
         with connection.cursor() as cursor:
             for statement in statements:
-                # Skip empty statements and comments
-                if not statement or statement.startswith('--'):
+                # Skip empty statements
+                if not statement:
                     continue
                 
+                # Clean the statement by removing leading comments and empty lines
+                cleaned_lines = []
+                for line in statement.split('\n'):
+                    line = line.strip()
+                    # Skip comment lines and empty lines
+                    if line and not line.startswith('--'):
+                        cleaned_lines.append(line)
+                
+                if not cleaned_lines:
+                    continue
+                
+                cleaned_statement = ' '.join(cleaned_lines)
+                
                 # Only allow INSERT statements for seed data
-                if not statement.upper().startswith('INSERT'):
+                if not cleaned_statement.upper().startswith('INSERT'):
                     self.stdout.write(self.style.WARNING(
-                        f'Skipping non-INSERT statement in seed file: {statement[:50]}...'
+                        f'Skipping non-INSERT statement in seed file: {cleaned_statement[:50]}...'
                     ))
                     skipped_count += 1
                     continue
                 
                 try:
                     # Execute the insert statement
-                    cursor.execute(statement)
+                    cursor.execute(cleaned_statement)
                     executed_count += 1
                     
                 except IntegrityError as e:
                     if 'Duplicate entry' in str(e) or 'already exists' in str(e):
                         self.stdout.write(self.style.WARNING(
-                            f'⚠ Skipping duplicate entry: {statement[:50]}...'
+                            f'⚠ Skipping duplicate entry: {cleaned_statement[:50]}...'
                         ))
                         skipped_count += 1
                     else:
@@ -126,7 +139,7 @@ class Command(BaseCommand):
                     self.stdout.write(self.style.ERROR(
                         f'✗ Error executing statement: {str(e)}'
                     ))
-                    self.stdout.write(self.style.ERROR(f'Statement: {statement}'))
+                    self.stdout.write(self.style.ERROR(f'Statement: {cleaned_statement}'))
                     raise
         
         self.stdout.write(self.style.SUCCESS(
