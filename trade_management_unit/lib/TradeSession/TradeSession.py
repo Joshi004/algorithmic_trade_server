@@ -3,6 +3,7 @@ from trade_management_unit.models.ScanningAlgorithm import ScanningAlgorithm
 from trade_management_unit.models.InitiationAlgorithm import InitiationAlgorithm
 from trade_management_unit.models.TerminationAlgorithm import TerminationAlgorithm
 from trade_management_unit.models.TradeSession import TradeSession as TradeSessionModel
+from trade_management_unit.lib.common.event_publisher import get_trade_session_event_publisher
 from ats_gateway.models.User import User
 
 
@@ -34,7 +35,7 @@ class TradeSession:
         try:
             user = User.objects.get(public_id=user_id_str)
         except User.DoesNotExist:
-            raise ValueError('Authenticated user does not exist')
+            raise ValueError('Authenticated user does not exist in database')
         
         # Convert and validate algorithm IDs to integers
         try:
@@ -56,6 +57,16 @@ class TradeSession:
         
         if trade_session is None:
             raise ValueError(message)  # This will contain the specific error message
+        
+        # Publish event to Redis stream only for new session creation
+        if message == "New session created":
+            try:
+                event_publisher = get_trade_session_event_publisher()
+                event_publisher.publish_trade_session_initiated(trade_session, message)
+            except Exception as e:
+                # Log error but don't fail the session creation
+                from trade_management_unit.lib.common.Utils.custome_logger import log
+                log(f"Failed to publish trade session initiation event for session {trade_session.id}: {str(e)}", level="error")
         
         # Build success response - works for both new and existing sessions
         response = {
