@@ -111,13 +111,6 @@ class Migration(migrations.Migration):
                 )),
                 
                 # Broker integration
-                ('kite_order_id', models.CharField(
-                    max_length=64,
-                    blank=True,
-                    null=True,
-                    db_index=True,
-                    help_text='Broker order ID for tracking'
-                )),
                 ('broker_order_id', models.CharField(
                     max_length=64,
                     blank=True,
@@ -181,7 +174,6 @@ class Migration(migrations.Migration):
             CREATE INDEX idx_orders_order_type ON orders(order_type);
             CREATE INDEX idx_orders_started_at ON orders(started_at);
             CREATE INDEX idx_orders_closed_at ON orders(closed_at);
-            CREATE INDEX idx_orders_kite_order_id ON orders(kite_order_id);
             CREATE INDEX idx_orders_broker_order_id ON orders(broker_order_id);
             CREATE INDEX idx_orders_created_at ON orders(created_at);
             
@@ -207,7 +199,6 @@ class Migration(migrations.Migration):
             DROP INDEX IF EXISTS idx_orders_order_type;
             DROP INDEX IF EXISTS idx_orders_started_at;
             DROP INDEX IF EXISTS idx_orders_closed_at;
-            DROP INDEX IF EXISTS idx_orders_kite_order_id;
             DROP INDEX IF EXISTS idx_orders_broker_order_id;
             DROP INDEX IF EXISTS idx_orders_created_at;
             
