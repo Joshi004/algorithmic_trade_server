@@ -78,8 +78,8 @@ class KiteUser:
             if self.credential.status == 'pending_verification':
                 self.credential.status = 'active'
                 self.credential.validation_error = None
-                # Use login_time from Zerodha as last_validated_at
-                self.credential.last_validated_at = user_data.get("login_time")
+                # Use login_time from Zerodha as last_refreshed_at
+                self.credential.last_refreshed_at = user_data.get("login_time")
                 self.logger.info(f"Credential {self.credential.id} validated and activated through successful token exchange")
             
             self.credential.save()
@@ -87,9 +87,9 @@ class KiteUser:
             
         except Exception as e:
             self.logger.error(f"Error saving access token and session data: {str(e)}")
-            # Mark as invalid if save fails
+            # Mark as pending_verification if save fails
             if self.credential.status == 'pending_verification':
-                self.credential.status = 'invalid'
+                self.credential.status = 'pending_verification'
                 self.credential.validation_error = f"Failed to save session data: {str(e)}"
                 self.credential.save()
     
@@ -112,7 +112,19 @@ class KiteUser:
                 self.logger.error(error_msg)
                 # Update credential status to reflect the failure
                 if self.credential:
-                    self.credential.status = 'invalid'
+                    self.credential.status = 'pending_verification'
+                    self.credential.validation_error = error_msg
+                    self.credential.save()
+                raise ValueError(error_msg)
+            
+            # Validate other required fields
+            required_fields = ["user_id", "email", "user_name"]
+            missing_fields = [field for field in required_fields if field not in user_data]
+            if missing_fields:
+                error_msg = f"Missing required fields in session response: {missing_fields}"
+                self.logger.error(error_msg)
+                if self.credential:
+                    self.credential.status = 'pending_verification'
                     self.credential.validation_error = error_msg
                     self.credential.save()
                 raise ValueError(error_msg)
@@ -141,7 +153,7 @@ class KiteUser:
             self.logger.error(f"Error setting session: {str(e)}")
             # Update credential status if available
             if self.credential:
-                self.credential.status = 'invalid'
+                self.credential.status = 'pending_verification'
                 self.credential.validation_error = f"Session setup failed: {str(e)}"
                 self.credential.save()
             raise

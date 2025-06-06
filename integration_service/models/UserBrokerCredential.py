@@ -20,9 +20,7 @@ class UserBrokerCredential(models.Model):
     
     # Broker configuration
     BROKER_CHOICES = [
-        ("zerodha", "zerodha"), 
-        ("upstox", "upstox"), 
-        ("angel", "angel")
+        ("zerodha", "zerodha")
     ]
     broker_name = EnumField(
         choices=BROKER_CHOICES,
@@ -67,11 +65,8 @@ class UserBrokerCredential(models.Model):
     
     # Credential status
     STATUS_CHOICES = [
-        ("active", "active"), 
-        ("revoked", "revoked"), 
-        ("expired", "expired"),
         ("pending_verification", "pending_verification"),
-        ("invalid", "invalid")
+        ("active", "active")
     ]
     status = EnumField(
         choices=STATUS_CHOICES,
@@ -86,17 +81,12 @@ class UserBrokerCredential(models.Model):
         db_index=True,
         help_text="Whether this is the default credential for the user"
     )
-    is_paper_trading = models.BooleanField(
-        default=False,
-        db_index=True,
-        help_text="Whether this credential is for paper trading"
-    )
     
     # Validation and monitoring
-    last_validated_at = models.DateTimeField(
+    last_refreshed_at = models.DateTimeField(
         blank=True, 
         null=True,
-        help_text="When the credentials were last validated"
+        help_text="When the credentials were last refreshed"
     )
     validation_error = models.TextField(
         blank=True, 
@@ -131,7 +121,6 @@ class UserBrokerCredential(models.Model):
             models.Index(fields=['broker_name']),
             models.Index(fields=['status']),
             models.Index(fields=['is_default']),
-            models.Index(fields=['is_paper_trading']),
             models.Index(fields=['user_id', 'broker_name']),
             models.Index(fields=['user_id', 'status']),
             models.Index(fields=['kite_user_id']),
@@ -150,7 +139,7 @@ class UserBrokerCredential(models.Model):
                 raise ValidationError({'api_key': 'Zerodha API key should be at least 15 characters'})
 
     @classmethod
-    def create_broker_credential(cls, user_id, broker_name, api_key, api_secret, is_paper_trading=False):
+    def create_broker_credential(cls, user_id, broker_name, api_key, api_secret):
         """
         Create a new broker credential for a user
         """
@@ -164,8 +153,7 @@ class UserBrokerCredential(models.Model):
                 broker_name=broker_name,
                 api_key=api_key,
                 api_secret=api_secret,
-                is_default=is_first,  # Set as default if it's the first one for this broker
-                is_paper_trading=is_paper_trading
+                is_default=is_first  # Set as default if it's the first one for this broker
             )
             credential.full_clean()
             credential.save()
@@ -191,17 +179,15 @@ class UserBrokerCredential(models.Model):
             return credential
 
     @classmethod
-    def get_default_credential(cls, user_id, broker_name=None, is_paper_trading=None):
+    def get_default_credential(cls, user_id, broker_name=None):
         """
-        Get the default credential for a user, optionally filtered by broker and trading mode.
+        Get the default credential for a user, optionally filtered by broker.
         Returns default credential regardless of status - validation happens during API calls.
         """
         query = cls.objects.filter(user_id=user_id, is_default=True)
         
         if broker_name:
             query = query.filter(broker_name=broker_name)
-        if is_paper_trading is not None:
-            query = query.filter(is_paper_trading=is_paper_trading)
         
         try:
             return query.get()
@@ -225,16 +211,16 @@ class UserBrokerCredential(models.Model):
         """
         Update credential status based on validation result
         """
-        self.last_validated_at = timezone.now()
+        self.last_refreshed_at = timezone.now()
         
         if validation_result:
             self.status = 'active'
             self.validation_error = None
         else:
-            self.status = 'invalid'
+            self.status = 'pending_verification'
             self.validation_error = error_message
         
-        self.save(update_fields=['status', 'last_validated_at', 'validation_error', 'updated_at'])
+        self.save(update_fields=['status', 'last_refreshed_at', 'validation_error', 'updated_at'])
 
     def update_token(self, access_token, refresh_token=None, public_token=None, kite_user_id=None):
         """
@@ -260,9 +246,9 @@ class UserBrokerCredential(models.Model):
 
     def deactivate(self, reason="Manual deactivation"):
         """
-        Deactivate the credential
+        Deactivate the credential by setting it to pending_verification
         """
-        self.status = 'revoked'
+        self.status = 'pending_verification'
         self.validation_error = reason
         self.save(update_fields=['status', 'validation_error', 'updated_at'])
 

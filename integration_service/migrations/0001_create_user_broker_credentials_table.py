@@ -30,7 +30,7 @@ class Migration(migrations.Migration):
                 
                 # Broker configuration
                 ('broker_name', EnumField(
-                    choices=[("zerodha", "zerodha"), ("upstox", "upstox"), ("angel", "angel")],
+                    choices=[("zerodha", "zerodha")],
                     default="zerodha",
                     db_index=True,
                     help_text="Broker name for integration"
@@ -73,11 +73,8 @@ class Migration(migrations.Migration):
                 # Credential status
                 ('status', EnumField(
                     choices=[
-                        ("active", "active"), 
-                        ("revoked", "revoked"), 
-                        ("expired", "expired"),
                         ("pending_verification", "pending_verification"),
-                        ("invalid", "invalid")
+                        ("active", "active")
                     ],
                     default="pending_verification",
                     db_index=True,
@@ -90,17 +87,12 @@ class Migration(migrations.Migration):
                     db_index=True,
                     help_text="Whether this is the default credential for the user"
                 )),
-                ('is_paper_trading', models.BooleanField(
-                    default=False,
-                    db_index=True,
-                    help_text="Whether this credential is for paper trading"
-                )),
                 
                 # Validation and monitoring
-                ('last_validated_at', models.DateTimeField(
+                ('last_refreshed_at', models.DateTimeField(
                     blank=True, 
                     null=True,
-                    help_text="When the credentials were last validated"
+                    help_text="When the credentials were last refreshed"
                 )),
                 ('validation_error', models.TextField(
                     blank=True, 
@@ -141,7 +133,6 @@ class Migration(migrations.Migration):
             CREATE INDEX idx_usr_broker_name ON user_broker_credentials(broker_name);
             CREATE INDEX idx_usr_broker_status ON user_broker_credentials(status);
             CREATE INDEX idx_usr_broker_default ON user_broker_credentials(is_default);
-            CREATE INDEX idx_usr_broker_paper ON user_broker_credentials(is_paper_trading);
             CREATE INDEX idx_usr_broker_created ON user_broker_credentials(created_at);
             CREATE INDEX idx_usr_broker_used ON user_broker_credentials(last_used_at);
             CREATE INDEX idx_usr_broker_kite_user ON user_broker_credentials(kite_user_id);
@@ -157,7 +148,6 @@ class Migration(migrations.Migration):
             DROP INDEX IF EXISTS idx_usr_broker_name;
             DROP INDEX IF EXISTS idx_usr_broker_status;
             DROP INDEX IF EXISTS idx_usr_broker_default;
-            DROP INDEX IF EXISTS idx_usr_broker_paper;
             DROP INDEX IF EXISTS idx_usr_broker_created;
             DROP INDEX IF EXISTS idx_usr_broker_used;
             DROP INDEX IF EXISTS idx_usr_broker_kite_user;

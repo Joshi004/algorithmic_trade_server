@@ -24,11 +24,8 @@ You can set these variables in a `.env` file in the root directory of the projec
 4. **Ready for Trading** - Credentials with `active` status can be used for API calls
 
 ### Status Values
-- `pending_verification` - Initial status, awaiting session setup
+- `pending_verification` - Initial status, awaiting session setup or failed validation
 - `active` - Validated through successful session creation
-- `invalid` - Failed session creation, credentials incorrect
-- `expired` - Access tokens expired
-- `revoked` - Manually disabled
 
 ### Automatic Validation
 When a user calls the `set_session` API with a request token, the system automatically:
@@ -37,7 +34,7 @@ When a user calls the `set_session` API with a request token, the system automat
 2. **Validates credentials** implicitly (if API call succeeds, credentials are valid)
 3. **Updates status** based on result:
    - ✅ Success → `active` 
-   - ❌ Failure → `invalid`
+   - ❌ Failure → `pending_verification`
 4. **Saves encrypted access token** for future use
 
 This approach is **more reliable** than separate validation calls because it uses the actual authentication flow.
@@ -157,6 +154,6 @@ All sensitive credential fields are encrypted before storage:
 - **Automatic Status Updates**: Credentials marked as `active` when session creation succeeds
 
 ### Audit Trail
-- `last_validated_at` - Timestamp of successful session creation
+- `last_refreshed_at` - Timestamp of successful session creation
 - `validation_error` - Error message if session creation fails
 - `last_used_at` - Timestamp of last trading activity 

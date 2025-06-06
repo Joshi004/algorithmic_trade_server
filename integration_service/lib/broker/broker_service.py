@@ -81,7 +81,7 @@ class BrokerService:
         
         Args:
             user_id: User's unique identifier
-            broker_name: Name of the broker (zerodha, upstox, etc.)
+            broker_name: Name of the broker (zerodha)
             api_key: Broker API key (will be encrypted)
             api_secret: Broker API secret (will be encrypted)
             
