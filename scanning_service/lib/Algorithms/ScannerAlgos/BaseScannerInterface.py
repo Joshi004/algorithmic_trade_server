@@ -43,25 +43,23 @@ class BaseScannerInterface(ABC):
         Use configure() method to set up the scanner with required parameters.
         """
         self.trade_frequency = None
-        self.user_id = None
-        self.trade_session_id = None
         self._configured = False
     
     @abstractmethod
-    def configure(self, trade_freq: str, user_id: str = None, trade_session_id: str = None, **kwargs):
+    def configure(self, trade_freq: str, **kwargs):
         """
         Configure the scanner with required parameters and dependencies.
         Each scanner implementation can accept different configuration parameters.
         
+        Note: user_id and trade_session_id are passed as parameters but not stored
+        as instance state since scanners are now frequency-based singletons.
+        
         Args:
             trade_freq: Trading frequency (e.g., "5minute")
-            user_id: User ID for the scanner
-            trade_session_id: Trade session ID for event correlation
             **kwargs: Additional scanner-specific configuration parameters
+                     May include user_id, trade_session_id for method calls
         """
         self.trade_frequency = trade_freq
-        self.user_id = user_id
-        self.trade_session_id = trade_session_id
         self._configured = True
     
     def is_configured(self) -> bool:

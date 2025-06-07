@@ -43,23 +43,26 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
         
         log(f"Initialized UDTSScanner singleton for {algorithm_type} algorithm with {frequency} frequency")
     
-    def configure(self, trade_freq: str, user_id: str = None, trade_session_id: str = None, **kwargs):
+    def configure(self, trade_freq: str, **kwargs):
         """
         Configure the UDTS scanner with required parameters and dependencies.
         
+        Note: user_id and trade_session_id are not stored as instance state
+        since this scanner is now a frequency-based singleton.
+        
         Args:
             trade_freq: Trading frequency (e.g., "5minute")
-            user_id: User ID for the scanner
-            trade_session_id: Trade session ID for event correlation
-            **kwargs: Additional configuration (integration_provider, tmu_provider)
+            **kwargs: Additional configuration (integration_provider, tmu_provider, user_id, trade_session_id)
         """
         # Call parent configure
-        super().configure(trade_freq, user_id, trade_session_id, **kwargs)
+        super().configure(trade_freq, **kwargs)
         
+        # Extract user_id from kwargs for provider initialization
+        user_id = kwargs.get('user_id')
         
         # Use provided providers or create default ones
-        self.integration_provider = kwargs.get('integration_provider') or IntegrationServiceProvider(user_id)
-        self.tmu_provider = kwargs.get('tmu_provider') or TMUServiceProvider(user_id)
+        self.integration_provider = kwargs.get('integration_provider') or IntegrationServiceProvider(user_id) if user_id else None
+        self.tmu_provider = kwargs.get('tmu_provider') or TMUServiceProvider(user_id) if user_id else None
         
         # Keep data_provider for backward compatibility (points to integration provider)
         self.data_provider = self.integration_provider
@@ -67,13 +70,13 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
         # Event publisher
         self.event_publisher = get_scanning_event_publisher()
         
-        log(f"UDTS Scanner configured for frequency: {trade_freq}, user: {user_id}, session: {trade_session_id}")
+        log(f"UDTS Scanner configured for frequency: {trade_freq}")
      
     def __str__(self):
         identifier = f"{self.algorithm_type}__{self.frequency}"
         return identifier
 
-    def scan_in_separate_thread(self, all_instruments, user_id, dummy):
+    def scan_in_separate_thread(self, all_instruments, user_id, trade_session_id, dummy):
         self._ensure_configured()
         
         tm.sleep(4) # let Trade session be created
@@ -83,7 +86,7 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
         # Publish scanner started status
         self.event_publisher.publish_scanner_status(
             user_id=user_id,
-            trade_session_id=self.trade_session_id,
+            trade_session_id=trade_session_id,
             scanner_type="udts",
             status="started",
             details={"trade_frequency": self.trade_frequency, "instruments_count": len(all_instruments)}
@@ -128,7 +131,7 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
                     instrument_data = self.format_eligible_instrument(raw_instrument_data)
                     
                     # Publish the eligible instrument immediately
-                    self.add_tokens_to_subscribed_trade_sessions([instrument_data])
+                    self.add_tokens_to_subscribed_trade_sessions([instrument_data], trade_session_id)
                 else:
                     log(f'{eligibility_obj["message"]}')
                     
@@ -138,7 +141,7 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
             # Publish scan cycle completed status
             self.event_publisher.publish_scanner_status(
                 user_id=user_id,
-                trade_session_id=self.trade_session_id,
+                trade_session_id=trade_session_id,
                 scanner_type="udts",
                 status="running",
                 details={
@@ -158,19 +161,20 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
         self._is_running = False
         self.event_publisher.publish_scanner_status(
             user_id=user_id,
-            trade_session_id=self.trade_session_id,
+            trade_session_id=trade_session_id,
             scanner_type="udts",
             status="stopped",
             details={"total_cycles": counter}
         )
         log(f"Scanner thread for {self.trade_frequency} stopped after {counter} cycles")
 
-    def add_tokens_to_subscribed_trade_sessions(self, eligible_instruments):
+    def add_tokens_to_subscribed_trade_sessions(self, eligible_instruments, trade_session_id):
         """
         Publish eligible instruments to Redis stream for consumption by other services.
         
         Args:
             eligible_instruments: List of eligible instrument dictionaries in standardized format
+            trade_session_id: Trade session ID for event correlation
         """
         self._ensure_configured()
         
@@ -182,7 +186,7 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
             try:
                 # Publish the eligible instrument event using standardized format
                 message_id = self.event_publisher.publish_eligible_instrument(
-                    trade_session_id=self.trade_session_id,
+                    trade_session_id=trade_session_id,
                     instrument_data=instrument,
                     scanner_type="udts"
                 )
@@ -222,20 +226,20 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
         log(f"Successfully fetched {len(instruments)} instruments from TMU")
         return instruments
 
-    def fetch_instrument_tokens_and_start_tracking(self, user_id, dummy):
+    def fetch_instrument_tokens_and_start_tracking(self, user_id, trade_session_id, dummy):
         self._ensure_configured()
         
         instrument_list = self.fetch_instruments()
-        self.scan_instruments(instrument_list, user_id, dummy)
+        self.scan_instruments(instrument_list, user_id, trade_session_id, dummy)
 
-    def scan_instruments(self, all_instruments, user_id, dummy):
+    def scan_instruments(self, all_instruments, user_id, trade_session_id, dummy):
         self._ensure_configured()
         
         # Store the thread reference
         thread_name = f"scanner_thread_udts_{self.trade_frequency}"
         self._scanner_thread = threading.Thread(
             target=self.scan_in_separate_thread,
-            args=(all_instruments, user_id, dummy),
+            args=(all_instruments, user_id, trade_session_id, dummy),
             name=thread_name
         )
         self._scanner_thread.daemon = True
