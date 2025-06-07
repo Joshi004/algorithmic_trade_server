@@ -99,11 +99,6 @@ class Migration(migrations.Migration):
                     null=True,
                     help_text="Last validation error message if any"
                 )),
-                ('last_used_at', models.DateTimeField(
-                    blank=True, 
-                    null=True,
-                    help_text="When the credentials were last used for trading"
-                )),
                 
                 # Kite specific fields
                 ('kite_user_id', models.CharField(
@@ -134,7 +129,6 @@ class Migration(migrations.Migration):
             CREATE INDEX idx_usr_broker_status ON user_broker_credentials(status);
             CREATE INDEX idx_usr_broker_default ON user_broker_credentials(is_default);
             CREATE INDEX idx_usr_broker_created ON user_broker_credentials(created_at);
-            CREATE INDEX idx_usr_broker_used ON user_broker_credentials(last_used_at);
             CREATE INDEX idx_usr_broker_kite_user ON user_broker_credentials(kite_user_id);
             
             -- Composite indexes for common query patterns
@@ -149,7 +143,6 @@ class Migration(migrations.Migration):
             DROP INDEX IF EXISTS idx_usr_broker_status;
             DROP INDEX IF EXISTS idx_usr_broker_default;
             DROP INDEX IF EXISTS idx_usr_broker_created;
-            DROP INDEX IF EXISTS idx_usr_broker_used;
             DROP INDEX IF EXISTS idx_usr_broker_kite_user;
             
             -- Drop composite indexes

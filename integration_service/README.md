@@ -155,5 +155,4 @@ All sensitive credential fields are encrypted before storage:
 
 ### Audit Trail
 - `last_refreshed_at` - Timestamp of successful session creation
-- `validation_error` - Error message if session creation fails
-- `last_used_at` - Timestamp of last trading activity 
+- `validation_error` - Error message if session creation fails 

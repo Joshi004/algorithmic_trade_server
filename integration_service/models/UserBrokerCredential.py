@@ -93,11 +93,6 @@ class UserBrokerCredential(models.Model):
         null=True,
         help_text="Last validation error message if any"
     )
-    last_used_at = models.DateTimeField(
-        blank=True, 
-        null=True,
-        help_text="When the credentials were last used for trading"
-    )
     
     # Kite specific fields
     kite_user_id = models.CharField(
@@ -221,8 +216,7 @@ class UserBrokerCredential(models.Model):
         if kite_user_id:
             self.kite_user_id = kite_user_id
         
-        self.last_used_at = timezone.now()
-        self.save(update_fields=['access_token', 'refresh_token', 'public_token', 'kite_user_id', 'last_used_at', 'updated_at'])
+        self.save(update_fields=['access_token', 'refresh_token', 'public_token', 'kite_user_id', 'updated_at'])
 
     @property
     def is_healthy(self):
