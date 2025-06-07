@@ -113,7 +113,7 @@ class ScanningQueueConsumer:
             tmu_provider = TMUServiceProvider(user_id)
             
             # Create scanner instance using new factory pattern
-            scanner = self._scanner_factory.get_scanner(scanning_algo_name)
+            scanner = self._scanner_factory.get_scanner(scanning_algo_name, trading_frequency)
             
             if scanner is None:
                 log(f"Unknown scanning algorithm: {scanning_algo_name}", level="error")

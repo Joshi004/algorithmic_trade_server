@@ -14,9 +14,21 @@ from django.conf import settings
 
 
 class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
-    def __init__(self):
+    def __init__(self, algorithm_type, frequency):
+        """
+        Initialize UDTS scanner for specific algorithm type and frequency.
+        Called by singleton metaclass with algorithm_type and frequency parameters.
+        
+        Args:
+            algorithm_type: Type of algorithm (should be "udts")
+            frequency: Trading frequency (e.g., "5-minute", "10-minute")
+        """
         # Initialize base class
         super().__init__()
+        
+        # Store algorithm type and frequency for this singleton instance
+        self.algorithm_type = algorithm_type
+        self.frequency = frequency
         
         # Initialize scanner-specific attributes
         self.integration_provider = None
@@ -28,6 +40,8 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
         self._scanner_thread = None
         self._stop_event = threading.Event()
         self._is_running = False
+        
+        log(f"Initialized UDTSScanner singleton for {algorithm_type} algorithm with {frequency} frequency")
     
     def configure(self, trade_freq: str, user_id: str = None, trade_session_id: str = None, **kwargs):
         """
@@ -56,7 +70,7 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
         log(f"UDTS Scanner configured for frequency: {trade_freq}, user: {user_id}, session: {trade_session_id}")
      
     def __str__(self):
-        identifier = f"{self.trade_frequency}__udts_scanner"
+        identifier = f"{self.algorithm_type}__{self.frequency}"
         return identifier
 
     def scan_in_separate_thread(self, all_instruments, user_id, dummy):
@@ -191,7 +205,7 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
             required_action = None
         return required_action
 
-    def fetch_instruments_from_db(self):
+    def fetch_instruments(self):
         self._ensure_configured()
         
         search_params = {"exchange": "NSE", "segment": "NSE", "instrument_type": "EQ", "page_length": 5000}
@@ -211,10 +225,10 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
     def fetch_instrument_tokens_and_start_tracking(self, user_id, dummy):
         self._ensure_configured()
         
-        result = self.fetch_instruments_from_db()
-        self.scan_and_add_instruments_for_tracking(result, user_id, dummy)
+        instrument_list = self.fetch_instruments()
+        self.scan_instruments(instrument_list, user_id, dummy)
 
-    def scan_and_add_instruments_for_tracking(self, all_instruments, user_id, dummy):
+    def scan_instruments(self, all_instruments, user_id, dummy):
         self._ensure_configured()
         
         # Store the thread reference
