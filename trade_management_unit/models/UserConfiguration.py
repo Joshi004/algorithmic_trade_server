@@ -128,58 +128,6 @@ class UserConfiguration(models.Model):
         except cls.DoesNotExist:
             return None
 
-    def calculate_position_size(self, account_balance, instrument_price):
-        """Calculate position size based on configuration and account balance"""
-        # Calculate based on percentage of capital
-        max_amount_percentage = (account_balance * self.position_size_percentage) / 100
-        
-        # Calculate based on absolute maximum
-        max_amount_absolute = float(self.max_position_size)
-        
-        # Use the smaller of the two
-        max_amount = min(max_amount_percentage, max_amount_absolute)
-        
-        # Calculate quantity (number of shares/units)
-        if instrument_price > 0:
-            quantity = int(max_amount / instrument_price)
-            return max(1, quantity)  # At least 1 unit
-        return 1
-
-    def calculate_stop_loss_price(self, entry_price, trade_direction='long'):
-        """Calculate stop loss price based on configuration"""
-        stop_loss_factor = self.default_stop_loss_percentage / 100
-        
-        if trade_direction.lower() == 'long':
-            return entry_price * (1 - stop_loss_factor)
-        else:  # short
-            return entry_price * (1 + stop_loss_factor)
-
-    def calculate_take_profit_price(self, entry_price, trade_direction='long'):
-        """Calculate take profit price based on configuration"""
-        take_profit_factor = self.default_take_profit_percentage / 100
-        
-        if trade_direction.lower() == 'long':
-            return entry_price * (1 + take_profit_factor)
-        else:  # short
-            return entry_price * (1 - take_profit_factor)
-
-    def is_within_reward_risk_ratio(self, reward_risk_ratio):
-        """Check if a given reward-risk ratio is within configured limits"""
-        return self.min_reward_risk_ratio <= reward_risk_ratio <= self.max_reward_risk_ratio
-
-    def validate_trade_limits(self, current_session_trades=0, current_daily_trades=0):
-        """Validate if more trades can be taken based on limits"""
-        session_limit_ok = current_session_trades < self.trades_per_session
-        daily_limit_ok = current_daily_trades < self.max_daily_trades
-        
-        return {
-            'can_trade': session_limit_ok and daily_limit_ok,
-            'session_limit_reached': not session_limit_ok,
-            'daily_limit_reached': not daily_limit_ok,
-            'session_trades_remaining': max(0, self.trades_per_session - current_session_trades),
-            'daily_trades_remaining': max(0, self.max_daily_trades - current_daily_trades),
-        }
-
     def update_configuration(self, **kwargs):
         """Update configuration with validation"""
         for field, value in kwargs.items():
@@ -189,15 +137,3 @@ class UserConfiguration(models.Model):
         # Trigger full_clean to run validators and constraints
         self.full_clean()
         self.save()
-
-    @property
-    def risk_level(self):
-        """Get risk level description based on risk appetite"""
-        if self.risk_appetite <= 20:
-            return 'Conservative'
-        elif self.risk_appetite <= 50:
-            return 'Moderate'
-        elif self.risk_appetite <= 80:
-            return 'Aggressive'
-        else:
-            return 'Very Aggressive'
