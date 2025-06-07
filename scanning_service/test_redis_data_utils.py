@@ -111,7 +111,7 @@ def test_trade_session_event():
             "initiation_algorithm_id": 3,
             "termination_algorithm_id": 4
         },
-        "trading_frequency": "5minute",
+        "trading_frequency": "5-minute",
         "is_dummy": True,
         "session_status": "started"
     }

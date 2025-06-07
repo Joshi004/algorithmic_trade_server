@@ -26,9 +26,9 @@ class BrokerServiceTest(TransactionTestCase):
         self.test_api_key = 'test_api_key'
         self.test_api_secret = 'test_api_secret'
         
-        # Set required environment variables
-        if not os.environ.get('BROKER_ENCRYPTION_SECRET'):
-            os.environ['BROKER_ENCRYPTION_SECRET'] = 'test_encryption_secret'
+        # Set required environment variables for encryption testing
+        if not os.environ.get('BROKER_API_ENCRYPTION_SECRET'):
+            os.environ['BROKER_API_ENCRYPTION_SECRET'] = 'test_encryption_secret_key_for_broker_api_32_chars'
 
     def tearDown(self):
         """Clean up test data using raw SQL."""
@@ -43,7 +43,7 @@ class BrokerServiceTest(TransactionTestCase):
             'data': {
                 'broker_name': self.test_broker_name,
                 'is_default': True,
-                'status': 'active'
+                'status': 'pending_verification'
             }
         }
         
@@ -64,10 +64,14 @@ class BrokerServiceTest(TransactionTestCase):
         
         # Verify credential fields
         self.assertEqual(credential.broker_name, self.test_broker_name)
-        self.assertEqual(credential.api_key, self.test_api_key)
-        self.assertEqual(credential.api_secret, self.test_api_secret)
+        # Note: api_key and api_secret are now encrypted, so we can't compare directly
+        # Verify we can decrypt them back to original values
+        decrypted_key = self.broker_service._decrypt_value(credential.api_key)
+        decrypted_secret = self.broker_service._decrypt_value(credential.api_secret)
+        self.assertEqual(decrypted_key, self.test_api_key)
+        self.assertEqual(decrypted_secret, self.test_api_secret)
         self.assertTrue(credential.is_default)
-        self.assertEqual(credential.status, 'active')
+        self.assertEqual(credential.status, 'pending_verification')
         
         # Update expected response with actual credential ID
         expected_response['data']['credential_id'] = credential.id
@@ -124,12 +128,12 @@ class BrokerServiceTest(TransactionTestCase):
         # Verify first credential data
         self.assertEqual(cred1_result['broker_name'], self.test_broker_name)
         self.assertEqual(cred1_result['is_default'], True)
-        self.assertEqual(cred1_result['status'], 'active')
+        self.assertEqual(cred1_result['status'], 'pending_verification')
         
         # Verify second credential data
         self.assertEqual(cred2_result['broker_name'], self.test_broker_name)
         self.assertEqual(cred2_result['is_default'], False)
-        self.assertEqual(cred2_result['status'], 'active')
+        self.assertEqual(cred2_result['status'], 'pending_verification')
 
     def test_set_default_broker_updates_default_status(self):
         """Test set_default_broker method correctly updates default status."""
@@ -257,13 +261,43 @@ class BrokerServiceTest(TransactionTestCase):
         test_secret = 'test_api_secret'
         
         # Encrypt the secret
-        encrypted = self.broker_service._encrypt_secret(test_secret)
+        encrypted = self.broker_service._encrypt_value(test_secret)
         
         # Verify encrypted value is different from original
         self.assertNotEqual(encrypted, test_secret)
         
         # Decrypt the secret
-        decrypted = self.broker_service._decrypt_secret(encrypted)
+        decrypted = self.broker_service._decrypt_value(encrypted)
         
         # Verify decrypted value matches original
-        self.assertEqual(decrypted, test_secret) 
+        self.assertEqual(decrypted, test_secret)
+
+    def test_credentials_are_encrypted_in_database(self):
+        """Test that credentials are actually encrypted when stored in database."""
+        # Register a broker
+        response = self.broker_service.register_broker(
+            user_id=self.test_user_id,
+            broker_name=self.test_broker_name,
+            api_key=self.test_api_key,
+            api_secret=self.test_api_secret
+        )
+        
+        # Verify successful registration
+        self.assertEqual(response['status'], 'success')
+        
+        # Get credential from database
+        credential = UserBrokerCredential.objects.get(user_id=self.test_user_id)
+        
+        # Verify that stored values are encrypted (different from original)
+        self.assertNotEqual(credential.api_key, self.test_api_key)
+        self.assertNotEqual(credential.api_secret, self.test_api_secret)
+        
+        # Verify we can decrypt them back
+        decrypted_key = self.broker_service._decrypt_value(credential.api_key)
+        decrypted_secret = self.broker_service._decrypt_value(credential.api_secret)
+        
+        self.assertEqual(decrypted_key, self.test_api_key)
+        self.assertEqual(decrypted_secret, self.test_api_secret)
+        
+        # Verify initial status is pending_verification
+        self.assertEqual(credential.status, 'pending_verification') 

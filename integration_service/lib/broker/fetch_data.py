@@ -40,10 +40,12 @@ class FetchData:
                 to_date = datetime.now()
             
             # Calculate from_date based on interval and number of candles
-            if "minute" in interval:
-                minutes = int(interval.replace("minute", "") or 1)
+            if "-minute" in interval:
+                # Handle new format (5-minute)
+                minute_str = interval.replace("-minute", "")
+                minutes = int(minute_str) if minute_str else 1
                 from_date = to_date - timedelta(minutes=minutes * number_of_candles)
-            elif interval == "day":
+            elif interval == "1-day" or interval == "day":
                 from_date = to_date - timedelta(days=number_of_candles)
             else:
                 # Default fallback

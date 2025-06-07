@@ -20,11 +20,11 @@ FRICTION_COEFFECIENT = 0.2  # Trading costs consideration
 
 # Frequency configuration
 FREQUENCY_STEPS = {
-    "minute": ["minute", "10minute", "60minute"],
-    "3minute": ["3minute", "15minute", "60minute"],
-    "5minute": ["5minute", "30minute", "60minute"],
-    "10minute": ["10minute", "30minute", "60minute"],
-    "15minute": ["15minute", "60minute", "day"],
+    "1-minute": ["1-minute", "10-minute", "60-minute"],
+    "3-minute": ["3-minute", "15-minute", "60-minute"],
+    "5-minute": ["5-minute", "30-minute", "60-minute"],
+    "10-minute": ["10-minute", "30-minute", "60-minute"],
+    "15-minute": ["15-minute", "60-minute", "1-day"],
 }
 SCOPE_COLLECTION_FREQ_INDEX = 0  # Freq index for scope calculation
 

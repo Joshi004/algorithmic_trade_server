@@ -19,7 +19,7 @@ class InitiationQueueConsumerTest(TestCase):
             'timestamp': '2024-01-01T10:00:00+05:30',
             'trade_session_id': '123',
             'user_id': 'user-456',
-            'trading_frequency': '3minute',
+            'trading_frequency': '3-minute',
             'is_dummy': 'true',
             'session_status': 'started',
             'algorithm_config_scanning_algorithm_id': '2',
@@ -58,7 +58,7 @@ class InitiationQueueConsumerTest(TestCase):
             'trade_session_id': '123',
             'user_id': 'user-456',
             'timestamp': '2024-01-01T10:00:00+05:30',
-            'trading_frequency': '3minute',
+            'trading_frequency': '3-minute',
             'is_dummy': 'true',
             'session_status': 'started'
         }

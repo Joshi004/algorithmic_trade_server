@@ -4,9 +4,8 @@ from ats_gateway.models.User import User
 from trade_management_unit.models.ScanningAlgorithm import ScanningAlgorithm
 from trade_management_unit.models.InitiationAlgorithm import InitiationAlgorithm
 from trade_management_unit.models.TerminationAlgorithm import TerminationAlgorithm
-from trade_management_unit.Constants.TmuConstants import FREQUENCY  # assuming constants.py is in the same directory
-from trade_management_unit.lib.common.Utils.Utils import *
-from trade_management_unit.lib.common.event_publisher import get_trade_session_event_publisher
+from trade_management_unit.Constants.TmuConstants import FREQUENCY
+from trade_management_unit.lib.common.Utils.Utils import current_ist
 
 
 class TradeSession(models.Model):
@@ -38,7 +37,7 @@ class TradeSession(models.Model):
     TRADING_FREQUENCY_CHOICES = [(freq, freq) for freq in FREQUENCY]
 
     TRADING_FREQUENCY_CHOICES = [(freq, freq) for freq in FREQUENCY]
-    trading_frequency = EnumField(choices=TRADING_FREQUENCY_CHOICES, default="10minute")
+    trading_frequency = EnumField(choices=TRADING_FREQUENCY_CHOICES, default="10-minute")
 
     @classmethod
     def fetch_or_create_trade_session(cls, scanning_algo_id, initiation_algo_id, termination_algo_id, trading_freq, is_dummy, user_id):
@@ -75,15 +74,6 @@ class TradeSession(models.Model):
                 dummy=is_dummy  # Set is_dummy based on the parameter
             )
             trade_session.save()  # Save the new trade session to the database
-            
-            # Publish event to Redis stream for new session creation
-            try:
-                event_publisher = get_trade_session_event_publisher()
-                event_publisher.publish_trade_session_initiated(trade_session, "New session created")
-            except Exception as e:
-                # Log error but don't fail the session creation
-                from trade_management_unit.lib.common.Utils.custome_logger import log
-                log(f"Failed to publish trade session initiation event for session {trade_session.id}: {str(e)}", level="error")
             
             return trade_session, "New session created"
 
@@ -142,15 +132,6 @@ class TradeSession(models.Model):
             dummy=is_dummy  # Set is_dummy based on the parameter
         )
         trade_session.save()  # Save the new trade session to the database
-        
-        # Publish event to Redis stream for new session creation
-        try:
-            event_publisher = get_trade_session_event_publisher()
-            event_publisher.publish_trade_session_initiated(trade_session, "New session created")
-        except Exception as e:
-            # Log error but don't fail the session creation
-            from trade_management_unit.lib.common.Utils.custome_logger import log
-            log(f"Failed to publish trade session initiation event for session {trade_session.id}: {str(e)}", level="error")
         
         return trade_session
 

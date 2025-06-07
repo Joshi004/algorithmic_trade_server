@@ -48,8 +48,8 @@ def set_session(request, *args, **kwargs):
 
 def get_login_url(request, *args, **kwargs):
     """
-    Get Kite login URL for a user
-    Updated to check if broker credentials exist first
+    Get Kite login URL for a user.
+    Returns login URL for any default credentials - validation happens during actual API calls.
     """
     if request.method != 'GET':
         return JsonResponse({
@@ -69,8 +69,7 @@ def get_login_url(request, *args, **kwargs):
         
         # Check if user has broker credentials
         credential = UserBrokerCredential.get_default_credential(
-            user_id=user_id, 
-            broker_name="zerodha"
+            user_id=user_id
         )
         
         if not credential:

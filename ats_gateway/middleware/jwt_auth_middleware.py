@@ -61,7 +61,8 @@ class JWTAuthMiddleware:
         
         # Strip quotes if present (though cookies shouldn't have them)
         token = token.strip('"') if token else None
-        logger.info(f"Token extracted from cookie | Token prefix: {token[:15] if token else 'None'}... | Path: {request.path}")
+        # Log token extraction without exposing token value
+        logger.info(f"Token extracted from cookie | Path: {request.path}")
         return token, None
     
     def process_refresh_endpoint(self, token, request, is_async=False):

@@ -1,4 +1,6 @@
-class ScannerSingletonMeta(type):
+from abc import ABCMeta
+
+class ScannerSingletonMeta(ABCMeta):
     # Create an empty dictionary to store the instances
     _instances = {}
 

@@ -67,7 +67,7 @@ class IntegrationServiceProvider:
         Args:
             symbol: Trading symbol
             token: Instrument token
-            interval: Time interval (e.g., "5minute", "day")
+            interval: Time interval (e.g., "5-minute", "1-day")
             number_of_candles: Number of candles to fetch
             trade_date: Optional trade date
             
