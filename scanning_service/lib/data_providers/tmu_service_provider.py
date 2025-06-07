@@ -79,39 +79,6 @@ class TMUServiceProvider:
             log(error_msg, level="error")
             return {"data": [], "meta": {"error": error_msg}}
     
-    def get_udts_eligibility(self, symbol, trade_freq):
-        """
-        Get UDTS eligibility for a symbol from TMU.
-        
-        Args:
-            symbol: Trading symbol
-            trade_freq: Trading frequency
-            
-        Returns:
-            dict: UDTS eligibility data
-        """
-        try:
-            url = f"{self.base_url}/get_udts_eligibility/"
-            params = {
-                "symbol": symbol,
-                "trade_freq": trade_freq
-            }
-            
-            log(f"Getting UDTS eligibility for {symbol} at {trade_freq}")
-            response = requests.get(url, params=params, headers=self.headers)
-            
-            if response.status_code == 200:
-                return response.json()
-            else:
-                error_msg = f"Failed to get UDTS eligibility, status code: {response.status_code}"
-                log(error_msg, level="error")
-                return {"error": error_msg}
-                
-        except Exception as e:
-            error_msg = f"Exception getting UDTS eligibility: {str(e)}"
-            log(error_msg, level="error")
-            return {"error": error_msg}
-    
     def get_historical_data(self, instrument_id, trade_frequency, number_of_candles, trade_date=None):
         """
         Get historical data from TMU (which internally calls integration service).
