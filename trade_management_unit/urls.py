@@ -8,7 +8,6 @@ urlpatterns = [
     # Instrument endpoints - handle both with and without trailing slash
     re_path(r'^get_instruments/?$', instrument_view.get_instruments, name='get_instruments'),
     re_path(r'^update_instruments/?$', instrument_view.update_instruments, name='update_instruments'),
-    re_path(r'^get_historical_data/?$', instrument_view.get_historical_data, name='get_historical_data'),
     
     # Trade session endpoints - handle both with and without trailing slash
     # re_path(r'^get_all_trades_info/?$', trade_session_view.get_all_trades_info, name='get_all_trades_info'),

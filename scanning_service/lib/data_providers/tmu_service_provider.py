@@ -79,47 +79,7 @@ class TMUServiceProvider:
             log(error_msg, level="error")
             return {"data": [], "meta": {"error": error_msg}}
     
-    def get_historical_data(self, instrument_id, trade_frequency, number_of_candles, trade_date=None):
-        """
-        Get historical data from TMU (which internally calls integration service).
-        
-        Args:
-            instrument_id: Instrument token/ID
-            trade_frequency: Time interval (e.g., "5minute")
-            number_of_candles: Number of candles to fetch
-            trade_date: Optional trade date
-            
-        Returns:
-            dict: Historical data response
-        """
-        try:
-            url = f"{self.base_url}/get_historical_data/"
-            params = {
-                "instrument_id": instrument_id,
-                "trade_frequency": trade_frequency,
-                "number_of_candles": number_of_candles
-            }
-            
-            if self.user_id:
-                params["user_id"] = self.user_id
-                
-            if trade_date:
-                params["trade_date"] = trade_date.isoformat() if hasattr(trade_date, 'isoformat') else str(trade_date)
-            
-            log(f"Fetching historical data from TMU for instrument {instrument_id}")
-            response = requests.get(url, params=params, headers=self.headers)
-            
-            if response.status_code == 200:
-                return response.json()
-            else:
-                error_msg = f"Failed to get historical data, status code: {response.status_code}"
-                log(error_msg, level="error")
-                return {"error": error_msg}
-                
-        except Exception as e:
-            error_msg = f"Exception getting historical data: {str(e)}"
-            log(error_msg, level="error")
-            return {"error": error_msg}
+
     
     def health_check(self):
         """
