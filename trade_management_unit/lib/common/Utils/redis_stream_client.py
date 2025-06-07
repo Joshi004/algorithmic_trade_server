@@ -4,7 +4,7 @@ import os
 from django.conf import settings
 from trade_management_unit.lib.common.Utils.custome_logger import log
 # Import centralized Redis utilities
-from scanning_service.lib.utils.redis_data_utils import prepare_for_redis_stream
+from scanning_service.lib.utils.redis import prepare_for_redis_stream
 
 
 
