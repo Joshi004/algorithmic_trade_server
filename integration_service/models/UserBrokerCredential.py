@@ -144,8 +144,8 @@ class UserBrokerCredential(models.Model):
         Create a new broker credential for a user
         """
         with transaction.atomic():
-            # Check if this is the first credential for this user/broker combination
-            is_first = not cls.objects.filter(user_id=user_id, broker_name=broker_name).exists()
+            # Check if this is the first credential for this user (across all brokers)
+            is_first = not cls.objects.filter(user_id=user_id).exists()
             
             # Create the new credential
             credential = cls(
@@ -153,7 +153,7 @@ class UserBrokerCredential(models.Model):
                 broker_name=broker_name,
                 api_key=api_key,
                 api_secret=api_secret,
-                is_default=is_first  # Set as default if it's the first one for this broker
+                is_default=is_first  # Set as default if it's the first credential for this user
             )
             credential.full_clean()
             credential.save()
@@ -161,41 +161,28 @@ class UserBrokerCredential(models.Model):
 
     @classmethod
     def set_as_default(cls, credential_id, user_id):
-        """
-        Set a specific credential as the default for a user
-        """
+        # Set a specific credential as the default for a user (across all brokers)
         with transaction.atomic():
             credential = cls.objects.get(id=credential_id, user_id=user_id)
             
-            # First, unset default for all credentials of this user for this broker
-            cls.objects.filter(
-                user_id=user_id, 
-                broker_name=credential.broker_name
-            ).update(is_default=False)
+            # Unset default for ALL credentials of this user (across all brokers)
+            cls.objects.filter(user_id=user_id).update(is_default=False)
             
-            # Then set the specified credential as default
+            # Set the specified credential as default
             credential.is_default = True
             credential.save()
             return credential
 
     @classmethod
-    def get_default_credential(cls, user_id, broker_name=None):
-        """
-        Get the default credential for a user, optionally filtered by broker.
-        Returns default credential regardless of status - validation happens during API calls.
-        """
-        query = cls.objects.filter(user_id=user_id, is_default=True)
-        
-        if broker_name:
-            query = query.filter(broker_name=broker_name)
-        
+    def get_default_credential(cls, user_id):
+        # Get the default credential for a user regardless of broker
         try:
-            return query.get()
+            return cls.objects.get(user_id=user_id, is_default=True)
         except cls.DoesNotExist:
             return None
         except cls.MultipleObjectsReturned:
             # If multiple defaults found, return the most recently created
-            return query.order_by('-created_at').first()
+            return cls.objects.filter(user_id=user_id, is_default=True).order_by('-created_at').first()
 
     @classmethod
     def get_active_credentials(cls, user_id, broker_name=None):

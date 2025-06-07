@@ -69,8 +69,7 @@ def get_login_url(request, *args, **kwargs):
         
         # Check if user has broker credentials
         credential = UserBrokerCredential.get_default_credential(
-            user_id=user_id, 
-            broker_name="zerodha"
+            user_id=user_id
         )
         
         if not credential:

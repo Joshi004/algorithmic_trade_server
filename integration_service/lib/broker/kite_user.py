@@ -25,8 +25,7 @@ class KiteUser:
         try:
             # Get the default credential for Zerodha (Kite)
             self.credential = UserBrokerCredential.get_default_credential(
-                user_id=self.user_id, 
-                broker_name="zerodha"
+                user_id=self.user_id
             )
             
             if self.credential:
