@@ -7,7 +7,7 @@ from typing import Dict, Any, Optional
 
 from django.conf import settings
 from scanning_service.lib.utils.logger import log
-from scanning_service.lib.utils.redis_data_utils import restore_from_redis_stream
+from scanning_service.lib.utils.redis import restore_from_redis_stream, create_consumer_client
 from scanning_service.lib.Algorithms.ScannerAlgos.ScannerAlgoFactory import ScannerAlgoFactory
 from scanning_service.lib.data_providers import IntegrationServiceProvider, TMUServiceProvider
 
@@ -20,69 +20,21 @@ class ScanningQueueConsumer:
     
     def __init__(self):
         """Initialize the consumer with Redis connection and configuration"""
-        # Get configuration from Django settings
-        self.redis_host = getattr(settings, 'REDIS_HOST', 'localhost')
-        self.redis_port = getattr(settings, 'REDIS_PORT', 6379)
-        self.redis_db = getattr(settings, 'REDIS_DB', 0)
-        self.socket_timeout = getattr(settings, 'REDIS_SOCKET_TIMEOUT', 5)
-        self.socket_connect_timeout = getattr(settings, 'REDIS_SOCKET_CONNECT_TIMEOUT', 5)
-        self.health_check_interval = getattr(settings, 'REDIS_HEALTH_CHECK_INTERVAL', 30)
-        
         # Stream and consumer configuration
         self.stream_name = getattr(settings, 'REDIS_STREAM_SCANNING_QUEUE', 'scanning_queue')
         self.consumer_group = "scanning_service_group"
         self.consumer_name = f"scanning_consumer_{int(time.time())}"
-        self.batch_size = getattr(settings, 'REDIS_CONSUMER_BATCH_SIZE', 10)
-        self.timeout = getattr(settings, 'REDIS_CONSUMER_TIMEOUT', 1000)  # milliseconds
         
-        self._client = None
+        # Create Redis consumer client using new structure
+        self.redis_consumer = create_consumer_client(self.consumer_group, self.consumer_name)
+        
         self._running = False
         self._scanner_factory = ScannerAlgoFactory()
         self._active_scanners = {}  # Track active scanner instances
         
         log(f"Initialized ScanningQueueConsumer with consumer name: {self.consumer_name}")
     
-    def _get_redis_client(self) -> Optional[redis.Redis]:
-        """Get Redis client with proper configuration"""
-        try:
-            if self._client is None:
-                self._client = redis.Redis(
-                    host=self.redis_host,
-                    port=self.redis_port,
-                    db=self.redis_db,
-                    socket_timeout=self.socket_timeout,
-                    socket_connect_timeout=self.socket_connect_timeout,
-                    decode_responses=True,
-                    health_check_interval=self.health_check_interval
-                )
-            return self._client
-        except Exception as e:
-            log(f"Failed to create Redis client: {str(e)}", level="error")
-            return None
-    
-    def _ensure_consumer_group(self) -> bool:
-        """Ensure the consumer group exists, create if it doesn't"""
-        try:
-            client = self._get_redis_client()
-            if client is None:
-                return False
-            
-            # Try to create the consumer group (from beginning of stream)
-            try:
-                client.xgroup_create(self.stream_name, self.consumer_group, id='0', mkstream=True)
-                log(f"Created consumer group '{self.consumer_group}' for stream '{self.stream_name}'")
-            except redis.ResponseError as e:
-                if "BUSYGROUP" in str(e):
-                    log(f"Consumer group '{self.consumer_group}' already exists")
-                else:
-                    log(f"Error creating consumer group: {str(e)}", level="error")
-                    return False
-            
-            return True
-            
-        except Exception as e:
-            log(f"Error ensuring consumer group: {str(e)}", level="error")
-            return False
+
     
     def _process_event(self, event_data: Dict[str, Any]) -> bool:
         """
@@ -228,17 +180,15 @@ class ScanningQueueConsumer:
         try:
             log("Starting ScanningQueueConsumer...")
             
-            client = self._get_redis_client()
-            if client is None:
-                log("Failed to get Redis client, cannot start consumer", level="error")
+            # Test Redis connection using new consumer client
+            if not self.redis_consumer.health_check():
+                log("Failed to connect to Redis, cannot start consumer", level="error")
                 return
             
-            # Test Redis connection
-            client.ping()
             log("Redis connection established successfully")
             
-            # Ensure consumer group exists
-            if not self._ensure_consumer_group():
+            # Ensure consumer group exists using new consumer client
+            if not self.redis_consumer.ensure_consumer_group(self.stream_name):
                 log("Failed to ensure consumer group, cannot start consumer", level="error")
                 return
             
@@ -247,14 +197,8 @@ class ScanningQueueConsumer:
             
             while self._running:
                 try:
-                    # Read messages from the stream
-                    messages = client.xreadgroup(
-                        self.consumer_group,
-                        self.consumer_name,
-                        {self.stream_name: '>'},
-                        count=self.batch_size,
-                        block=self.timeout
-                    )
+                    # Read messages from the stream using new consumer client
+                    messages = self.redis_consumer.read_from_stream(self.stream_name)
                     
                     if messages:
                         for stream, stream_messages in messages:
@@ -267,9 +211,11 @@ class ScanningQueueConsumer:
                                     success = self._process_event(event_data)
                                     
                                     if success:
-                                        # Acknowledge the message
-                                        client.xack(self.stream_name, self.consumer_group, message_id)
-                                        log(f"Acknowledged message {message_id}")
+                                        # Acknowledge the message using new consumer client
+                                        if self.redis_consumer.acknowledge_message(self.stream_name, message_id):
+                                            log(f"Acknowledged message {message_id}")
+                                        else:
+                                            log(f"Failed to acknowledge message {message_id}", level="error")
                                     else:
                                         log(f"Failed to process message {message_id}, not acknowledging", level="error")
                                         
@@ -292,9 +238,7 @@ class ScanningQueueConsumer:
             log(f"Fatal error in consumer: {str(e)}", level="error")
         finally:
             self._running = False
-            if self._client:
-                self._client.close()
-                log("Redis connection closed")
+            self.redis_consumer.close()
             log("ScanningQueueConsumer stopped")
     
     def stop_consuming(self):
@@ -317,13 +261,4 @@ class ScanningQueueConsumer:
     
     def health_check(self) -> bool:
         """Check if the consumer can connect to Redis"""
-        try:
-            client = self._get_redis_client()
-            if client is None:
-                return False
-            
-            client.ping()
-            return True
-        except Exception as e:
-            log(f"Health check failed: {str(e)}", level="error")
-            return False 
+        return self.redis_consumer.health_check() 

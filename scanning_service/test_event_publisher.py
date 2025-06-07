@@ -12,8 +12,7 @@ sys.path.append('/app')  # Adjust based on your Docker setup
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ats_base.settings')
 django.setup()
 
-from scanning_service.lib.utils.event_publisher import get_scanning_event_publisher
-from scanning_service.lib.utils.redis_client import get_redis_client
+from scanning_service.lib.utils.redis import get_scanning_event_publisher, get_publisher_client
 from scanning_service.lib.utils.logger import log
 import time
 
@@ -122,21 +121,15 @@ def test_event_publisher():
     log("\n=== Test 4: Verify Events in Redis Streams ===")
     
     try:
-        redis_client = get_redis_client()
+        publisher_client = get_publisher_client()
         
         # Check initiation queue stream (renamed from eligible_instruments_stream)
-        stream_info = redis_client.xinfo_stream('initiation_queue')
-        log(f"Initiation queue stream - Length: {stream_info['length']}, Last ID: {stream_info['last-generated-id']}")
-        
-        # Read last few events
-        events = redis_client.xrevrange('initiation_queue', count=3)
-        log(f"Last 3 initiation queue events:")
-        for event_id, data in events:
-            log(f"  - {event_id}: {data.get('trading_symbol')} ({data.get('required_action')}) @ {data.get('market_price')}")
+        stream_info = publisher_client.get_stream_info('initiation_queue')
+        log(f"Initiation queue stream - Length: {stream_info.get('length', 0)}")
         
         # Check scanner status stream
-        stream_info = redis_client.xinfo_stream('scanner_status_stream')
-        log(f"\nScanner status stream - Length: {stream_info['length']}, Last ID: {stream_info['last-generated-id']}")
+        stream_info = publisher_client.get_stream_info('scanner_status_stream')
+        log(f"\nScanner status stream - Length: {stream_info.get('length', 0)}")
         
     except Exception as e:
         log(f"Error checking Redis streams: {str(e)}", level="error")

@@ -5,7 +5,7 @@ from django.test import TestCase
 from unittest.mock import patch, MagicMock
 from scanning_service.consumers.scanning_queue_consumer import ScanningQueueConsumer
 from scanning_service.lib.utils.logger import log
-from scanning_service.lib.utils.redis_data_utils import restore_from_redis_stream
+from scanning_service.lib.utils.redis import restore_from_redis_stream
 
 
 class ScanningQueueConsumerTest(TestCase):

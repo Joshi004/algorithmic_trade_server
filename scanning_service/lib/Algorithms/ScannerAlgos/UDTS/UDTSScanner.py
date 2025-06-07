@@ -8,7 +8,7 @@ import pandas as pd
 import threading
 from scanning_service.lib.utils.common import current_ist
 from scanning_service.lib.data_providers import IntegrationServiceProvider, TMUServiceProvider
-from scanning_service.lib.utils.event_publisher import get_scanning_event_publisher
+from scanning_service.lib.utils.redis import get_scanning_event_publisher
 import requests
 from django.conf import settings
 

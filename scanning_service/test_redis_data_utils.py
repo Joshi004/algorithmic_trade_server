@@ -12,14 +12,11 @@ sys.path.append('/app')  # Adjust based on your Docker setup
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ats_base.settings')
 django.setup()
 
-from scanning_service.lib.utils.redis_data_utils import (
+from scanning_service.lib.utils.redis.utils import (
     flatten_dict, 
     unflatten_dict, 
     prepare_for_redis_stream, 
-    restore_from_redis_stream,
-    convert_redis_stream_data,
-    unflatten_dict_with_types,
-    smart_type_conversion
+    restore_from_redis_stream
 )
 from scanning_service.lib.utils.logger import log
 
@@ -118,59 +115,17 @@ def test_trade_session_event():
     
     log(f"Original trade session event: {trade_session_event}")
     
-    # Test with convert_redis_stream_data function
-    flattened = convert_redis_stream_data(trade_session_event, 'flatten')
+    # Test with prepare/restore functions
+    flattened = prepare_for_redis_stream(trade_session_event)
     log(f"Flattened: {flattened}")
     
-    restored = convert_redis_stream_data(flattened, 'unflatten')
+    restored = restore_from_redis_stream(flattened)
     log(f"Restored: {restored}")
     
     log(f"Trade session round-trip successful: {trade_session_event == restored}")
 
 
-def test_type_conversion():
-    """Test smart type conversion features"""
-    log("\n" + "=" * 50)
-    log("Testing Type Conversion")
-    log("=" * 50)
-    
-    # Test individual type conversions
-    test_values = [
-        ("123", 123),
-        ("45.67", 45.67),
-        ("true", True),
-        ("false", False),
-        ("null", None),
-        ('["item1", "item2"]', ["item1", "item2"]),
-        ('{"key": "value"}', {"key": "value"}),
-        ("", None),
-        ("regular string", "regular string")
-    ]
-    
-    for input_val, expected in test_values:
-        result = smart_type_conversion(input_val)
-        log(f"'{input_val}' -> {result} (type: {type(result).__name__}) - Expected: {expected}")
-        assert result == expected, f"Expected {expected}, got {result}"
-    
-    # Test unflattening with type conversion
-    flattened_with_types = {
-        'user_id': '123',
-        'user_active': 'true',
-        'user_score': '89.5',
-        'metadata': '',
-        'tags': '["tag1", "tag2"]',
-        'config_debug': 'false'
-    }
-    
-    log(f"Flattened data with string types: {flattened_with_types}")
-    
-    # Restore without type conversion
-    restored_strings = unflatten_dict(flattened_with_types)
-    log(f"Restored (strings): {restored_strings}")
-    
-    # Restore with type conversion
-    restored_typed = unflatten_dict_with_types(flattened_with_types)
-    log(f"Restored (typed): {restored_typed}")
+
 
 
 def test_edge_cases():
@@ -192,13 +147,6 @@ def test_edge_cases():
     restored_single = unflatten_dict(flattened_single)
     log(f"Single level test: {single_level} -> {flattened_single} -> {restored_single}")
     # Note: numbers will be strings after round-trip without type conversion
-    
-    # Test invalid operation
-    try:
-        convert_redis_stream_data({}, 'invalid_operation')
-        assert False, "Should have raised ValueError"
-    except ValueError as e:
-        log(f"Correctly caught error: {e}")
     
     log("All edge case tests passed!")
 
@@ -246,7 +194,6 @@ if __name__ == "__main__":
         test_basic_flattening()
         test_eligible_instrument_event()
         test_trade_session_event()
-        test_type_conversion()
         test_edge_cases()
         test_performance()
         

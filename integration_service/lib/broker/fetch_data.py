@@ -81,25 +81,4 @@ class FetchData:
                 logging.error(f"Error fetching data from Zerodha: {str(e)}")
                 raise e
 
-    def separate_time(self, s):
-        """Helper method to parse time intervals"""
-        # If the string is empty or None, return 1 and None
-        if not s:
-            return 1, None
-
-        # Use regex to find the number and unit in the string
-        match = re.match(r'(\d*)(\D*)', s.strip())
-
-        # If there's no match, return 1 and None
-        if not match:
-            return 1, None
-
-        # Get the number and unit from the match
-        number, unit = match.groups()
-
-        # If the number is empty, assume it's 1
-        if not number:
-            number = '1'
-
-        # Return the number as an int and the unit
-        return int(number), str(unit) + "s" 
+ 
