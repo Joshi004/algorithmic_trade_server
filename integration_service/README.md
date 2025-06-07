@@ -20,7 +20,7 @@ You can set these variables in a `.env` file in the root directory of the projec
 2. **Get Login URL** - User gets Zerodha login URL and completes OAuth flow
 3. **Set Session** (`/set_session/`) - Exchanges request token for access token
    - **Validates credentials** automatically by testing with Zerodha API
-   - **Updates status** to `active` if successful, `invalid` if failed
+   - **Updates status** to `active` if successful, `pending_verification` if failed
 4. **Ready for Trading** - Credentials with `active` status can be used for API calls
 
 ### Status Values

@@ -130,13 +130,11 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-# Password Hashers - Explicit bcrypt configuration for consistency
-# This ensures all password hashing uses bcrypt, matching our custom UserManager implementation
+# Password Hashers - BCrypt preferred with PBKDF2 fallback
+# BCrypt for new passwords, PBKDF2 as reliable fallback (no external dependencies)
 PASSWORD_HASHERS = [
-    'django.contrib.auth.hashers.BCryptSHA256PasswordHasher',
-    'django.contrib.auth.hashers.BCryptPasswordHasher', 
-    'django.contrib.auth.hashers.PBKDF2PasswordHasher',  # Fallback for existing data
-    'django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher',  # Additional fallback
+    'django.contrib.auth.hashers.BCryptSHA256PasswordHasher',  # Preferred: fast, secure
+    'django.contrib.auth.hashers.PBKDF2PasswordHasher',       # Fallback: reliable, no deps
 ]
 
 
