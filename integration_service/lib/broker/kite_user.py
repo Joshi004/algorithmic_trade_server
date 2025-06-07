@@ -30,14 +30,12 @@ class KiteUser:
             
             if self.credential:
                 self.logger.info(f"Found credential {self.credential.id} for user {self.user_id}")
-                self.logger.info(f"Encrypted API key length: {len(self.credential.api_key) if self.credential.api_key else 'None'}")
+                # Log only non-sensitive information about credential existence
+                self.logger.info("API credentials loaded and decrypted successfully")
                 
                 # Decrypt credentials for use
                 self.api_key = self.broker_service._decrypt_value(self.credential.api_key)
                 self.api_secret = self.broker_service._decrypt_value(self.credential.api_secret)
-                
-                self.logger.info(f"Decrypted API key: '{self.api_key}' (length: {len(self.api_key) if self.api_key else 'None'})")
-                self.logger.info(f"API key starts with: '{self.api_key[:10] if self.api_key and len(self.api_key) >= 10 else self.api_key}'...")
                 
                 if self.credential.access_token:
                     self.access_token = self.broker_service._decrypt_value(self.credential.access_token)
@@ -103,7 +101,8 @@ class KiteUser:
         try:
             kite = KiteConnect(api_key=self.api_key)
             user_data = kite.generate_session(request_token, api_secret=self.api_secret)
-            self.logger.info(f"User data post set session from Kite: {user_data}")
+            # Log only non-sensitive session information
+            self.logger.info("Session data received from Kite successfully")
             
             # Validate that we received the required access_token
             if not user_data or "access_token" not in user_data:
@@ -158,7 +157,8 @@ class KiteUser:
             raise
     
     def get_login_url(self):
-        self.logger.info(f"Generating login URL with API key: '{self.api_key}' (length: {len(self.api_key) if self.api_key else 'None'})")
+        # Log only non-sensitive information about login URL generation
+        self.logger.info("Generating login URL for Kite authentication")
         
         if not self.api_key:
             self.logger.error("No API key available for login URL generation")
@@ -167,7 +167,7 @@ class KiteUser:
         kite = KiteConnect(api_key=self.api_key)
         login_url = kite.login_url()
         
-        self.logger.info(f"Generated login URL: {login_url}")
+        self.logger.info("Login URL generated successfully")
         
         result = {
             "login_url": login_url
