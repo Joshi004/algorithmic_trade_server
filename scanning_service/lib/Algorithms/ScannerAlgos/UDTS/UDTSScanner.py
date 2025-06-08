@@ -85,7 +85,7 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
         self.event_publisher.publish_scanner_status(
             user_id=user_id,
             trade_session_id=trade_session_id,
-            scanner_type="udts",
+            scanner_type=self.algorithm_type,
             status="started",
             details={"trade_frequency": self.trade_frequency, "instruments_count": len(all_instruments)}
         )
@@ -130,7 +130,7 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
                     
                     # Publish the eligible instrument immediately using parent class method
                     # This will now publish to ALL active trade sessions using this scanner
-                    self.publish_eligible_instruments([instrument_data], "udts")
+                    self.publish_eligible_instruments([instrument_data])
                 else:
                     log(f'{eligibility_obj["message"]}')
                     
@@ -141,7 +141,7 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
             self.event_publisher.publish_scanner_status(
                 user_id=user_id,
                 trade_session_id=trade_session_id,
-                scanner_type="udts",
+                scanner_type=self.algorithm_type,
                 status="running",
                 details={
                     "scan_cycle": counter,
@@ -161,7 +161,7 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
         self.event_publisher.publish_scanner_status(
             user_id=user_id,
             trade_session_id=trade_session_id,
-            scanner_type="udts",
+            scanner_type=self.algorithm_type,
             status="stopped",
             details={"total_cycles": counter}
         )

@@ -85,7 +85,7 @@ class TradeSession(models.Model):
         return trade_session
 
     @classmethod
-    def fetch_active_trade_session(cls, user_id=None, scanning_algo_id=None, initiation_algo_id=None, termination_algo_id=None, trading_freq=None, is_dummy=None, scanner_algorithm_name=None):
+    def fetch_active_trade_session(cls, user_id=None, scanning_algo_id=None, initiation_algo_id=None, termination_algo_id=None, trading_freq=None, is_dummy=None):
         """
         Fetch active trade sessions with optional filtering.
         Returns QuerySet of all matching active sessions.
@@ -97,9 +97,6 @@ class TradeSession(models.Model):
         
         if scanning_algo_id is not None:
             query = query.filter(scanning_algorithm_id=scanning_algo_id)
-        
-        if scanner_algorithm_name is not None:
-            query = query.filter(scanning_algorithm__name=scanner_algorithm_name)
             
         if initiation_algo_id is not None:
             query = query.filter(initiation_algorithm_id=initiation_algo_id)

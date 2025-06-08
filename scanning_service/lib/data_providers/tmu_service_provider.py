@@ -79,12 +79,12 @@ class TMUServiceProvider:
             log(error_msg, level="error")
             return {"data": [], "meta": {"error": error_msg}}
     
-    def fetch_active_trade_sessions(self, scanner_algorithm_name, trading_frequency):
+    def fetch_active_trade_sessions(self, scanning_algo_id, trading_frequency):
         """
-        Fetch active trade sessions that use the specified scanner algorithm and frequency.
+        Fetch active trade sessions that use the specified scanner algorithm ID and frequency.
         
         Args:
-            scanner_algorithm_name: Name of the scanning algorithm (e.g., "udts")
+            scanning_algo_id: ID of the scanning algorithm (e.g., 1 for UDTS)
             trading_frequency: Trading frequency (e.g., "5-minute", "10-minute")
                 
         Returns:
@@ -103,11 +103,11 @@ class TMUServiceProvider:
         try:
             url = f"{self.base_url}/get_active_trade_sessions/"
             params = {
-                'scanner_algorithm_name': scanner_algorithm_name,
+                'scanning_algo_id': scanning_algo_id,
                 'trading_frequency': trading_frequency
             }
             
-            log(f"Fetching active trade sessions for scanner: {scanner_algorithm_name}, frequency: {trading_frequency}")
+            log(f"Fetching active trade sessions for scanner ID: {scanning_algo_id}, frequency: {trading_frequency}")
             response = requests.get(url, params=params, headers=self.headers)
             
             if response.status_code == 200:

@@ -44,7 +44,7 @@ class ScanningEventPublisher:
         self,
         trade_session_id: str,
         instrument_data: Dict[str, Any],
-        scanner_type: str = "udts"
+        scanner_type: str = None
     ) -> Optional[str]:
         """
         Publish an eligible instrument found by scanner using standardized format.
@@ -52,7 +52,7 @@ class ScanningEventPublisher:
         Args:
             trade_session_id: Trade session ID
             instrument_data: Dictionary containing standardized instrument details
-            scanner_type: Type of scanner (default: "udts")
+            scanner_type: Type of scanner (required parameter)
             
         Returns:
             Message ID if successful, None otherwise
@@ -68,6 +68,11 @@ class ScanningEventPublisher:
         }
         """
         try:
+            # Validate required parameter
+            if not scanner_type:
+                log("Scanner type is required for publishing eligible instrument", level="error")
+                return None
+                
             # Create standardized event data format
             event_data = {
                 'event_id': self._generate_event_id(),
@@ -159,7 +164,7 @@ class ScanningEventPublisher:
         self,
         trade_session_id: str,
         instruments: List[Dict[str, Any]],
-        scanner_type: str = "udts"
+        scanner_type: str = None
     ) -> int:
         """
         Publish multiple eligible instruments in a batch operation.
@@ -167,7 +172,7 @@ class ScanningEventPublisher:
         Args:
             trade_session_id: Trade session ID
             instruments: List of instrument data dictionaries
-            scanner_type: Type of scanner (default: "udts")
+            scanner_type: Type of scanner (required parameter)
             
         Returns:
             Number of successfully published instruments
@@ -175,6 +180,11 @@ class ScanningEventPublisher:
         if not instruments:
             return 0
         
+        # Validate required parameter
+        if not scanner_type:
+            log("Scanner type is required for batch publishing eligible instruments", level="error")
+            return 0
+
         try:
             # Prepare batch data
             batch_data = []

@@ -85,14 +85,14 @@ class ScanningQueueConsumer:
             
             # Extract algorithm configuration
             algo_config = event_data.get('algorithm', {}) or event_data.get('algorithm_config', {})
-            scanning_algo_name = algo_config.get('scanning', {}).get('name', 'udts')
-            tracking_algo_name = algo_config.get('tracking', {}).get('name', 'udts_slto')
+            scanning_algo_id = algo_config.get('scanning_algorithm_id', 1)  # Default to UDTS (ID 1)
+            tracking_algo_id = algo_config.get('tracking_algorithm_id', 1)  # Default to tracking algo ID 1
             
             log(f"Starting scanner for trade session {trade_session_id}:")
             log(f"  - User ID: {user_id}")
             log(f"  - Trading Frequency: {trading_frequency}")
-            log(f"  - Scanning Algorithm: {scanning_algo_name}")
-            log(f"  - Tracking Algorithm: {tracking_algo_name}")
+            log(f"  - Scanning Algorithm ID: {scanning_algo_id}")
+            log(f"  - Tracking Algorithm ID: {tracking_algo_id}")
             log(f"  - Is Dummy: {is_dummy}")
             
             # Create data providers
@@ -100,10 +100,10 @@ class ScanningQueueConsumer:
             tmu_provider = TMUServiceProvider(user_id)
             
             # Get scanner instance using factory (factory handles singleton behavior)
-            scanner = self._scanner_factory.get_scanner(scanning_algo_name, trading_frequency)
+            scanner = self._scanner_factory.get_scanner(scanning_algo_id, trading_frequency)
             
             if scanner is None:
-                log(f"Unknown scanning algorithm: {scanning_algo_name}", level="error")
+                log(f"Unknown scanning algorithm ID: {scanning_algo_id}", level="error")
                 return False
             
             # Configure the scanner with required parameters

@@ -85,12 +85,21 @@ def get_active_trade_sessions(request, *args, **kwargs):
     """
     try:
         query_params = request.GET
-        scanner_algorithm_name = query_params.get("scanner_algorithm_name")
+        scanning_algo_id = query_params.get("scanning_algo_id")
         trading_frequency = query_params.get("trading_frequency")
+        
+        # Convert to int if provided
+        if scanning_algo_id:
+            try:
+                scanning_algo_id = int(scanning_algo_id)
+            except ValueError:
+                return JsonResponse({
+                    'error': 'Invalid scanning_algo_id, must be an integer'
+                }, status=400)
         
         # Use the model method with optional parameters
         sessions = TradeSessionModel.fetch_active_trade_session(
-            scanner_algorithm_name=scanner_algorithm_name,
+            scanning_algo_id=scanning_algo_id,
             trading_freq=trading_frequency
         )
         

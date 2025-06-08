@@ -199,19 +199,27 @@ class BaseScannerInterface(ABC):
         if scanner_type is None:
             scanner_type = self.__class__.__name__.lower().replace('scanner', '')
         
-        # Convert scanner type to uppercase for database query (algorithm names are stored in uppercase)
-        database_algorithm_name = scanner_type.upper()
+        # Map scanner type to algorithm ID
+        algorithm_id_map = {
+            'udts': 1,
+            # Add more mappings as algorithms are implemented
+            # 'rsi_divergence': 2,
+            # 'breakout_scanner': 3,
+            # 'momentum_surge': 4
+        }
         
-        # Fetch active trade sessions for this scanner algorithm and frequency
+        scanning_algo_id = algorithm_id_map.get(scanner_type, 1)  # Default to UDTS (ID 1)
+        
+        # Fetch active trade sessions for this scanner algorithm ID and frequency
         try:
             active_sessions = self.tmu_provider.fetch_active_trade_sessions(
-                scanner_algorithm_name=database_algorithm_name,
+                scanning_algo_id=scanning_algo_id,
                 trading_frequency=self.trade_frequency
             )
             
             if not active_sessions:
                 from scanning_service.lib.utils.logger import log
-                log(f"No active trade sessions found for scanner {scanner_type} with frequency {self.trade_frequency}")
+                log(f"No active trade sessions found for scanner ID {scanning_algo_id} with frequency {self.trade_frequency}")
                 return
             
             from scanning_service.lib.utils.logger import log
