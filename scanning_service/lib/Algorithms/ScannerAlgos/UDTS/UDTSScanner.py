@@ -150,57 +150,108 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
 
 
     def is_eligible(self, symbol):
+        """
+        Check if a trading symbol is eligible for UDTS strategy based on volume, trend analysis, and reward-risk ratio.
+        
+        Args:
+            symbol: Trading symbol to analyze (e.g., "RELIANCE")
+            
+        Returns:
+            tuple: (is_eligible: bool, eligibility_data: dict)
+        """
         self._ensure_configured()
         
-        eligibility_obj = {"message": str(symbol) + " : Eligible"}
+        # Initialize eligibility tracking object with default message
+        eligibility_data = {"message": str(symbol) + " : Eligible"}
         
-        # Fetch Quotes using data provider
+        # Fetch real-time quote data for the symbol
         quote_response = self.data_provider.get_quotes(symbol, DEFAULT_EXCHANGE)
-        quote = quote_response.get("data", {})
+        quotes_data = quote_response.get("data", {})
         
-        key = DEFAULT_EXCHANGE+":"+symbol.upper()
-        if key not in quote:
-            eligibility_obj["message"] = symbol + " : No Data Fetched from quotes"
-            return False, eligibility_obj
-        token = quote[key]["instrument_token"]
-        quote_data = quote[key]
-        trade_freq =  self.trade_frequency
-        frq_steps = FREQUENCY_STEPS[trade_freq]
-        number_of_candles = NUM_CANDLES_FOR_TREND_ANALYSIS
-        is_volume_eligible = self.get_volume_eligibility(quote_data)
-        if (not is_volume_eligible):
-            eligibility_obj["message"] = symbol + " : Volume not eligible"
-            return False, eligibility_obj
+        # Create quote key in expected format (EXCHANGE:SYMBOL)
+        quote_key = DEFAULT_EXCHANGE + ":" + symbol.upper()
         
-        for index in range(0,len(frq_steps)):
-            freq = frq_steps[index]
-            eligibility_obj[freq] = {}
-            # Use data provider instead of FetchData
-            eligibility_obj[freq]["data"] = self.data_provider.fetch_historical_candle_data_from_kite(
-                symbol, token, frq_steps[index], number_of_candles
+        # Validate that quote data exists for this symbol
+        if quote_key not in quotes_data:
+            eligibility_data["message"] = symbol + " : No Data Fetched from quotes"
+            return False, eligibility_data
+            
+        # Extract instrument token and quote details
+        instrument_token = quotes_data[quote_key]["instrument_token"]
+        current_quote_data = quotes_data[quote_key]
+        
+        # Get trading frequency configuration
+        current_trade_frequency = self.trade_frequency
+        frequency_steps = FREQUENCY_STEPS[current_trade_frequency]
+        required_candles_count = NUM_CANDLES_FOR_TREND_ANALYSIS
+        
+        # Check if volume meets minimum trading threshold
+        is_volume_sufficient = self.get_volume_eligibility(current_quote_data)
+        if not is_volume_sufficient:
+            eligibility_data["message"] = symbol + " : Volume not eligible"
+            return False, eligibility_data
+        
+        # Analyze trends across multiple timeframes
+        for frequency_index in range(0, len(frequency_steps)):
+            current_frequency = frequency_steps[frequency_index]
+            eligibility_data[current_frequency] = {}
+            
+            # Fetch historical candle data for this timeframe
+            eligibility_data[current_frequency]["data"] = self.data_provider.fetch_historical_candle_data_from_kite(
+                symbol, instrument_token, frequency_steps[frequency_index], required_candles_count
             )
-            if(len(eligibility_obj[freq]["data"]) < NUM_CANDLES_FOR_TREND_ANALYSIS): #For This frequency no data was fetched
-                eligibility_obj["message"] = symbol + " : Not Enough Candles For " + str(freq)
-                return False , eligibility_obj
-            eligibility_obj[freq]["chart"] = CandleChart(symbol,token,quote_data["last_price"],quote_data["volume"],quote_data["last_quantity"],frq_steps[index],eligibility_obj[freq]["data"])
-            eligibility_obj[freq]["chart"].set_trend_and_deflection_points()
-        # USe Center element for scope
-        deflection_points_scope =  self.__get_deflection_points_scope(eligibility_obj[frq_steps[SCOPE_COLLECTION_FREQ_INDEX]]["chart"])
-        eligibility_obj[trade_freq]["chart"].normalise_deflection_points(deflection_points_scope)
-        eligibility_obj[trade_freq]["chart"].set_trading_levels_and_ratios()
-        effective_trend = self.__get_effective_trend(eligibility_obj)
-        eligibility_obj["effective_trend"] = effective_trend
+            
+            # Validate sufficient historical data exists
+            historical_candles = eligibility_data[current_frequency]["data"]
+            if len(historical_candles) < NUM_CANDLES_FOR_TREND_ANALYSIS:
+                eligibility_data["message"] = symbol + " : Not Enough Candles For " + str(current_frequency)
+                return False, eligibility_data
+                
+            # Create candle chart for trend analysis
+            eligibility_data[current_frequency]["chart"] = CandleChart(
+                symbol, 
+                instrument_token, 
+                current_quote_data["last_price"], 
+                current_quote_data["volume"], 
+                current_quote_data["last_quantity"], 
+                frequency_steps[frequency_index], 
+                eligibility_data[current_frequency]["data"]
+            )
+            
+            # Calculate trend direction and key price levels
+            eligibility_data[current_frequency]["chart"].set_trend_and_deflection_points()
+        
+        # Use center timeframe element to establish price scope for normalization
+        scope_reference_chart = eligibility_data[frequency_steps[SCOPE_COLLECTION_FREQ_INDEX]]["chart"]
+        price_deflection_scope = self.__get_deflection_points_scope(scope_reference_chart)
+        
+        # Normalize deflection points and calculate trading levels for primary timeframe
+        primary_timeframe_chart = eligibility_data[current_trade_frequency]["chart"]
+        primary_timeframe_chart.normalise_deflection_points(price_deflection_scope)
+        primary_timeframe_chart.set_trading_levels_and_ratios()
+        
+        # Determine overall trend consensus across timeframes
+        consensus_trend = self.__get_effective_trend(eligibility_data)
+        eligibility_data["effective_trend"] = consensus_trend
 
-        if(not eligibility_obj[trade_freq]["chart"].valid_pairs or len(eligibility_obj[trade_freq]["chart"].valid_pairs)<1):
-            eligibility_obj["message"] = symbol + " : No Valid Trading pairs Present"
-            return False, eligibility_obj
+        # Validate that valid trading pairs exist
+        valid_trading_pairs = primary_timeframe_chart.valid_pairs
+        if not valid_trading_pairs or len(valid_trading_pairs) < 1:
+            eligibility_data["message"] = symbol + " : No Valid Trading pairs Present"
+            return False, eligibility_data
 
-        reward_risk_ratio = eligibility_obj[trade_freq]["chart"].trading_pair["reward_risk_ratio"] if "reward_risk_ratio" in eligibility_obj[trade_freq]["chart"].trading_pair else 0
-        eligibility_obj["message"] = f"{symbol} : {effective_trend.value} , Reward:Risk - {reward_risk_ratio}"
-        if(reward_risk_ratio > MINIMUM_REWARD_RISK_RATIO ):
-            return True,eligibility_obj
+        # Extract reward-to-risk ratio for final eligibility check
+        trading_pair_data = primary_timeframe_chart.trading_pair
+        current_reward_risk_ratio = trading_pair_data.get("reward_risk_ratio", 0)
+        
+        # Update eligibility message with trend and ratio information
+        eligibility_data["message"] = f"{symbol} : {consensus_trend.value} , Reward:Risk - {current_reward_risk_ratio}"
+        
+        # Final eligibility decision based on minimum reward-risk threshold
+        if current_reward_risk_ratio > MINIMUM_REWARD_RISK_RATIO:
+            return True, eligibility_data
 
-        return False,eligibility_obj
+        return False, eligibility_data
 
     def get_volume_eligibility(self, quote):
         self.volume = quote["volume"]
