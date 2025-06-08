@@ -5,6 +5,11 @@ Defines the standardized event format that all scanner algorithms must follow.
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, List
 
+# Import dependencies that were previously scattered in methods
+from scanning_service.lib.utils.redis import get_scanning_event_publisher
+from scanning_service.lib.data_providers import TMUServiceProvider
+from scanning_service.lib.utils.logger import log
+
 
 class BaseScannerInterface(ABC):
     """
@@ -64,12 +69,10 @@ class BaseScannerInterface(ABC):
         
         # Initialize event publisher (common across all scanners)
         if not self.event_publisher:
-            from scanning_service.lib.utils.redis import get_scanning_event_publisher
             self.event_publisher = get_scanning_event_publisher()
         
         # Initialize TMU service provider for fetching active trade sessions
         if not hasattr(self, 'tmu_provider') or not self.tmu_provider:
-            from scanning_service.lib.data_providers import TMUServiceProvider
             self.tmu_provider = TMUServiceProvider()
         
         self._configured = True
@@ -191,7 +194,6 @@ class BaseScannerInterface(ABC):
         self._ensure_configured()
         
         if not self.event_publisher:
-            from scanning_service.lib.utils.logger import log
             log("Event publisher not available, cannot publish eligible instruments", level="error")
             return
         
@@ -218,11 +220,9 @@ class BaseScannerInterface(ABC):
             )
             
             if not active_sessions:
-                from scanning_service.lib.utils.logger import log
                 log(f"No active trade sessions found for scanner ID {scanning_algo_id} with frequency {self.trade_frequency}")
                 return
             
-            from scanning_service.lib.utils.logger import log
             log(f"Publishing eligible instruments to {len(active_sessions)} active trade sessions")
             
             # Publish events for each active session
@@ -247,6 +247,5 @@ class BaseScannerInterface(ABC):
                         log(f"Error publishing eligible instrument {instrument.get('trading_symbol', 'unknown')} for session {trade_session_id}: {str(e)}", level="error")
         
         except Exception as e:
-            from scanning_service.lib.utils.logger import log
             log(f"Error fetching active trade sessions: {str(e)}", level="error")
     
