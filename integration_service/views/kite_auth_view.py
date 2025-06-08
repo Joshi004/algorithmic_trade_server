@@ -1,7 +1,6 @@
 from django.shortcuts import HttpResponse, render, redirect
 from django.http import JsonResponse
 import json
-from django.core import serializers
 from integration_service.lib.broker.kite_user import KiteUser
 from integration_service.models.UserBrokerCredential import UserBrokerCredential
 

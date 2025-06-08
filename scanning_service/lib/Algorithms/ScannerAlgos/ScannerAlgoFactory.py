@@ -5,7 +5,7 @@ class ScannerAlgoFactory:
         # Mapping of algorithm IDs to algorithm types
         self.algorithm_map = {
             1: "udts",  # UDTS algorithm
-            # Add more algorithms here as they are implemented
+            # Get this  from Db LAter may be cach as well 
             # 2: "rsi_divergence",
             # 3: "breakout_scanner", 
             # 4: "momentum_surge"

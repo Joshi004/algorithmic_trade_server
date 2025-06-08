@@ -1,15 +1,23 @@
-import time as tm
 from scanning_service.lib.utils.logger import log
 from scanning_service.lib.Algorithms.ScannerAlgos.UDTS.CandleChart import CandleChart
 from scanning_service.lib.Algorithms.ScannerAlgos.ScannerSingletonMeta import ScannerSingletonMeta
 from scanning_service.lib.Algorithms.ScannerAlgos.BaseScannerInterface import BaseScannerInterface
-from scanning_service.constants import *
+from scanning_service.constants import (
+    DEFAULT_EXCHANGE,
+    FREQUENCY_STEPS,
+    NUM_CANDLES_FOR_TREND_ANALYSIS,
+    SCOPE_COLLECTION_FREQ_INDEX,
+    MINIMUM_REWARD_RISK_RATIO,
+    MARKET_OPEN_TIME,
+    MARKET_CLOSE_TIME,
+    TRADE_THRESHHOLD_PER_MINUTE,
+    Trends,
+    OrderType
+)
 import pandas as pd
 import threading
 from scanning_service.lib.utils.common import current_ist
 from scanning_service.lib.data_providers import IntegrationServiceProvider, TMUServiceProvider
-import requests
-from django.conf import settings
 
 
 class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
@@ -74,25 +82,17 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
         instrument_list = self.fetch_instruments()
         self.scan_instruments(instrument_list, user_id, trade_session_id, dummy)
 
-    def scan_in_separate_thread(self, all_instruments, user_id, trade_session_id, dummy):
+    def scan_in_separate_thread(self, all_instruments):
         self._ensure_configured()
         
-        tm.sleep(4) # let Trade session be created
         counter = 0
         self._is_running = True
         
-        # Publish scanner started status
-        self.event_publisher.publish_scanner_status(
-            user_id=user_id,
-            trade_session_id=trade_session_id,
-            scanner_type=self.algorithm_type,
-            status="started",
-            details={"trade_frequency": self.trade_frequency, "instruments_count": len(all_instruments)}
-        )
+
+        log(f'Scanning started for total {len(all_instruments)} instruments')
         
         while not self._stop_event.is_set():
             counter += 1
-            eligible_instruments = []
             instrument_counter = 0
             eligible_instrument_counter = 0
             scan_start_time = current_ist()
@@ -128,44 +128,26 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
                     # Format using base class method to ensure standardization
                     instrument_data = self.format_eligible_instrument(raw_instrument_data)
                     
-                    # Publish the eligible instrument immediately using parent class method
-                    # This will now publish to ALL active trade sessions using this scanner
+                    # This will now publish to ALL active trade sessions using this scanner using parent
                     self.publish_eligible_instruments([instrument_data])
                 else:
-                    log(f'{eligibility_obj["message"]}')
+                    log(f'Not Eligible {eligibility_obj["message"]}')
                     
             scan_end_time = current_ist()
             scan_duration = (scan_end_time - scan_start_time).total_seconds()
             
-            # Publish scan cycle completed status
-            self.event_publisher.publish_scanner_status(
-                user_id=user_id,
-                trade_session_id=trade_session_id,
-                scanner_type=self.algorithm_type,
-                status="running",
-                details={
-                    "scan_cycle": counter,
-                    "instruments_scanned": instrument_counter,
-                    "eligible_found": eligible_instrument_counter,
-                    "scan_duration_seconds": scan_duration
-                }
-            )
+
             
             log(f"Scan cycle {counter} completed - Duration: {scan_duration}s, Found: {eligible_instrument_counter}/{instrument_counter}")
+            log(f'Last scan total time taken {scan_duration} seconds')
             
             # Use wait instead of sleep to be interruptible
             self._stop_event.wait(timeout=30)
         
         # Scanner stopped
         self._is_running = False
-        self.event_publisher.publish_scanner_status(
-            user_id=user_id,
-            trade_session_id=trade_session_id,
-            scanner_type=self.algorithm_type,
-            status="stopped",
-            details={"total_cycles": counter}
-        )
         log(f"Scanner thread for {self.trade_frequency} stopped after {counter} cycles")
+
 
     def is_eligible(self, symbol):
         self._ensure_configured()

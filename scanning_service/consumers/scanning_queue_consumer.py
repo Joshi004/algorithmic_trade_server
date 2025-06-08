@@ -155,7 +155,7 @@ class ScanningQueueConsumer:
             return False
     
     def start_consuming(self):
-        """Start consuming messages from the scanning queue"""
+        """Start consuming messages from the scanning queue called from the start_scanning_service"""
         try:
             log("Starting ScanningQueueConsumer...")
             
@@ -205,7 +205,7 @@ class ScanningQueueConsumer:
                     log(f"Redis connection error: {str(e)}", level="error")
                     time.sleep(5)  # Wait before retry
                 except redis.TimeoutError:
-                    # Timeout is expected when no messages are available
+                    log(f"Redis connection Timed Out:", level="error")
                     pass
                 except Exception as e:
                     log(f"Unexpected error in consumer loop: {str(e)}", level="error")
@@ -221,11 +221,9 @@ class ScanningQueueConsumer:
             log("ScanningQueueConsumer stopped")
     
     def stop_consuming(self):
-        """Stop the consumer gracefully"""
         log("Stopping ScanningQueueConsumer...")
         self._running = False
         log("ScanningQueueConsumer stopped")
     
     def health_check(self) -> bool:
-        """Check if the consumer can connect to Redis"""
         return self.redis_consumer.health_check() 
