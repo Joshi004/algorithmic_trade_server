@@ -3,7 +3,7 @@ Base Scanner Interface for the scanning service.
 Defines the standardized event format that all scanner algorithms must follow.
 """
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 
 class BaseScannerInterface(ABC):
@@ -43,6 +43,7 @@ class BaseScannerInterface(ABC):
         Use configure() method to set up the scanner with required parameters.
         """
         self.trade_frequency = None
+        self.event_publisher = None
         self._configured = False
     
     @abstractmethod
@@ -60,6 +61,12 @@ class BaseScannerInterface(ABC):
                      May include user_id, trade_session_id for method calls
         """
         self.trade_frequency = trade_freq
+        
+        # Initialize event publisher (common across all scanners)
+        if not self.event_publisher:
+            from scanning_service.lib.utils.redis import get_scanning_event_publisher
+            self.event_publisher = get_scanning_event_publisher()
+        
         self._configured = True
     
     def is_configured(self) -> bool:
@@ -164,4 +171,47 @@ class BaseScannerInterface(ABC):
                 standardized_data[field] = float(standardized_data[field])
         
         return standardized_data
+    
+    def publish_eligible_instruments(self, eligible_instruments: List[Dict[str, Any]], trade_session_id: str, scanner_type: str = None) -> None:
+        """
+        Publish eligible instruments to Redis stream for consumption by other services.
+        
+        This is a common method that all scanner algorithms can use to publish their
+        findings in a standardized way.
+        
+        Args:
+            eligible_instruments: List of eligible instrument dictionaries in standardized format
+            trade_session_id: Trade session ID for event correlation
+            scanner_type: Type of scanner (auto-detected from class name if not provided)
+        """
+        self._ensure_configured()
+        
+        if not self.event_publisher:
+            from scanning_service.lib.utils.logger import log
+            log("Event publisher not available, cannot publish eligible instruments", level="error")
+            return
+        
+        # Auto-detect scanner type from class name if not provided
+        if scanner_type is None:
+            scanner_type = self.__class__.__name__.lower().replace('scanner', '')
+        
+        for instrument in eligible_instruments:
+            try:
+                # Publish the eligible instrument event using standardized format
+                message_id = self.event_publisher.publish_eligible_instrument(
+                    trade_session_id=trade_session_id,
+                    instrument_data=instrument,
+                    scanner_type=scanner_type
+                )
+                
+                if message_id:
+                    from scanning_service.lib.utils.logger import log
+                    log(f"Published eligible instrument: {instrument['trading_symbol']} - Message ID: {message_id}")
+                else:
+                    from scanning_service.lib.utils.logger import log
+                    log(f"Failed to publish eligible instrument: {instrument['trading_symbol']}", level="warning")
+                    
+            except Exception as e:
+                from scanning_service.lib.utils.logger import log
+                log(f"Error publishing eligible instrument {instrument.get('trading_symbol', 'unknown')}: {str(e)}", level="error")
     
