@@ -30,7 +30,6 @@ class KiteUser:
             
             if self.credential:
                 self.logger.info(f"Found credential {self.credential.id} for user {self.user_id}")
-                # Log only non-sensitive information about credential existence
                 self.logger.info("API credentials loaded and decrypted successfully")
                 
                 # Decrypt credentials for use
