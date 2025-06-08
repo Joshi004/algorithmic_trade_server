@@ -3,7 +3,12 @@ Base Scanner Interface for the scanning service.
 Defines the standardized event format that all scanner algorithms must follow.
 """
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
+
+# Import dependencies that were previously scattered in methods
+from scanning_service.lib.utils.redis import get_scanning_event_publisher
+from scanning_service.lib.data_providers import TMUServiceProvider
+from scanning_service.lib.utils.logger import log
 
 
 class BaseScannerInterface(ABC):
@@ -43,25 +48,33 @@ class BaseScannerInterface(ABC):
         Use configure() method to set up the scanner with required parameters.
         """
         self.trade_frequency = None
-        self.user_id = None
-        self.trade_session_id = None
+        self.event_publisher = None
         self._configured = False
     
     @abstractmethod
-    def configure(self, trade_freq: str, user_id: str = None, trade_session_id: str = None, **kwargs):
+    def configure(self, trade_freq: str, **kwargs):
         """
         Configure the scanner with required parameters and dependencies.
         Each scanner implementation can accept different configuration parameters.
         
+        Note: user_id and trade_session_id are passed as parameters but not stored
+        as instance state since scanners are now frequency-based singletons.
+        
         Args:
             trade_freq: Trading frequency (e.g., "5minute")
-            user_id: User ID for the scanner
-            trade_session_id: Trade session ID for event correlation
             **kwargs: Additional scanner-specific configuration parameters
+                     May include user_id, trade_session_id for method calls
         """
         self.trade_frequency = trade_freq
-        self.user_id = user_id
-        self.trade_session_id = trade_session_id
+        
+        # Initialize event publisher (common across all scanners)
+        if not self.event_publisher:
+            self.event_publisher = get_scanning_event_publisher()
+        
+        # Initialize TMU service provider for fetching active trade sessions
+        if not hasattr(self, 'tmu_provider') or not self.tmu_provider:
+            self.tmu_provider = TMUServiceProvider()
+        
         self._configured = True
     
     def is_configured(self) -> bool:
@@ -166,4 +179,73 @@ class BaseScannerInterface(ABC):
                 standardized_data[field] = float(standardized_data[field])
         
         return standardized_data
+    
+    def publish_eligible_instruments(self, eligible_instruments: List[Dict[str, Any]], scanner_type: str = None) -> None:
+        """
+        Publish eligible instruments to Redis stream for ALL active trade sessions using this scanner.
+        
+        This method queries for all active trade sessions that use this scanner algorithm and frequency,
+        then publishes one event per session per instrument.
+        
+        Args:
+            eligible_instruments: List of eligible instrument dictionaries in standardized format
+            scanner_type: Type of scanner (auto-detected from class name if not provided)
+        """
+        self._ensure_configured()
+        
+        if not self.event_publisher:
+            log("Event publisher not available, cannot publish eligible instruments", level="error")
+            return
+        
+        # Auto-detect scanner type from class name if not provided
+        if scanner_type is None:
+            scanner_type = self.__class__.__name__.lower().replace('scanner', '')
+        
+        # Map scanner type to algorithm ID
+        algorithm_id_map = {
+            'udts': 1,
+            # Add more mappings as algorithms are implemented
+            # 'rsi_divergence': 2,
+            # 'breakout_scanner': 3,
+            # 'momentum_surge': 4
+        }
+        
+        scanning_algo_id = algorithm_id_map.get(scanner_type, 1)  # Default to UDTS (ID 1)
+        
+        # Fetch active trade sessions for this scanner algorithm ID and frequency
+        try:
+            active_sessions = self.tmu_provider.fetch_active_trade_sessions(
+                scanning_algo_id=scanning_algo_id,
+                trading_frequency=self.trade_frequency
+            )
+            
+            if not active_sessions:
+                log(f"No active trade sessions found for scanner ID {scanning_algo_id} with frequency {self.trade_frequency}")
+                return
+            
+            log(f"Publishing eligible instruments to {len(active_sessions)} active trade sessions")
+            
+            # Publish events for each active session
+            for session in active_sessions:
+                trade_session_id = str(session['id'])
+                
+                for instrument in eligible_instruments:
+                    try:
+                        # Publish the eligible instrument event using standardized format
+                        message_id = self.event_publisher.publish_eligible_instrument(
+                            trade_session_id=trade_session_id,
+                            instrument_data=instrument,
+                            scanner_type=scanner_type
+                        )
+                        
+                        if message_id:
+                            log(f"Published eligible instrument: {instrument['trading_symbol']} for session {trade_session_id} - Message ID: {message_id}")
+                        else:
+                            log(f"Failed to publish eligible instrument: {instrument['trading_symbol']} for session {trade_session_id}", level="warning")
+                            
+                    except Exception as e:
+                        log(f"Error publishing eligible instrument {instrument.get('trading_symbol', 'unknown')} for session {trade_session_id}: {str(e)}", level="error")
+        
+        except Exception as e:
+            log(f"Error fetching active trade sessions: {str(e)}", level="error")
     

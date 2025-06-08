@@ -30,7 +30,6 @@ class ScanningQueueConsumer:
         
         self._running = False
         self._scanner_factory = ScannerAlgoFactory()
-        self._active_scanners = {}  # Track active scanner instances
         
         log(f"Initialized ScanningQueueConsumer with consumer name: {self.consumer_name}")
     
@@ -80,46 +79,35 @@ class ScanningQueueConsumer:
         try:
             # Extract necessary information
             trade_session_id = event_data.get('trade_session_id')
-            
             user_id = event_data.get('user_id')
             trading_frequency = event_data.get('trading_frequency')
             is_dummy = event_data.get('is_dummy', False)
             
             # Extract algorithm configuration
             algo_config = event_data.get('algorithm', {}) or event_data.get('algorithm_config', {})
-            scanning_algo_name = algo_config.get('scanning', {}).get('name', 'udts')
-            tracking_algo_name = algo_config.get('tracking', {}).get('name', 'udts_slto')
+            scanning_algo_id = algo_config.get('scanning_algorithm_id', 1)  # Default to UDTS (ID 1)
+            tracking_algo_id = algo_config.get('tracking_algorithm_id', 1)  # Default to tracking algo ID 1
             
             log(f"Starting scanner for trade session {trade_session_id}:")
             log(f"  - User ID: {user_id}")
             log(f"  - Trading Frequency: {trading_frequency}")
-            log(f"  - Scanning Algorithm: {scanning_algo_name}")
-            log(f"  - Tracking Algorithm: {tracking_algo_name}")
+            log(f"  - Scanning Algorithm ID: {scanning_algo_id}")
+            log(f"  - Tracking Algorithm ID: {tracking_algo_id}")
             log(f"  - Is Dummy: {is_dummy}")
-            
-            # Check if scanner already exists for this session
-            scanner_key = f"{trade_session_id}_{user_id}"
-            if scanner_key in self._active_scanners:
-                existing_scanner = self._active_scanners[scanner_key]
-                if existing_scanner.is_running():
-                    log(f"Scanner already running for trade session {trade_session_id}", level="warning")
-                    return True
-                else:
-                    # Remove the stopped scanner
-                    del self._active_scanners[scanner_key]
             
             # Create data providers
             integration_provider = IntegrationServiceProvider(user_id)
             tmu_provider = TMUServiceProvider(user_id)
             
-            # Create scanner instance using new factory pattern
-            scanner = self._scanner_factory.get_scanner(scanning_algo_name)
+            # Get scanner instance using factory (factory handles singleton behavior)
+            scanner = self._scanner_factory.get_scanner(scanning_algo_id, trading_frequency)
             
             if scanner is None:
-                log(f"Unknown scanning algorithm: {scanning_algo_name}", level="error")
+                log(f"Unknown scanning algorithm ID: {scanning_algo_id}", level="error")
                 return False
             
             # Configure the scanner with required parameters
+            # Note: user_id and trade_session_id are passed but not stored as instance state
             scanner.configure(
                 trade_freq=trading_frequency,
                 user_id=user_id,
@@ -128,11 +116,9 @@ class ScanningQueueConsumer:
                 tmu_provider=tmu_provider
             )
             
-            # Store scanner reference
-            self._active_scanners[scanner_key] = scanner
-            
             # Start scanning in a separate thread
-            scanner.fetch_instrument_tokens_and_start_tracking(user_id, is_dummy)
+            # Pass trade_session_id as parameter since it's not stored in scanner
+            scanner.fetch_instrument_tokens_and_start_tracking(user_id, trade_session_id, is_dummy)
             
             log(f"Successfully started scanner for trade session {trade_session_id}")
             return True
@@ -143,36 +129,29 @@ class ScanningQueueConsumer:
     
     def _handle_trade_session_terminated(self, event_data: Dict[str, Any]) -> bool:
         """
-        Handle trade session terminated event by stopping the scanner.
+        Handle trade session terminated event.
+        
+        Note: Since we no longer cache scanner instances, we cannot directly stop
+        specific scanners. The singleton scanners will continue running for their
+        frequency until stopped by container shutdown or other mechanisms.
         
         Args:
             event_data: The event data containing trade session details
             
         Returns:
-            bool: True if scanner stopped successfully, False otherwise
+            bool: True (always successful as no action needed)
         """
         try:
             trade_session_id = event_data.get('trade_session_id')
             user_id = event_data.get('user_id')
             
-            scanner_key = f"{trade_session_id}_{user_id}"
-            
-            if scanner_key in self._active_scanners:
-                scanner = self._active_scanners[scanner_key]
-                
-                # Stop the scanner gracefully
-                scanner.stop_scanning()
-                
-                # Remove from active scanners
-                del self._active_scanners[scanner_key]
-                log(f"Stopped and removed scanner for trade session {trade_session_id}")
-            else:
-                log(f"No active scanner found for trade session {trade_session_id}", level="warning")
+            log(f"Trade session terminated: {trade_session_id} for user: {user_id}")
+            log("Note: Scanner instances are frequency-based singletons and continue running")
             
             return True
             
         except Exception as e:
-            log(f"Error stopping scanner: {str(e)}", level="error")
+            log(f"Error handling session termination: {str(e)}", level="error")
             return False
     
     def start_consuming(self):
@@ -242,22 +221,10 @@ class ScanningQueueConsumer:
             log("ScanningQueueConsumer stopped")
     
     def stop_consuming(self):
-        """Stop the consumer and all active scanners gracefully"""
+        """Stop the consumer gracefully"""
         log("Stopping ScanningQueueConsumer...")
         self._running = False
-        
-        # Stop all active scanners
-        for scanner_key, scanner in list(self._active_scanners.items()):
-            try:
-                log(f"Stopping scanner: {scanner_key}")
-                scanner.stop_scanning()
-            except Exception as e:
-                log(f"Error stopping scanner {scanner_key}: {str(e)}", level="error")
-            finally:
-                # Remove the scanner regardless of stop result
-                del self._active_scanners[scanner_key]
-        
-        log(f"All {len(self._active_scanners)} scanners stopped")
+        log("ScanningQueueConsumer stopped")
     
     def health_check(self) -> bool:
         """Check if the consumer can connect to Redis"""

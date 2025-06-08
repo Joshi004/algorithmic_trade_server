@@ -1,10 +1,7 @@
 from django.http import JsonResponse
 from trade_management_unit.lib.TradeSession.TradeSession import TradeSession
-
-
-
+from trade_management_unit.models.TradeSession import TradeSession as TradeSessionModel
 from ats_gateway.models.User import User
-
 from trade_management_unit.Constants.TmuConstants import *
 
 
@@ -79,4 +76,52 @@ def get_new_session_param_options(request, *args, **kwargs):
         return JsonResponse({
             'error': str(e),
             'message': 'Failed to fetch session parameter options'
+        }, status=500)
+
+
+def get_active_trade_sessions(request, *args, **kwargs):
+    """
+    API endpoint to get active trade sessions with optional filtering.
+    """
+    try:
+        query_params = request.GET
+        scanning_algo_id = query_params.get("scanning_algo_id")
+        trading_frequency = query_params.get("trading_frequency")
+        
+        # Convert to int if provided
+        if scanning_algo_id:
+            try:
+                scanning_algo_id = int(scanning_algo_id)
+            except ValueError:
+                return JsonResponse({
+                    'error': 'Invalid scanning_algo_id, must be an integer'
+                }, status=400)
+        
+        # Use the model method with optional parameters
+        sessions = TradeSessionModel.fetch_active_trade_session(
+            scanning_algo_id=scanning_algo_id,
+            trading_freq=trading_frequency
+        )
+        
+        # Format response data
+        sessions_data = []
+        for session in sessions:
+            sessions_data.append({
+                'id': session.id,
+                'user_id': session.user_id,
+                'trading_frequency': session.trading_frequency,
+                'is_dummy': session.dummy,
+                'status': session.status,
+                'started_at': session.started_at.isoformat() if session.started_at else None
+            })
+        
+        return JsonResponse({
+            'data': sessions_data,
+            'meta': {'count': len(sessions_data)}
+        }, status=200)
+        
+    except Exception as e:
+        return JsonResponse({
+            'error': str(e),
+            'message': 'Failed to fetch active trade sessions'
         }, status=500)

@@ -79,7 +79,52 @@ class TMUServiceProvider:
             log(error_msg, level="error")
             return {"data": [], "meta": {"error": error_msg}}
     
-
+    def fetch_active_trade_sessions(self, scanning_algo_id, trading_frequency):
+        """
+        Fetch active trade sessions that use the specified scanner algorithm ID and frequency.
+        
+        Args:
+            scanning_algo_id: ID of the scanning algorithm (e.g., 1 for UDTS)
+            trading_frequency: Trading frequency (e.g., "5-minute", "10-minute")
+                
+        Returns:
+            list: List of active trade session data:
+                [
+                    {
+                        "id": session_id,
+                        "user_id": user_public_id,
+                        "trading_frequency": frequency,
+                        "is_dummy": boolean,
+                        "status": "started"
+                    },
+                    ...
+                ]
+        """
+        try:
+            url = f"{self.base_url}/get_active_trade_sessions/"
+            params = {
+                'scanning_algo_id': scanning_algo_id,
+                'trading_frequency': trading_frequency
+            }
+            
+            log(f"Fetching active trade sessions for scanner ID: {scanning_algo_id}, frequency: {trading_frequency}")
+            response = requests.get(url, params=params, headers=self.headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                sessions = data.get('data', [])
+                log(f"Successfully fetched {len(sessions)} active trade sessions")
+                return sessions
+            else:
+                log(f"Failed to fetch active trade sessions from TMU, status code: {response.status_code}", level="error")
+                return []
+                
+        except requests.exceptions.ConnectionError:
+            log("Failed to connect to TMU service for trade sessions. Is it running?", level="error")
+            return []
+        except Exception as e:
+            log(f"Exception fetching active trade sessions from TMU: {str(e)}", level="error")
+            return []
     
     def health_check(self):
         """
