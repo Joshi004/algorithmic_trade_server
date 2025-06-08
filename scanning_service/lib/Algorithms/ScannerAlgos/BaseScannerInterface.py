@@ -67,6 +67,11 @@ class BaseScannerInterface(ABC):
             from scanning_service.lib.utils.redis import get_scanning_event_publisher
             self.event_publisher = get_scanning_event_publisher()
         
+        # Initialize TMU service provider for fetching active trade sessions
+        if not hasattr(self, 'tmu_provider') or not self.tmu_provider:
+            from scanning_service.lib.data_providers import TMUServiceProvider
+            self.tmu_provider = TMUServiceProvider()
+        
         self._configured = True
     
     def is_configured(self) -> bool:
@@ -172,16 +177,15 @@ class BaseScannerInterface(ABC):
         
         return standardized_data
     
-    def publish_eligible_instruments(self, eligible_instruments: List[Dict[str, Any]], trade_session_id: str, scanner_type: str = None) -> None:
+    def publish_eligible_instruments(self, eligible_instruments: List[Dict[str, Any]], scanner_type: str = None) -> None:
         """
-        Publish eligible instruments to Redis stream for consumption by other services.
+        Publish eligible instruments to Redis stream for ALL active trade sessions using this scanner.
         
-        This is a common method that all scanner algorithms can use to publish their
-        findings in a standardized way.
+        This method queries for all active trade sessions that use this scanner algorithm and frequency,
+        then publishes one event per session per instrument.
         
         Args:
             eligible_instruments: List of eligible instrument dictionaries in standardized format
-            trade_session_id: Trade session ID for event correlation
             scanner_type: Type of scanner (auto-detected from class name if not provided)
         """
         self._ensure_configured()
@@ -195,23 +199,46 @@ class BaseScannerInterface(ABC):
         if scanner_type is None:
             scanner_type = self.__class__.__name__.lower().replace('scanner', '')
         
-        for instrument in eligible_instruments:
-            try:
-                # Publish the eligible instrument event using standardized format
-                message_id = self.event_publisher.publish_eligible_instrument(
-                    trade_session_id=trade_session_id,
-                    instrument_data=instrument,
-                    scanner_type=scanner_type
-                )
-                
-                if message_id:
-                    from scanning_service.lib.utils.logger import log
-                    log(f"Published eligible instrument: {instrument['trading_symbol']} - Message ID: {message_id}")
-                else:
-                    from scanning_service.lib.utils.logger import log
-                    log(f"Failed to publish eligible instrument: {instrument['trading_symbol']}", level="warning")
-                    
-            except Exception as e:
+        # Convert scanner type to uppercase for database query (algorithm names are stored in uppercase)
+        database_algorithm_name = scanner_type.upper()
+        
+        # Fetch active trade sessions for this scanner algorithm and frequency
+        try:
+            active_sessions = self.tmu_provider.fetch_active_trade_sessions(
+                scanner_algorithm_name=database_algorithm_name,
+                trading_frequency=self.trade_frequency
+            )
+            
+            if not active_sessions:
                 from scanning_service.lib.utils.logger import log
-                log(f"Error publishing eligible instrument {instrument.get('trading_symbol', 'unknown')}: {str(e)}", level="error")
+                log(f"No active trade sessions found for scanner {scanner_type} with frequency {self.trade_frequency}")
+                return
+            
+            from scanning_service.lib.utils.logger import log
+            log(f"Publishing eligible instruments to {len(active_sessions)} active trade sessions")
+            
+            # Publish events for each active session
+            for session in active_sessions:
+                trade_session_id = str(session['id'])
+                
+                for instrument in eligible_instruments:
+                    try:
+                        # Publish the eligible instrument event using standardized format
+                        message_id = self.event_publisher.publish_eligible_instrument(
+                            trade_session_id=trade_session_id,
+                            instrument_data=instrument,
+                            scanner_type=scanner_type
+                        )
+                        
+                        if message_id:
+                            log(f"Published eligible instrument: {instrument['trading_symbol']} for session {trade_session_id} - Message ID: {message_id}")
+                        else:
+                            log(f"Failed to publish eligible instrument: {instrument['trading_symbol']} for session {trade_session_id}", level="warning")
+                            
+                    except Exception as e:
+                        log(f"Error publishing eligible instrument {instrument.get('trading_symbol', 'unknown')} for session {trade_session_id}: {str(e)}", level="error")
+        
+        except Exception as e:
+            from scanning_service.lib.utils.logger import log
+            log(f"Error fetching active trade sessions: {str(e)}", level="error")
     

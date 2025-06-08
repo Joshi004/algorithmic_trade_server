@@ -129,7 +129,8 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
                     instrument_data = self.format_eligible_instrument(raw_instrument_data)
                     
                     # Publish the eligible instrument immediately using parent class method
-                    self.publish_eligible_instruments([instrument_data], trade_session_id, "udts")
+                    # This will now publish to ALL active trade sessions using this scanner
+                    self.publish_eligible_instruments([instrument_data], "udts")
                 else:
                     log(f'{eligibility_obj["message"]}')
                     

@@ -13,6 +13,7 @@ urlpatterns = [
     # re_path(r'^get_all_trades_info/?$', trade_session_view.get_all_trades_info, name='get_all_trades_info'),
     re_path(r'^initiate_trade_session/?$', trade_session_view.initiate_trade_session, name='initiate_trade_session'),
     re_path(r'^get_new_session_param_options/?$', trade_session_view.get_new_session_param_options, name='get_new_session_param_options'),
+    re_path(r'^get_active_trade_sessions/?$', trade_session_view.get_active_trade_sessions, name='get_active_trade_sessions'),
     # re_path(r'^get_trade_sessions/?$', trade_session_view.get_trade_sessions, name='get_trade_sessions'),
     # re_path(r'^resume_trade_session/?$', trade_session_view.resume_trade_session, name='resume_trade_session'),
     # re_path(r'^session_active/?$', trade_session_view.session_active, name='session_active'),

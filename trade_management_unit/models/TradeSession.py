@@ -85,29 +85,35 @@ class TradeSession(models.Model):
         return trade_session
 
     @classmethod
-    def fetch_active_trade_session(cls, user_id, scanning_algo_id, initiation_algo_id, termination_algo_id, trading_freq, is_dummy):
-        # If user_id is a string (UUID), fetch the User instance
-        if isinstance(user_id, str):
-            try:
-                user = User.objects.get(public_id=user_id)
-            except User.DoesNotExist:
-                return None
-        else:
-            user = user_id  # Assume it's already a User instance
+    def fetch_active_trade_session(cls, user_id=None, scanning_algo_id=None, initiation_algo_id=None, termination_algo_id=None, trading_freq=None, is_dummy=None, scanner_algorithm_name=None):
+        """
+        Fetch active trade sessions with optional filtering.
+        Returns QuerySet of all matching active sessions.
+        """
+        query = cls.objects.filter(status='started', is_active=True)
+        
+        if user_id is not None:
+            query = query.filter(user_id=user_id)
+        
+        if scanning_algo_id is not None:
+            query = query.filter(scanning_algorithm_id=scanning_algo_id)
+        
+        if scanner_algorithm_name is not None:
+            query = query.filter(scanning_algorithm__name=scanner_algorithm_name)
             
-        try:
-            trade_session = cls.objects.get(
-                user_id=user,
-                scanning_algorithm_id=scanning_algo_id,
-                initiation_algorithm_id=initiation_algo_id,
-                termination_algorithm_id=termination_algo_id,
-                trading_frequency=trading_freq,
-                dummy=is_dummy,
-                status='started'
-            )
-            return trade_session
-        except cls.DoesNotExist:
-            return None
+        if initiation_algo_id is not None:
+            query = query.filter(initiation_algorithm_id=initiation_algo_id)
+            
+        if termination_algo_id is not None:
+            query = query.filter(termination_algorithm_id=termination_algo_id)
+            
+        if trading_freq is not None:
+            query = query.filter(trading_frequency=trading_freq)
+            
+        if is_dummy is not None:
+            query = query.filter(dummy=is_dummy)
+        
+        return query
 
     @classmethod
     def create_trade_session(cls, user_id, scanning_algo_id, initiation_algo_id, termination_algo_id, trading_freq, is_dummy):
