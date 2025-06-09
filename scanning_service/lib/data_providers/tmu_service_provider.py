@@ -24,7 +24,9 @@ class TMUServiceProvider:
         self.auth_token = auth_token
         # Get TMU service URL from settings or use default
         self.base_url = getattr(settings, 'TMU_SERVICE_URL', 'http://localhost:8000/tmu')
-        self.headers = {}
+        self.headers = {
+            'X-Internal-Service-Token': getattr(settings, 'INTERNAL_SERVICE_TOKEN', 'internal-service-secret-token-change-in-production')
+        }
         
         if auth_token:
             self.headers['Authorization'] = f'Bearer {auth_token}'

@@ -19,6 +19,9 @@ class UdtsSlto(metaclass=TrackerAlgoMeta):
         self.indicators = []
         self.trade_sessions = {}
         self.integration_service_url = getattr(settings, 'INTEGRATION_SERVICE_URL', 'http://localhost:8000/integration_service')
+        self.headers = {
+            'X-Internal-Service-Token': getattr(settings, 'INTERNAL_SERVICE_TOKEN', 'internal-service-secret-token-change-in-production')
+        }
     
     def __str__(self):
         identifier = self.trading_frequency + "__" + self.scanning_algorithm_name
@@ -44,7 +47,7 @@ class UdtsSlto(metaclass=TrackerAlgoMeta):
             api_url = f"{self.integration_service_url}/place_order/"
             params['user_id'] = user_id
             
-            response = requests.post(api_url, json=params)
+            response = requests.post(api_url, json=params, headers=self.headers)
             
             if response.status_code == 200:
                 data = response.json()

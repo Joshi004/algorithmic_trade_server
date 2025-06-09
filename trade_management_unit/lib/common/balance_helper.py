@@ -6,6 +6,9 @@ from trade_management_unit.models.Trade import Trade
 class BalanceHelper:
     def __init__(self):
         self.integration_service_url = getattr(settings, 'INTEGRATION_SERVICE_URL', 'http://localhost:8000/integration_service')
+        self.headers = {
+            'X-Internal-Service-Token': getattr(settings, 'INTERNAL_SERVICE_TOKEN', 'internal-service-secret-token-change-in-production')
+        }
     
     def get_current_balance_including_margin(self, user_id, dummy):
         """Get current balance including margin for a user"""
@@ -31,7 +34,7 @@ class BalanceHelper:
             api_url = f"{self.integration_service_url}/get_available_margin/"
             api_params = {'user_id': user_id}
             
-            response = requests.get(api_url, params=api_params)
+            response = requests.get(api_url, params=api_params, headers=self.headers)
             
             if response.status_code == 200:
                 data = response.json()

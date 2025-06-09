@@ -20,6 +20,9 @@ class IntegrationServiceProvider:
         """
         self.user_id = user_id
         self.base_url = getattr(settings, 'INTEGRATION_SERVICE_URL', 'http://localhost:8000/integration_service')
+        self.headers = {
+            'X-Internal-Service-Token': getattr(settings, 'INTERNAL_SERVICE_TOKEN', 'internal-service-secret-token-change-in-production')
+        }
         
     def get_quotes(self, symbol, exchange="NSE"):
         """
@@ -43,7 +46,7 @@ class IntegrationServiceProvider:
                 params["user_id"] = self.user_id
                 
             log(f"Fetching quotes for {symbol} from {exchange}")
-            response = requests.get(url, params=params)
+            response = requests.get(url, params=params, headers=self.headers)
             
             if response.status_code == 200:
                 data = response.json()
@@ -90,7 +93,7 @@ class IntegrationServiceProvider:
                 params["trade_date"] = trade_date.isoformat() if hasattr(trade_date, 'isoformat') else str(trade_date)
                 
             log(f"Fetching historical data for {symbol}, interval: {interval}, candles: {number_of_candles}")
-            response = requests.get(url, params=params)
+            response = requests.get(url, params=params, headers=self.headers)
             
             if response.status_code == 200:
                 data = response.json()
