@@ -33,7 +33,17 @@ class BaseRedisClient(ABC):
         """Create Redis client with appropriate configuration"""
         try:
             client_config = self._get_client_config()
-            client = redis.Redis(**client_config)
+            
+            # Extract connection pool kwargs if present
+            connection_pool_kwargs = client_config.pop('connection_pool_kwargs', None)
+            
+            # Create Redis client
+            # Create connection pool with the extracted kwargs
+            pool_config = client_config.copy()
+            pool_config.update(connection_pool_kwargs)
+            pool = redis.ConnectionPool(**pool_config)
+            client = redis.Redis(connection_pool=pool)
+
             
             # Test the connection
             client.ping()

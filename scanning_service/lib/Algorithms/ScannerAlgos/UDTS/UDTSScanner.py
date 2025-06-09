@@ -357,7 +357,7 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
         thread_name = f"scanner_thread_udts_{self.trade_frequency}"
         self._scanner_thread = threading.Thread(
             target=self.scan_in_separate_thread,
-            args=(all_instruments, user_id, trade_session_id, dummy),
+            args=(all_instruments,),
             name=thread_name
         )
         self._scanner_thread.daemon = True

@@ -47,6 +47,7 @@ class ScanningQueueConsumer:
         """
         try:
             # Extract event information
+            log(f"Processing event with event data : {event_data}")
             event_id = event_data.get('event_id', 'unknown')
             event_type = event_data.get('event_type', 'unknown')
             trade_session_id = event_data.get('trade_session_id', 'unknown')
@@ -71,28 +72,29 @@ class ScanningQueueConsumer:
         Handle trade session initiated event by creating and starting a scanner.
         
         Args:
-            event_data: The event data containing trade session details
+            event_data: The flat event data containing trade session details
             
         Returns:
             bool: True if scanner started successfully, False otherwise
         """
         try:
-            # Extract necessary information
+            # Extract necessary information from flat structure
             trade_session_id = event_data.get('trade_session_id')
             user_id = event_data.get('user_id')
             trading_frequency = event_data.get('trading_frequency')
             is_dummy = event_data.get('is_dummy', False)
             
-            # Extract algorithm configuration
-            algo_config = event_data.get('algorithm', {}) or event_data.get('algorithm_config', {})
-            scanning_algo_id = algo_config.get('scanning_algorithm_id', 1)  # Default to UDTS (ID 1)
-            tracking_algo_id = algo_config.get('tracking_algorithm_id', 1)  # Default to tracking algo ID 1
+            # Extract algorithm IDs directly from flat structure
+            scanning_algo_id = int(event_data.get('scanning_algorithm_id', 1))  # Default to UDTS (ID 1)
+            initiation_algo_id = int(event_data.get('initiation_algorithm_id', 1))  # Default to algo ID 1
+            termination_algo_id = int(event_data.get('termination_algorithm_id', 1))  # Default to algo ID 1
             
             log(f"Starting scanner for trade session {trade_session_id}:")
             log(f"  - User ID: {user_id}")
             log(f"  - Trading Frequency: {trading_frequency}")
             log(f"  - Scanning Algorithm ID: {scanning_algo_id}")
-            log(f"  - Tracking Algorithm ID: {tracking_algo_id}")
+            log(f"  - Initiation Algorithm ID: {initiation_algo_id}")
+            log(f"  - Termination Algorithm ID: {termination_algo_id}")
             log(f"  - Is Dummy: {is_dummy}")
             
             # Create data providers
@@ -183,8 +185,14 @@ class ScanningQueueConsumer:
                         for stream, stream_messages in messages:
                             for message_id, fields in stream_messages:
                                 try:
-                                    # Unflatten the event data
-                                    event_data = restore_from_redis_stream(fields)
+                                    # Debug: Log the raw fields from Redis stream
+                                    log(f"Raw Redis stream fields for message {message_id}: {fields}")
+                                    
+                                    # Use flat fields directly instead of unflattering
+                                    event_data = fields
+                                    
+                                    # Debug: Log the event data being processed
+                                    log(f"Processing flat event data for message {message_id}: {event_data}")
                                     
                                     # Process the event
                                     success = self._process_event(event_data)

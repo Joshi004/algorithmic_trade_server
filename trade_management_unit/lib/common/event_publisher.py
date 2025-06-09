@@ -57,37 +57,35 @@ class TradeSessionEventPublisher:
     
     def _format_trade_session_event(self, trade_session_obj):
         """
-        Format trade session data into event structure.
+        Format trade session data into flat event structure.
         
         Args:
             trade_session_obj: TradeSession model instance
             
         Returns:
-            dict: Formatted event data
+            dict: Flat event data without nesting
         """
         try:
             # Get current timestamp in IST
             current_time = current_ist()
             
-            # Format the event payload
+            # Format the event payload as completely flat structure
             event_data = {
                 "event_id": str(uuid.uuid4()),
                 "event_type": "trade_session_initiated",
                 "timestamp": current_time.isoformat(),
                 "trade_session_id": trade_session_obj.id,
-                "user_id": str(trade_session_obj.user_id.public_id),  # Access the User's public_id
-                "algorithm_config": {
-                    "scanning_algorithm_id": trade_session_obj.scanning_algorithm.id,
-                    "initiation_algorithm_id": trade_session_obj.initiation_algorithm.id,
-                    "termination_algorithm_id": trade_session_obj.termination_algorithm.id
-                },
+                "user_id": str(trade_session_obj.user_id.public_id),
+                "scanning_algorithm_id": trade_session_obj.scanning_algorithm.id,
+                "initiation_algorithm_id": trade_session_obj.initiation_algorithm.id,
+                "termination_algorithm_id": trade_session_obj.termination_algorithm.id,
                 "trading_frequency": trade_session_obj.trading_frequency,
                 "is_dummy": trade_session_obj.dummy,
                 "session_status": trade_session_obj.status,
                 "started_at": trade_session_obj.started_at.isoformat() if trade_session_obj.started_at else None
             }
             
-            log(f"Formatted event data for trade session {trade_session_obj.id}")
+            log(f"Formatted flat event data for trade session {trade_session_obj.id}")
             return event_data
             
         except Exception as e:

@@ -67,7 +67,7 @@ services:
       
       # Django Configuration
       - DJANGO_DEBUG=True
-      - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
+      - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,ats-app,ats-django-app,ats-scanning-service
       - DJANGO_SETTINGS_MODULE=ats_base.settings
     command: >
       sh -c "
@@ -136,7 +136,7 @@ services:
       
       # Django Configuration
       - DJANGO_DEBUG=True
-      - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
+      - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,ats-app,ats-django-app,ats-scanning-service
       - DJANGO_SETTINGS_MODULE=ats_base.settings
     command: >
       sh -c "
@@ -203,6 +203,7 @@ services:
       
       # Django Configuration
       - DJANGO_DEBUG=True
+      - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,ats-app,ats-django-app,ats-scanning-service
       - DJANGO_SETTINGS_MODULE=ats_base.settings
     command: >
       sh -c "
