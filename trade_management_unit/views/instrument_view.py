@@ -9,10 +9,29 @@ from django.db.models import Q
 from django.core.exceptions import FieldError
 
 def update_instruments(request, *args, **kwargs):
-    query_params = request.GET
-    instruments = Instruments()
-    instruments.update_instruments()
-    return JsonResponse({}, status=200, content_type='application/json')
+    try:
+        # Extract user_id from the request
+        user_id = request.user_data.get('public_id') if hasattr(request, 'user_data') else request.GET.get('user_id')
+        
+        if not user_id:
+            return JsonResponse({
+                "status": "error",
+                "error": "User ID is required"
+            }, status=400)
+        
+        instruments = Instruments()
+        instruments.update_instruments(user_id)
+        
+        return JsonResponse({
+            "status": "success",
+            "message": "Instruments updated successfully"
+        }, status=200)
+        
+    except Exception as e:
+        return JsonResponse({
+            "status": "error", 
+            "error": str(e)
+        }, status=500)
 
 def get_instruments(request, *args, **kwargs):
     query_params = request.GET

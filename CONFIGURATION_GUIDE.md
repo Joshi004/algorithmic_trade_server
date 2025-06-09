@@ -48,7 +48,7 @@ All configuration parameters are environment variables with sensible defaults. T
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `INTEGRATION_SERVICE_URL` | `http://localhost:8000/integration_service` | Integration service endpoint |
+| `INTEGRATION_SERVICE_URL` | `http://localhost:8000/integration` | Integration service endpoint |
 | `TMU_SERVICE_URL` | `http://localhost:8000/tmu` | Trade Management Unit endpoint |
 | `SCANNING_SERVICE_URL` | `http://localhost:8000/scanning_service` | Scanning service endpoint |
 
@@ -136,7 +136,7 @@ services:
       - REDIS_STREAM_SCANNER_STATUS=scanner_status_stream
       
       # Service URLs (for inter-container communication)
-      - INTEGRATION_SERVICE_URL=http://ats-app:8000/integration_service
+      - INTEGRATION_SERVICE_URL=http://ats-app:8000/integration
       - TMU_SERVICE_URL=http://ats-app:8000/tmu
       - SCANNING_SERVICE_URL=http://ats-app:8000/scanning_service
 ```

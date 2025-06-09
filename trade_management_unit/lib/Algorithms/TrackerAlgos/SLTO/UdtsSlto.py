@@ -18,7 +18,7 @@ class UdtsSlto(metaclass=TrackerAlgoMeta):
         self.scanning_algorithm_name = scanning_algorithm_name
         self.indicators = []
         self.trade_sessions = {}
-        self.integration_service_url = getattr(settings, 'INTEGRATION_SERVICE_URL', 'http://localhost:8000/integration_service')
+        self.integration_service_url = getattr(settings, 'INTEGRATION_SERVICE_URL', 'http://localhost:8000/integration')
         self.headers = {
             'X-Internal-Service-Token': getattr(settings, 'INTERNAL_SERVICE_TOKEN', 'internal-service-secret-token-change-in-production')
         }

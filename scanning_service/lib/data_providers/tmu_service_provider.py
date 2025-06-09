@@ -109,23 +109,45 @@ class TMUServiceProvider:
                 'trading_frequency': trading_frequency
             }
             
-            log(f"Fetching active trade sessions for scanner ID: {scanning_algo_id}, frequency: {trading_frequency}")
+            log(f"[Scanning] Fetching active trade sessions for scanner ID: {scanning_algo_id}, frequency: {trading_frequency}")
+            log(f"[Scanning] Request URL: {url}")
+            log(f"[Scanning] Request params: {params}")
+            log(f"[Scanning] Request headers: {self.headers}")
+            
             response = requests.get(url, params=params, headers=self.headers)
             
+            log(f"[Scanning] Response status code: {response.status_code}")
+            log(f"[Scanning] Response headers: {dict(response.headers)}")
+            
+            try:
+                response_text = response.text
+                log(f"[Scanning] Response text: {response_text}")
+            except:
+                log(f"[Scanning] Could not read response text")
+            
             if response.status_code == 200:
-                data = response.json()
-                sessions = data.get('data', [])
-                log(f"Successfully fetched {len(sessions)} active trade sessions")
-                return sessions
+                try:
+                    data = response.json()
+                    log(f"[Scanning] Response JSON parsed successfully")
+                    log(f"[Scanning] Response data keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}")
+                    
+                    sessions = data.get('data', [])
+                    log(f"[Scanning] Successfully fetched {len(sessions)} active trade sessions")
+                    log(f"[Scanning] Sessions data: {sessions}")
+                    return sessions
+                except Exception as json_error:
+                    log(f"[Scanning] Failed to parse JSON response: {str(json_error)}", level="error")
+                    return []
             else:
-                log(f"Failed to fetch active trade sessions from TMU, status code: {response.status_code}", level="error")
+                log(f"[Scanning] Failed to fetch active trade sessions from TMU, status code: {response.status_code}", level="error")
+                log(f"[Scanning] Error response: {response.text}", level="error")
                 return []
                 
-        except requests.exceptions.ConnectionError:
-            log("Failed to connect to TMU service for trade sessions. Is it running?", level="error")
+        except requests.exceptions.ConnectionError as conn_error:
+            log(f"[Scanning] Failed to connect to TMU service for trade sessions: {str(conn_error)}", level="error")
             return []
         except Exception as e:
-            log(f"Exception fetching active trade sessions from TMU: {str(e)}", level="error")
+            log(f"[Scanning] Exception fetching active trade sessions from TMU: {str(e)}", level="error")
             return []
     
     def health_check(self):

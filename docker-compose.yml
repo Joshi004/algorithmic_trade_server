@@ -128,7 +128,7 @@ services:
       - REDIS_CONSUMER_TIMEOUT=1000
       
       # Service URLs
-      - INTEGRATION_SERVICE_URL=http://ats-app:8000/integration_service
+      - INTEGRATION_SERVICE_URL=http://ats-app:8000/integration
       - TMU_SERVICE_URL=http://ats-app:8000/tmu
       - SCANNING_SERVICE_URL=http://ats-app:8000/scanning_service
       
@@ -196,7 +196,7 @@ services:
       - REDIS_CONSUMER_TIMEOUT=1000
       
       # Service URLs
-      - INTEGRATION_SERVICE_URL=http://ats-app:8000/integration_service
+      - INTEGRATION_SERVICE_URL=http://ats-app:8000/integration
       - TMU_SERVICE_URL=http://ats-app:8000/tmu
       - SCANNING_SERVICE_URL=http://ats-app:8000/scanning_service
       

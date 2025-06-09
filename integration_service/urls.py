@@ -3,7 +3,7 @@ from integration_service.views.broker_view import register_broker, get_user_brok
 from integration_service.views.kite_auth_view import set_session, get_login_url, get_profile_info
 from integration_service.views.kite_integration_view import (
     get_historical_data, get_holdings, get_positions, get_orders, 
-    get_order_trades, get_order_history, place_order, get_available_margin, get_quotes
+    get_order_trades, get_order_history, place_order, get_available_margin, get_quotes, get_instruments
 )
 
 urlpatterns = [
@@ -31,4 +31,7 @@ urlpatterns = [
     
     # Trade endpoints - handle both with and without trailing slash
     re_path(r'^get_quotes/?$', get_quotes, name='get_quotes'),
+    
+    # Instruments endpoints - handle both with and without trailing slash
+    re_path(r'^get_instruments/?$', get_instruments, name='get_instruments'),
 ] 

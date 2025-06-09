@@ -9,7 +9,7 @@ class Trade:
         logging.basicConfig(level=logging.DEBUG)
         self.user_id = user_id
         # Get integration service URL from settings or use default
-        self.integration_service_url = getattr(settings, 'INTEGRATION_SERVICE_URL', 'http://localhost:8000/integration_service')
+        self.integration_service_url = getattr(settings, 'INTEGRATION_SERVICE_URL', 'http://localhost:8000/integration')
         self.headers = {
             'X-Internal-Service-Token': getattr(settings, 'INTERNAL_SERVICE_TOKEN', 'internal-service-secret-token-change-in-production')
         }

@@ -19,7 +19,7 @@ class IntegrationServiceProvider:
             user_id: User ID for authentication (if needed)
         """
         self.user_id = user_id
-        self.base_url = getattr(settings, 'INTEGRATION_SERVICE_URL', 'http://localhost:8000/integration_service')
+        self.base_url = getattr(settings, 'INTEGRATION_SERVICE_URL', 'http://localhost:8000/integration')
         self.headers = {
             'X-Internal-Service-Token': getattr(settings, 'INTERNAL_SERVICE_TOKEN', 'internal-service-secret-token-change-in-production')
         }

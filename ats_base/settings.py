@@ -222,7 +222,7 @@ LOGGING = {
 
 # Service URLs Configuration
 # These URLs are used for inter-service communication in the microservices architecture
-INTEGRATION_SERVICE_URL = os.environ.get('INTEGRATION_SERVICE_URL', 'http://localhost:8000/integration_service')
+INTEGRATION_SERVICE_URL = os.environ.get('INTEGRATION_SERVICE_URL', 'http://localhost:8000/integration')
 TMU_SERVICE_URL = os.environ.get('TMU_SERVICE_URL', 'http://localhost:8000/tmu')
 SCANNING_SERVICE_URL = os.environ.get('SCANNING_SERVICE_URL', 'http://localhost:8000/scanning_service')
 

@@ -1,6 +1,7 @@
 from datetime import timedelta, time
 import re
 from integration_service.lib.broker.kite_user import KiteUser
+from integration_service.Constants.IntegrationConstants import FREQUENCY_MAPPING
 from kiteconnect.exceptions import NetworkException
 import logging
 import time as tm
@@ -45,8 +46,10 @@ class FetchData:
                 minute_str = interval.replace("-minute", "")
                 minutes = int(minute_str) if minute_str else 1
                 from_date = to_date - timedelta(minutes=minutes * number_of_candles)
+                from_date =  datetime.now() - timedelta(days=50)  # Hard-coded from date to be removed after testing
             elif interval == "1-day" or interval == "day":
                 from_date = to_date - timedelta(days=number_of_candles)
+                from_date =  datetime.now() - timedelta(days=50)  # Hard-coded from date to be removed after testing
             else:
                 # Default fallback
                 from_date = to_date - timedelta(days=number_of_candles)
@@ -66,9 +69,12 @@ class FetchData:
 
     def fetch_data_from_zerodha(self, instrument_token, start_date, end_date, interval):
         """Fetch data directly from Zerodha with rate limiting"""
+        # Convert TMU frequency format to Zerodha API format
+        zerodha_interval = FREQUENCY_MAPPING.get(interval, interval)
+        
         while True:
             try:
-                data = self.kite.historical_data(instrument_token, start_date, end_date, interval)
+                data = self.kite.historical_data(instrument_token, start_date, end_date, zerodha_interval)
                 return data
             except NetworkException as e:
                 if 'Too many requests' in str(e):

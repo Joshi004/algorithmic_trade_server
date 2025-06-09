@@ -6,6 +6,7 @@ from trade_management_unit.models.InitiationAlgorithm import InitiationAlgorithm
 from trade_management_unit.models.TerminationAlgorithm import TerminationAlgorithm
 from trade_management_unit.Constants.TmuConstants import FREQUENCY
 from trade_management_unit.lib.common.Utils.Utils import current_ist
+import logging
 
 
 class TradeSession(models.Model):
@@ -90,27 +91,54 @@ class TradeSession(models.Model):
         Fetch active trade sessions with optional filtering.
         Returns QuerySet of all matching active sessions.
         """
+        logger = logging.getLogger(__name__)
+        
+        logger.info(f"[TMU-Model] fetch_active_trade_session called with params:")
+        logger.info(f"[TMU-Model] - user_id: {user_id}")
+        logger.info(f"[TMU-Model] - scanning_algo_id: {scanning_algo_id}")
+        logger.info(f"[TMU-Model] - initiation_algo_id: {initiation_algo_id}")
+        logger.info(f"[TMU-Model] - termination_algo_id: {termination_algo_id}")
+        logger.info(f"[TMU-Model] - trading_freq: {trading_freq}")
+        logger.info(f"[TMU-Model] - is_dummy: {is_dummy}")
+        
         query = cls.objects.filter(status='started', is_active=True)
+        logger.info(f"[TMU-Model] Base query: status='started', is_active=True")
         
         if user_id is not None:
             query = query.filter(user_id=user_id)
+            logger.info(f"[TMU-Model] Added filter: user_id={user_id}")
         
         if scanning_algo_id is not None:
             query = query.filter(scanning_algorithm_id=scanning_algo_id)
+            logger.info(f"[TMU-Model] Added filter: scanning_algorithm_id={scanning_algo_id}")
             
         if initiation_algo_id is not None:
             query = query.filter(initiation_algorithm_id=initiation_algo_id)
+            logger.info(f"[TMU-Model] Added filter: initiation_algorithm_id={initiation_algo_id}")
             
         if termination_algo_id is not None:
             query = query.filter(termination_algorithm_id=termination_algo_id)
+            logger.info(f"[TMU-Model] Added filter: termination_algorithm_id={termination_algo_id}")
             
         if trading_freq is not None:
             query = query.filter(trading_frequency=trading_freq)
+            logger.info(f"[TMU-Model] Added filter: trading_frequency={trading_freq}")
             
         if is_dummy is not None:
             query = query.filter(dummy=is_dummy)
+            logger.info(f"[TMU-Model] Added filter: dummy={is_dummy}")
         
-        return query
+        logger.info(f"[TMU-Model] Final query SQL: {query.query}")
+        
+        try:
+            results = list(query)
+            logger.info(f"[TMU-Model] Query executed successfully, found {len(results)} sessions")
+            for session in results:
+                logger.info(f"[TMU-Model] Session: id={session.id}, user_id={session.user_id}, freq={session.trading_frequency}, scanning_algo={session.scanning_algorithm_id}")
+            return results
+        except Exception as e:
+            logger.error(f"[TMU-Model] Database query failed: {str(e)}", exc_info=True)
+            raise
 
     @classmethod
     def create_trade_session(cls, user_id, scanning_algo_id, initiation_algo_id, termination_algo_id, trading_freq, is_dummy):

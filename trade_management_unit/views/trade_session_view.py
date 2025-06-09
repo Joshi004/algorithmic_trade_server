@@ -3,6 +3,7 @@ from trade_management_unit.lib.TradeSession.TradeSession import TradeSession
 from trade_management_unit.models.TradeSession import TradeSession as TradeSessionModel
 from ats_gateway.models.User import User
 from trade_management_unit.Constants.TmuConstants import *
+import logging
 
 
 def initiate_trade_session(request, *args, **kwargs):
@@ -83,19 +84,29 @@ def get_active_trade_sessions(request, *args, **kwargs):
     """
     API endpoint to get active trade sessions with optional filtering.
     """
+    logger = logging.getLogger(__name__)
+    
     try:
+        logger.info(f"[TMU] get_active_trade_sessions called with method: {request.method}")
+        
         query_params = request.GET
         scanning_algo_id = query_params.get("scanning_algo_id")
         trading_frequency = query_params.get("trading_frequency")
+        
+        logger.info(f"[TMU] Query params - scanning_algo_id: {scanning_algo_id}, trading_frequency: {trading_frequency}")
         
         # Convert to int if provided
         if scanning_algo_id:
             try:
                 scanning_algo_id = int(scanning_algo_id)
+                logger.info(f"[TMU] Converted scanning_algo_id to int: {scanning_algo_id}")
             except ValueError:
+                logger.error(f"[TMU] Invalid scanning_algo_id conversion: {scanning_algo_id}")
                 return JsonResponse({
                     'error': 'Invalid scanning_algo_id, must be an integer'
                 }, status=400)
+        
+        logger.info(f"[TMU] Calling TradeSessionModel.fetch_active_trade_session with params")
         
         # Use the model method with optional parameters
         sessions = TradeSessionModel.fetch_active_trade_session(
@@ -103,24 +114,32 @@ def get_active_trade_sessions(request, *args, **kwargs):
             trading_freq=trading_frequency
         )
         
+        logger.info(f"[TMU] Retrieved {len(sessions)} sessions from model")
+        
         # Format response data
         sessions_data = []
         for session in sessions:
             sessions_data.append({
                 'id': session.id,
-                'user_id': session.user_id,
+                'user_id': session.user_id.public_id,
                 'trading_frequency': session.trading_frequency,
                 'is_dummy': session.dummy,
                 'status': session.status,
                 'started_at': session.started_at.isoformat() if session.started_at else None
             })
         
-        return JsonResponse({
+        logger.info(f"[TMU] Formatted {len(sessions_data)} sessions data")
+        
+        response_data = {
             'data': sessions_data,
             'meta': {'count': len(sessions_data)}
-        }, status=200)
+        }
+        
+        logger.info(f"[TMU] Returning successful response with {len(sessions_data)} sessions")
+        return JsonResponse(response_data, status=200)
         
     except Exception as e:
+        logger.error(f"[TMU] Exception in get_active_trade_sessions: {str(e)}", exc_info=True)
         return JsonResponse({
             'error': str(e),
             'message': 'Failed to fetch active trade sessions'

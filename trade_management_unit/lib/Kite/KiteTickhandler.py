@@ -17,7 +17,7 @@ class SingletonMeta(type):
 class KiteTickhandler(metaclass=SingletonMeta):
     def __init__(self, user_id=None):
         self.user_id = user_id
-        self.integration_service_url = getattr(settings, 'INTEGRATION_SERVICE_URL', 'http://localhost:8000/integration_service')
+        self.integration_service_url = getattr(settings, 'INTEGRATION_SERVICE_URL', 'http://localhost:8000/integration')
         self.api_key = None
         self.api_secret = None
         self.access_token = None

@@ -24,9 +24,11 @@ class KiteUser:
         
         try:
             # Get the default credential for Zerodha (Kite)
+            
             self.credential = UserBrokerCredential.get_default_credential(
                 user_id=self.user_id
             )
+            self.logger.warning (f"Creds for user ID  -  {self.user_id} - creds {self.credential}")
             
             if self.credential:
                 self.logger.info(f"Found credential {self.credential.id} for user {self.user_id}")
