@@ -19,7 +19,10 @@ All scanner algorithms in the scanning service must emit events in a **standardi
   "support_price": 2450.50,
   "resistance_price": 2500.75,
   "required_action": "buy",
-  "market_price": 2475.30
+  "market_price": 2475.30,
+  "scanning_algorithm_id": 1,
+  "initiation_algorithm_id": 2,
+  "termination_algorithm_id": 3
 }
 ```
 
@@ -37,6 +40,9 @@ All scanner algorithms in the scanning service must emit events in a **standardi
 | `resistance_price` | float\|null | ❌ Optional | Resistance price level | `2500.75`, `null` |
 | `required_action` | string\|null | ❌ Optional | Trading action | `"buy"`, `"sell"`, `null` |
 | `market_price` | float | ✅ Yes | Current market price | `2475.30` |
+| `scanning_algorithm_id` | integer | ✅ Yes | ID of the scanning algorithm | `1`, `2`, `3` |
+| `initiation_algorithm_id` | integer | ✅ Yes | ID of the initiation algorithm | `1`, `2`, `3` |
+| `termination_algorithm_id` | integer | ✅ Yes | ID of the termination algorithm | `1`, `2`, `3` |
 
 ## Implementation Guidelines
 

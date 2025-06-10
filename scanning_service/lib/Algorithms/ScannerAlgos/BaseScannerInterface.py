@@ -29,7 +29,9 @@ class BaseScannerInterface(ABC):
         'resistance_price',   # Optional: Resistance price level (None if not applicable)
         'required_action',    # Optional: "buy", "sell", or None
         'market_price',       # Required: Current market price
-        'scanner_type'        # Required: Type of scanner that found the instrument
+        'scanning_algorithm_id',    # Required: ID of the scanning algorithm
+        'initiation_algorithm_id',  # Required: ID of the initiation algorithm
+        'termination_algorithm_id'  # Required: ID of the termination algorithm
     ]
     
     # Instrument-specific fields (subset of STANDARD_EVENT_FIELDS for scanner output)

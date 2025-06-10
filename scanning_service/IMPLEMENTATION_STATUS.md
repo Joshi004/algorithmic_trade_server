@@ -105,7 +105,10 @@ The scanning service has been successfully decoupled from the Trade Management U
   "support_price": 2450.50,
   "resistance_price": 2500.75,
   "required_action": "buy",
-  "market_price": 2475.30
+  "market_price": 2475.30,
+  "scanning_algorithm_id": 1,
+  "initiation_algorithm_id": 2,
+  "termination_algorithm_id": 3
 }
 ```
 
@@ -120,6 +123,9 @@ The scanning service has been successfully decoupled from the Trade Management U
 - `resistance_price`: Resistance price level or `null` if not applicable (float|null)
 - `required_action`: `"buy"`, `"sell"`, or `null` based on analysis (string|null)
 - `market_price`: Current market price (float)
+- `scanning_algorithm_id`: ID of the scanning algorithm used (integer)
+- `initiation_algorithm_id`: ID of the initiation algorithm for the session (integer)
+- `termination_algorithm_id`: ID of the termination algorithm for the session (integer)
 
 **Note:** This standardized format must be followed by all scanner algorithms. Fields not applicable to a specific algorithm should be set to `null`.
 
