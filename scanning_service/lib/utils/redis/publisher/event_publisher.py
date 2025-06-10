@@ -6,9 +6,11 @@ import time
 import uuid
 from datetime import datetime
 from typing import Dict, Any, Optional, List
+from decimal import Decimal
 
 from scanning_service.lib.utils.logger import log
 from scanning_service.lib.utils.common import current_ist
+from scanning_service.lib.utils.database import insert_record, insert_batch_records
 from .publisher_client import get_publisher_client
 from ..utils import prepare_for_redis_stream
 
@@ -44,15 +46,19 @@ class ScanningEventPublisher:
         self,
         trade_session_id: str,
         instrument_data: Dict[str, Any],
-        scanner_type: str = None
+        scanning_algorithm_id: int,
+        initiation_algorithm_id: int,
+        termination_algorithm_id: int
     ) -> Optional[str]:
         """
-        Publish an eligible instrument found by scanner using standardized format.
+        Persist and publish an eligible instrument found by scanner using standardized format.
         
         Args:
             trade_session_id: Trade session ID
             instrument_data: Dictionary containing standardized instrument details
-            scanner_type: Type of scanner (required parameter)
+            scanning_algorithm_id: ID of the scanning algorithm
+            initiation_algorithm_id: ID of the initiation algorithm
+            termination_algorithm_id: ID of the termination algorithm
             
         Returns:
             Message ID if successful, None otherwise
@@ -68,28 +74,46 @@ class ScanningEventPublisher:
         }
         """
         try:
-            # Validate required parameter
-            if not scanner_type:
-                log("Scanner type is required for publishing eligible instrument", level="error")
-                return None
-                
-            # Create standardized event data format
+            # Generate event ID and timestamp
+            event_id = self._generate_event_id()
+            timestamp = current_ist()
+            
+            # Create single event structure for both database and publishing
             event_data = {
-                'event_id': self._generate_event_id(),
+                'event_id': event_id,
                 'event_type': 'eligible_instrument_found',
                 'trade_session_id': trade_session_id,
-                'timestamp': current_ist().isoformat(),
+                'timestamp': timestamp,
                 'instrument_id': instrument_data.get('instrument_id'),
                 'trading_symbol': instrument_data.get('trading_symbol'),
                 'support_price': instrument_data.get('support_price'),
                 'resistance_price': instrument_data.get('resistance_price'),
                 'required_action': instrument_data.get('required_action'),
                 'market_price': instrument_data.get('market_price'),
-                'scanner_type': scanner_type
+                'scanning_algorithm_id': scanning_algorithm_id,
+                'initiation_algorithm_id': initiation_algorithm_id,
+                'termination_algorithm_id': termination_algorithm_id
             }
             
+            # Persist to database first using utility function (auto-adds created_at)
+            try:
+                success = insert_record('scanner_events', event_data)
+                if not success:
+                    log(f"Failed to persist scanner event {event_id} to database", level="error")
+                    return None
+                
+                log(f"Persisted scanner event {event_id} to database")
+                
+            except Exception as db_e:
+                log(f"Failed to persist scanner event to database: {str(db_e)}", level="error")
+                return None
+            
+            # Prepare for publishing (convert timestamp to ISO format)
+            publish_data = event_data.copy()
+            publish_data['timestamp'] = timestamp.isoformat()
+            
             # Flatten the data for Redis stream
-            flat_data = prepare_for_redis_stream(event_data)
+            flat_data = prepare_for_redis_stream(publish_data)
             
             # Publish to stream using optimized publisher client
             message_id = self.publisher_client.publish_to_stream(
@@ -99,6 +123,8 @@ class ScanningEventPublisher:
             
             if message_id:
                 log(f"Published eligible instrument event: {message_id} for {instrument_data.get('trading_symbol')}")
+            else:
+                log(f"Failed to publish eligible instrument event for {instrument_data.get('trading_symbol')}", level="warning")
             
             return message_id
             
@@ -164,56 +190,72 @@ class ScanningEventPublisher:
         self,
         trade_session_id: str,
         instruments: List[Dict[str, Any]],
-        scanner_type: str = None
+        scanning_algorithm_id: int,
+        initiation_algorithm_id: int,
+        termination_algorithm_id: int
     ) -> int:
         """
-        Publish multiple eligible instruments in a batch operation.
+        Persist and publish multiple eligible instruments in a batch operation.
         
         Args:
             trade_session_id: Trade session ID
             instruments: List of instrument data dictionaries
-            scanner_type: Type of scanner (required parameter)
+            scanning_algorithm_id: ID of the scanning algorithm
+            initiation_algorithm_id: ID of the initiation algorithm
+            termination_algorithm_id: ID of the termination algorithm
             
         Returns:
             Number of successfully published instruments
         """
         if not instruments:
             return 0
-        
-        # Validate required parameter
-        if not scanner_type:
-            log("Scanner type is required for batch publishing eligible instruments", level="error")
-            return 0
 
         try:
-            # Prepare batch data
-            batch_data = []
-            
+            # Create all events first (single structure for both DB and publishing)
+            events = []
             for instrument_data in instruments:
-                event_data = {
-                    'event_id': self._generate_event_id(),
+                event_id = self._generate_event_id()
+                timestamp = current_ist()
+                
+                # Create single event structure
+                event = {
+                    'event_id': event_id,
                     'event_type': 'eligible_instrument_found',
                     'trade_session_id': trade_session_id,
-                    'timestamp': current_ist().isoformat(),
+                    'timestamp': timestamp,
                     'instrument_id': instrument_data.get('instrument_id'),
                     'trading_symbol': instrument_data.get('trading_symbol'),
                     'support_price': instrument_data.get('support_price'),
                     'resistance_price': instrument_data.get('resistance_price'),
                     'required_action': instrument_data.get('required_action'),
                     'market_price': instrument_data.get('market_price'),
-                    'scanner_type': scanner_type
+                    'scanning_algorithm_id': scanning_algorithm_id,
+                    'initiation_algorithm_id': initiation_algorithm_id,
+                    'termination_algorithm_id': termination_algorithm_id
                 }
-                
-                # Flatten the data for Redis stream
-                flat_data = prepare_for_redis_stream(event_data)
-                batch_data.append(flat_data)
+                events.append(event)
+            
+            # Bulk persist to database (utility auto-adds created_at)
+            persisted_count = insert_batch_records('scanner_events', events)
+            if persisted_count == 0:
+                log("Failed to persist any scanner events to database", level="error")
+                return 0
+            
+            # Prepare all events for publishing (convert timestamps to ISO format)
+            publish_events = []
+            for event in events:
+                publish_event = event.copy()
+                publish_event['timestamp'] = event['timestamp'].isoformat()
+                flat_data = prepare_for_redis_stream(publish_event)
+                publish_events.append(flat_data)
             
             # Publish batch using optimized publisher client
             published_count = self.publisher_client.publish_batch_to_stream(
                 self.initiation_queue_stream,
-                batch_data
+                publish_events
             )
             
+            log(f"Persisted {persisted_count}/{len(instruments)} instruments to database")
             log(f"Published {published_count}/{len(instruments)} eligible instruments in batch")
             return published_count
             

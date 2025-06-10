@@ -197,11 +197,11 @@ class BaseScannerInterface(ABC):
             log("Event publisher not available, cannot publish eligible instruments", level="error")
             return
         
-        # Auto-detect scanner type from class name if not provided
+        # Auto-detect scanner type from class name if not provided (for logging purposes)
         if scanner_type is None:
             scanner_type = self.__class__.__name__.lower().replace('scanner', '')
         
-        # Map scanner type to algorithm ID
+        # Map scanner type to algorithm ID for fetching active sessions
         algorithm_id_map = {
             'udts': 1,
             # Add more mappings as algorithms are implemented
@@ -229,13 +229,20 @@ class BaseScannerInterface(ABC):
             for session in active_sessions:
                 trade_session_id = str(session['id'])
                 
+                # Extract algorithm IDs from session
+                session_scanning_algo_id = session.get('scanning_algorithm_id')
+                session_initiation_algo_id = session.get('initiation_algorithm_id')
+                session_termination_algo_id = session.get('termination_algorithm_id')
+                
                 for instrument in eligible_instruments:
                     try:
-                        # Publish the eligible instrument event using standardized format
+                        # Publish the eligible instrument event using standardized format with algorithm IDs
                         message_id = self.event_publisher.publish_eligible_instrument(
                             trade_session_id=trade_session_id,
                             instrument_data=instrument,
-                            scanner_type=scanner_type
+                            scanning_algorithm_id=session_scanning_algo_id,
+                            initiation_algorithm_id=session_initiation_algo_id,
+                            termination_algorithm_id=session_termination_algo_id
                         )
                         
                         if message_id:

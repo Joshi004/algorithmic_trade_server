@@ -6,6 +6,7 @@ from .UserConfiguration import UserConfiguration
 from .TradeSession import TradeSession
 from .Trade import Trade
 from .SeedTracker import SeedTracker
+from .ScannerEvent import ScannerEvent
 from . import Order
 
 __all__ = [
@@ -17,5 +18,6 @@ __all__ = [
     'TradeSession',
     'Trade',
     'SeedTracker',
+    'ScannerEvent',
     'Order',
 ]

@@ -45,7 +45,9 @@ def test_event_publisher():
     message_id = publisher.publish_eligible_instrument(
         trade_session_id=trade_session_id,
         instrument_data=instrument_data,
-        scanner_type="udts"
+        scanning_algorithm_id=1,
+        initiation_algorithm_id=1,
+        termination_algorithm_id=1
     )
     
     if message_id:
@@ -112,7 +114,9 @@ def test_event_publisher():
     published_count = publisher.publish_batch_eligible_instruments(
         trade_session_id=trade_session_id,
         instruments=instruments,
-        scanner_type="udts"
+        scanning_algorithm_id=1,
+        initiation_algorithm_id=1,
+        termination_algorithm_id=1
     )
     
     log(f"✅ Published {published_count} instruments in batch")
