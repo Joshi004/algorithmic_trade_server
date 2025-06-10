@@ -40,13 +40,15 @@ def login(request):
             "email": serializer.validated_data["email"]
         }
         
-        logger.info(f"Login successful for user: {user_data['email']}")
+        # Log successful login without exposing email
+        logger.info("User login successful")
         
-        # Generate both JWT tokens
+        # Generate tokens
         llt = generate_llt(user_data)
         slt = generate_slt(user_data)
         
-        logger.info(f"Generated tokens - LLT: {llt[:20]}..., SLT: {slt[:20]}...")
+        # Log token generation without exposing token values
+        logger.info("Authentication tokens generated successfully")
         
         # Calculate token expiry times for the frontend
         slt_expires_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=SLT_EXPIRY_MINUTES)
@@ -120,7 +122,7 @@ def refresh_token(request):
         "email": request.user_data["email"]
     }
     
-    logger.info(f"Refreshing token for user: {user_data['email']}")
+    logger.info(f"Refreshing token for user ID: {user_data.get('user_id', 'unknown')}")
     
     # Generate new SLT
     slt = generate_slt(user_data)

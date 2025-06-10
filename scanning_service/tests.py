@@ -5,6 +5,7 @@ from django.test import TestCase
 from unittest.mock import patch, MagicMock
 from scanning_service.consumers.scanning_queue_consumer import ScanningQueueConsumer
 from scanning_service.lib.utils.logger import log
+from scanning_service.lib.utils.redis import restore_from_redis_stream
 
 
 class ScanningQueueConsumerTest(TestCase):
@@ -19,7 +20,7 @@ class ScanningQueueConsumerTest(TestCase):
             'timestamp': '2024-01-01T10:00:00+05:30',
             'trade_session_id': '123',
             'user_id': 'user-456',
-            'trading_frequency': '3minute',
+            'trading_frequency': '3-minute',
             'is_dummy': 'true',
             'session_status': 'started',
             'algorithm_config_scanning_algorithm_id': '2',
@@ -37,7 +38,7 @@ class ScanningQueueConsumerTest(TestCase):
     
     def test_event_data_unflattening(self):
         """Test that flattened event data is correctly reconstructed"""
-        result = self.consumer._unflatten_event_data(self.test_event_data)
+        result = restore_from_redis_stream(self.test_event_data)
         
         # Check basic fields
         self.assertEqual(result['event_id'], 'test-event-123')
@@ -58,7 +59,7 @@ class ScanningQueueConsumerTest(TestCase):
             'trade_session_id': '123',
             'user_id': 'user-456',
             'timestamp': '2024-01-01T10:00:00+05:30',
-            'trading_frequency': '3minute',
+            'trading_frequency': '3-minute',
             'is_dummy': 'true',
             'session_status': 'started'
         }

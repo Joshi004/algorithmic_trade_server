@@ -18,7 +18,10 @@ class UdtsSlto(metaclass=TrackerAlgoMeta):
         self.scanning_algorithm_name = scanning_algorithm_name
         self.indicators = []
         self.trade_sessions = {}
-        self.integration_service_url = getattr(settings, 'INTEGRATION_SERVICE_URL', 'http://localhost:8000/integration_service')
+        self.integration_service_url = getattr(settings, 'INTEGRATION_SERVICE_URL', 'http://localhost:8000/integration')
+        self.headers = {
+            'X-Internal-Service-Token': getattr(settings, 'INTERNAL_SERVICE_TOKEN', 'internal-service-secret-token-change-in-production')
+        }
     
     def __str__(self):
         identifier = self.trading_frequency + "__" + self.scanning_algorithm_name
@@ -44,7 +47,7 @@ class UdtsSlto(metaclass=TrackerAlgoMeta):
             api_url = f"{self.integration_service_url}/place_order/"
             params['user_id'] = user_id
             
-            response = requests.post(api_url, json=params)
+            response = requests.post(api_url, json=params, headers=self.headers)
             
             if response.status_code == 200:
                 data = response.json()
@@ -76,8 +79,8 @@ class UdtsSlto(metaclass=TrackerAlgoMeta):
                         return trade, order
                     quantity = self.__get_square_off_quantity__(trade_id)
                     frictional_losses = RiskManager().get_frictional_losses(TRADE_TYPE["intraday"], market_price, quantity, action == "BUY")
-                    kite_order_id = self.square_off_order_on_zerodha(trading_symbol, action, quantity, user_id, dummy, market_price)
-                    order = Order.initiate_order(action.value, instrument_id, trade_id, dummy, kite_order_id, frictional_losses, user_id, quantity, market_price, trade_session_id)
+                    broker_order_id = self.square_off_order_on_zerodha(trading_symbol, action, quantity, user_id, dummy, market_price)
+                    order = Order.initiate_order(action.value, instrument_id, trade_id, dummy, broker_order_id, frictional_losses, user_id, quantity, market_price, trade_session_id)
                     self.__update_and_close_trade__(trade, order.closed_at)
                 log(f'Order and trade updated successfully as this is new state of trade: {str(trade)}')
             except Exception as e:
@@ -87,7 +90,7 @@ class UdtsSlto(metaclass=TrackerAlgoMeta):
         return (trade, order)
 
     def square_off_order_on_zerodha(self, trading_symbol, action, quantity, user_id, dummy, market_price):
-        kite_order_id = user_id + "__" + str(current_ist())
+        broker_order_id = user_id + "__" + str(current_ist())
         if dummy:
             retrieved_amount = quantity * market_price
             dummy_record = DummyAccount.objects.get(user_id=user_id)
@@ -104,8 +107,8 @@ class UdtsSlto(metaclass=TrackerAlgoMeta):
                 "product": "MIS",
                 "validity": "DAY"
             }
-            kite_order_id = self._place_order_via_api(order_params, user_id)
-        return kite_order_id
+            broker_order_id = self._place_order_via_api(order_params, user_id)
+        return broker_order_id
 
     def __update_and_close_trade__(self, trade, order_closed_at):
         if order_closed_at:

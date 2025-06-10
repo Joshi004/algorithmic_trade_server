@@ -5,7 +5,11 @@ import os
 from datetime import datetime
 from typing import Dict, Any, Optional
 
+from django.conf import settings
 from scanning_service.lib.utils.logger import log
+from scanning_service.lib.utils.redis import restore_from_redis_stream, create_consumer_client
+from scanning_service.lib.Algorithms.ScannerAlgos.ScannerAlgoFactory import ScannerAlgoFactory
+from scanning_service.lib.data_providers import IntegrationServiceProvider, TMUServiceProvider
 
 
 class ScanningQueueConsumer:
@@ -16,61 +20,20 @@ class ScanningQueueConsumer:
     
     def __init__(self):
         """Initialize the consumer with Redis connection and configuration"""
-        self.redis_host = os.environ.get('REDIS_HOST', 'localhost')
-        self.redis_port = int(os.environ.get('REDIS_PORT', 6379))
-        self.redis_db = 0
-        self.stream_name = "scanning_queue"
+        # Stream and consumer configuration
+        self.stream_name = getattr(settings, 'REDIS_STREAM_SCANNING_QUEUE', 'scanning_queue')
         self.consumer_group = "scanning_service_group"
         self.consumer_name = f"scanning_consumer_{int(time.time())}"
-        self.batch_size = 10
-        self.timeout = 1000  # 1 second timeout
         
-        self._client = None
+        # Create Redis consumer client using new structure
+        self.redis_consumer = create_consumer_client(self.consumer_group, self.consumer_name)
+        
         self._running = False
+        self._scanner_factory = ScannerAlgoFactory()
         
         log(f"Initialized ScanningQueueConsumer with consumer name: {self.consumer_name}")
     
-    def _get_redis_client(self) -> Optional[redis.Redis]:
-        """Get Redis client with proper configuration"""
-        try:
-            if self._client is None:
-                self._client = redis.Redis(
-                    host=self.redis_host,
-                    port=self.redis_port,
-                    db=self.redis_db,
-                    socket_timeout=5,
-                    socket_connect_timeout=5,
-                    decode_responses=True,
-                    health_check_interval=30
-                )
-            return self._client
-        except Exception as e:
-            log(f"Failed to create Redis client: {str(e)}", level="error")
-            return None
-    
-    def _ensure_consumer_group(self) -> bool:
-        """Ensure the consumer group exists, create if it doesn't"""
-        try:
-            client = self._get_redis_client()
-            if client is None:
-                return False
-            
-            # Try to create the consumer group (from beginning of stream)
-            try:
-                client.xgroup_create(self.stream_name, self.consumer_group, id='0', mkstream=True)
-                log(f"Created consumer group '{self.consumer_group}' for stream '{self.stream_name}'")
-            except redis.ResponseError as e:
-                if "BUSYGROUP" in str(e):
-                    log(f"Consumer group '{self.consumer_group}' already exists")
-                else:
-                    log(f"Error creating consumer group: {str(e)}", level="error")
-                    return False
-            
-            return True
-            
-        except Exception as e:
-            log(f"Error ensuring consumer group: {str(e)}", level="error")
-            return False
+
     
     def _process_event(self, event_data: Dict[str, Any]) -> bool:
         """
@@ -84,84 +47,129 @@ class ScanningQueueConsumer:
         """
         try:
             # Extract event information
+            log(f"Processing event with event data : {event_data}")
             event_id = event_data.get('event_id', 'unknown')
             event_type = event_data.get('event_type', 'unknown')
             trade_session_id = event_data.get('trade_session_id', 'unknown')
-            user_id = event_data.get('user_id', 'unknown')
-            timestamp = event_data.get('timestamp', 'unknown')
             
             log(f"Processing event {event_id}: {event_type} for trade session {trade_session_id}")
             
-            # Basic event validation
-            if event_type != 'trade_session_initiated':
+            # Handle different event types
+            if event_type == 'trade_session_initiated':
+                return self._handle_trade_session_initiated(event_data)
+            elif event_type == 'trade_session_terminated':
+                return self._handle_trade_session_terminated(event_data)
+            else:
                 log(f"Skipping unknown event type: {event_type}", level="warning")
                 return True
-            
-            # TODO: Implement actual business logic here
-            # For now, just log the event details
-            log(f"Successfully processed trade session scanning:")
-            log(f"  - Event ID: {event_id}")
-            log(f"  - Trade Session ID: {trade_session_id}")
-            log(f"  - User ID: {user_id}")
-            log(f"  - Timestamp: {timestamp}")
-            log(f"  - Trading Frequency: {event_data.get('trading_frequency', 'unknown')}")
-            log(f"  - Is Dummy: {event_data.get('is_dummy', 'unknown')}")
-            log(f"  - Status: {event_data.get('session_status', 'unknown')}")
-            
-            return True
             
         except Exception as e:
             log(f"Error processing event: {str(e)}", level="error")
             return False
     
-    def _unflatten_event_data(self, flattened_data: Dict[str, str]) -> Dict[str, Any]:
+    def _handle_trade_session_initiated(self, event_data: Dict[str, Any]) -> bool:
         """
-        Convert flattened Redis stream data back to nested structure.
+        Handle trade session initiated event by creating and starting a scanner.
         
         Args:
-            flattened_data: Flattened data from Redis stream
+            event_data: The flat event data containing trade session details
             
         Returns:
-            dict: Reconstructed nested data
+            bool: True if scanner started successfully, False otherwise
         """
-        result = {}
+        try:
+            # Extract necessary information from flat structure
+            trade_session_id = event_data.get('trade_session_id')
+            user_id = event_data.get('user_id')
+            trading_frequency = event_data.get('trading_frequency')
+            is_dummy = event_data.get('is_dummy', False)
+            
+            # Extract algorithm IDs directly from flat structure
+            scanning_algo_id = int(event_data.get('scanning_algorithm_id', 1))  # Default to UDTS (ID 1)
+            initiation_algo_id = int(event_data.get('initiation_algorithm_id', 1))  # Default to algo ID 1
+            termination_algo_id = int(event_data.get('termination_algorithm_id', 1))  # Default to algo ID 1
+            
+            log(f"Starting scanner for trade session {trade_session_id}:")
+            log(f"  - User ID: {user_id}")
+            log(f"  - Trading Frequency: {trading_frequency}")
+            log(f"  - Scanning Algorithm ID: {scanning_algo_id}")
+            log(f"  - Initiation Algorithm ID: {initiation_algo_id}")
+            log(f"  - Termination Algorithm ID: {termination_algo_id}")
+            log(f"  - Is Dummy: {is_dummy}")
+            
+            # Create data providers
+            integration_provider = IntegrationServiceProvider(user_id)
+            tmu_provider = TMUServiceProvider(user_id)
+            
+            # Get scanner instance using factory (factory handles singleton behavior)
+            scanner = self._scanner_factory.get_scanner(scanning_algo_id, trading_frequency)
+            
+            if scanner is None:
+                log(f"Unknown scanning algorithm ID: {scanning_algo_id}", level="error")
+                return False
+            
+            # Configure the scanner with required parameters
+            # Note: user_id and trade_session_id are passed but not stored as instance state
+            scanner.configure(
+                trade_freq=trading_frequency,
+                user_id=user_id,
+                trade_session_id=trade_session_id,
+                integration_provider=integration_provider,
+                tmu_provider=tmu_provider
+            )
+            
+            # Start scanning in a separate thread
+            # Pass trade_session_id as parameter since it's not stored in scanner
+            scanner.fetch_instrument_tokens_and_start_tracking(user_id, trade_session_id, is_dummy)
+            
+            log(f"Successfully started scanner for trade session {trade_session_id}")
+            return True
+            
+        except Exception as e:
+            log(f"Error starting scanner: {str(e)}", level="error")
+            return False
+    
+    def _handle_trade_session_terminated(self, event_data: Dict[str, Any]) -> bool:
+        """
+        Handle trade session terminated event.
         
-        for key, value in flattened_data.items():
-            if '_' in key:
-                # Handle nested keys (e.g., "algorithm_config_scanning_algorithm_id")
-                parts = key.split('_')
-                current = result
-                
-                # Navigate/create nested structure
-                for part in parts[:-1]:
-                    if part not in current:
-                        current[part] = {}
-                    current = current[part]
-                
-                # Set the final value
-                current[parts[-1]] = value
-            else:
-                # Direct key
-                result[key] = value
+        Note: Since we no longer cache scanner instances, we cannot directly stop
+        specific scanners. The singleton scanners will continue running for their
+        frequency until stopped by container shutdown or other mechanisms.
         
-        return result
+        Args:
+            event_data: The event data containing trade session details
+            
+        Returns:
+            bool: True (always successful as no action needed)
+        """
+        try:
+            trade_session_id = event_data.get('trade_session_id')
+            user_id = event_data.get('user_id')
+            
+            log(f"Trade session terminated: {trade_session_id} for user: {user_id}")
+            log("Note: Scanner instances are frequency-based singletons and continue running")
+            
+            return True
+            
+        except Exception as e:
+            log(f"Error handling session termination: {str(e)}", level="error")
+            return False
     
     def start_consuming(self):
-        """Start consuming messages from the scanning queue"""
+        """Start consuming messages from the scanning queue called from the start_scanning_service"""
         try:
             log("Starting ScanningQueueConsumer...")
             
-            client = self._get_redis_client()
-            if client is None:
-                log("Failed to get Redis client, cannot start consumer", level="error")
+            # Test Redis connection using new consumer client
+            if not self.redis_consumer.health_check():
+                log("Failed to connect to Redis, cannot start consumer", level="error")
                 return
             
-            # Test Redis connection
-            client.ping()
             log("Redis connection established successfully")
             
-            # Ensure consumer group exists
-            if not self._ensure_consumer_group():
+            # Ensure consumer group exists using new consumer client
+            if not self.redis_consumer.ensure_consumer_group(self.stream_name):
                 log("Failed to ensure consumer group, cannot start consumer", level="error")
                 return
             
@@ -170,29 +178,31 @@ class ScanningQueueConsumer:
             
             while self._running:
                 try:
-                    # Read messages from the stream
-                    messages = client.xreadgroup(
-                        self.consumer_group,
-                        self.consumer_name,
-                        {self.stream_name: '>'},
-                        count=self.batch_size,
-                        block=self.timeout
-                    )
+                    # Read messages from the stream using new consumer client
+                    messages = self.redis_consumer.read_from_stream(self.stream_name)
                     
                     if messages:
                         for stream, stream_messages in messages:
                             for message_id, fields in stream_messages:
                                 try:
-                                    # Unflatten the event data
-                                    event_data = self._unflatten_event_data(fields)
+                                    # Debug: Log the raw fields from Redis stream
+                                    log(f"Raw Redis stream fields for message {message_id}: {fields}")
+                                    
+                                    # Use flat fields directly instead of unflattering
+                                    event_data = fields
+                                    
+                                    # Debug: Log the event data being processed
+                                    log(f"Processing flat event data for message {message_id}: {event_data}")
                                     
                                     # Process the event
                                     success = self._process_event(event_data)
                                     
                                     if success:
-                                        # Acknowledge the message
-                                        client.xack(self.stream_name, self.consumer_group, message_id)
-                                        log(f"Acknowledged message {message_id}")
+                                        # Acknowledge the message using new consumer client
+                                        if self.redis_consumer.acknowledge_message(self.stream_name, message_id):
+                                            log(f"Acknowledged message {message_id}")
+                                        else:
+                                            log(f"Failed to acknowledge message {message_id}", level="error")
                                     else:
                                         log(f"Failed to process message {message_id}, not acknowledging", level="error")
                                         
@@ -203,7 +213,7 @@ class ScanningQueueConsumer:
                     log(f"Redis connection error: {str(e)}", level="error")
                     time.sleep(5)  # Wait before retry
                 except redis.TimeoutError:
-                    # Timeout is expected when no messages are available
+                    log(f"Redis connection Timed Out:", level="error")
                     pass
                 except Exception as e:
                     log(f"Unexpected error in consumer loop: {str(e)}", level="error")
@@ -215,25 +225,13 @@ class ScanningQueueConsumer:
             log(f"Fatal error in consumer: {str(e)}", level="error")
         finally:
             self._running = False
-            if self._client:
-                self._client.close()
-                log("Redis connection closed")
+            self.redis_consumer.close()
             log("ScanningQueueConsumer stopped")
     
     def stop_consuming(self):
-        """Stop the consumer gracefully"""
         log("Stopping ScanningQueueConsumer...")
         self._running = False
+        log("ScanningQueueConsumer stopped")
     
     def health_check(self) -> bool:
-        """Check if the consumer can connect to Redis"""
-        try:
-            client = self._get_redis_client()
-            if client is None:
-                return False
-            
-            client.ping()
-            return True
-        except Exception as e:
-            log(f"Health check failed: {str(e)}", level="error")
-            return False 
+        return self.redis_consumer.health_check() 

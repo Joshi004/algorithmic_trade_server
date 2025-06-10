@@ -38,18 +38,19 @@ services:
     networks:
       - ats-network
 
-  ats-app:
-    container_name: ats-django-app
+  # Dedicated migration service - runs once and exits
+  ats-migrations:
+    container_name: ats-migrations
     build: .
-    restart: always
     depends_on:
-      - ats-db
-      - ats-redis
-    ports:
-      - "18000:8000"
+      ats-db:
+        condition: service_healthy
+      ats-redis:
+        condition: service_healthy
     volumes:
       - .:/app
     environment:
+      # Database Configuration
       - DATABASE_ENGINE=django.db.backends.mysql
       - DATABASE_NAME=ats_db
       - DATABASE_USER=ats_user
@@ -57,12 +58,99 @@ services:
       - DATABASE_HOST=ats-db
       - DATABASE_PORT=3306
       - TEST_DATABASE_NAME=test_ats_db
+      
+      # Security Keys Configuration
+      - DJANGO_SECRET_KEY=prod-django-secret-key-change-in-production-make-it-50-chars-long
+      - JWT_LONG_LIVED_TOKEN_SECRET=jwt-llt-secret-key-32-chars-change-this
+      - JWT_SHORT_LIVED_TOKEN_SECRET=jwt-slt-secret-key-32-chars-change-this
+      - BROKER_API_ENCRYPTION_SECRET=broker-encryption-key-32-chars-change-this-for-production
+      - INTERNAL_SERVICE_TOKEN=internal-service-secret-token-change-in-production
+      
+      # Django Configuration
+      - DJANGO_DEBUG=True
+      - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,ats-app,ats-django-app,ats-scanning-service
+      - DJANGO_SETTINGS_MODULE=ats_base.settings
+    command: >
+      sh -c "
+        echo '🔄 Running database migrations...' &&
+        python manage.py migrate &&
+        echo '✅ All migrations applied successfully!' &&
+        echo '🌱 Applying seed data...' &&
+        python manage.py seed_data &&
+        echo '✅ Setup complete!'
+      "
+    restart: "no"
+    networks:
+      - ats-network
+
+  ats-app:
+    container_name: ats-django-app
+    build: .
+    restart: always
+    depends_on:
+      - ats-migrations
+    ports:
+      - "18000:8000"
+    volumes:
+      - .:/app
+    environment:
+      # Database Configuration
+      - DATABASE_ENGINE=django.db.backends.mysql
+      - DATABASE_NAME=ats_db
+      - DATABASE_USER=ats_user
+      - DATABASE_PASSWORD=ats_password
+      - DATABASE_HOST=ats-db
+      - DATABASE_PORT=3306
+      - TEST_DATABASE_NAME=test_ats_db
+      
+      # Security Keys Configuration
+      - DJANGO_SECRET_KEY=prod-django-secret-key-change-in-production-make-it-50-chars-long
+      - JWT_LONG_LIVED_TOKEN_SECRET=jwt-llt-secret-key-32-chars-change-this
+      - JWT_SHORT_LIVED_TOKEN_SECRET=jwt-slt-secret-key-32-chars-change-this
+      - BROKER_API_ENCRYPTION_SECRET=broker-encryption-key-32-chars-change-this-for-production
+      - INTERNAL_SERVICE_TOKEN=internal-service-secret-token-change-in-production
+      
+      # Redis Configuration
       - REDIS_HOST=ats-redis
       - REDIS_PORT=6379
+      - REDIS_DB=0
+      - REDIS_SOCKET_TIMEOUT=5
+      - REDIS_SOCKET_CONNECT_TIMEOUT=5
+      - REDIS_HEALTH_CHECK_INTERVAL=30
+      
+      # Redis Stream Configuration
+      - REDIS_STREAM_SCANNING_QUEUE=scanning_queue
+      - REDIS_STREAM_INITIATION_QUEUE=initiation_queue
+      - REDIS_STREAM_SCANNER_STATUS=scanner_status_stream
+      
+      # Consumer Configuration
+      - REDIS_CONSUMER_BATCH_SIZE=10
+      - REDIS_CONSUMER_TIMEOUT=1000
+      
+      # Service URLs
+      - INTEGRATION_SERVICE_URL=http://ats-app:8000/integration
+      - TMU_SERVICE_URL=http://ats-app:8000/tmu
+      - SCANNING_SERVICE_URL=http://ats-app:8000/scanning_service
+      
+      # Service Timeouts
+      - SERVICE_REQUEST_TIMEOUT=30
+      - SERVICE_CONNECT_TIMEOUT=10
+      
+      # Django Configuration
       - DJANGO_DEBUG=True
-      - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
+      - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,ats-app,ats-django-app,ats-scanning-service
       - DJANGO_SETTINGS_MODULE=ats_base.settings
-    command: python manage.py runserver 0.0.0.0:8000
+    command: >
+      sh -c "
+        echo '⏳ Waiting for database to be ready...' &&
+        until nc -z -v -w30 ats-db 3306; do
+          echo 'Waiting for database connection...'
+          sleep 5
+        done &&
+        echo '✅ Database connection established!' &&
+        echo '🚀 Starting Django application...' &&
+        python manage.py runserver 0.0.0.0:8000
+      "
     networks:
       - ats-network
 
@@ -71,22 +159,66 @@ services:
     build: .
     restart: always
     depends_on:
-      - ats-db
-      - ats-redis
+      - ats-migrations
     volumes:
       - .:/app
     environment:
+      # Database Configuration
       - DATABASE_ENGINE=django.db.backends.mysql
       - DATABASE_NAME=ats_db
       - DATABASE_USER=ats_user
       - DATABASE_PASSWORD=ats_password
       - DATABASE_HOST=ats-db
       - DATABASE_PORT=3306
+      
+      # Security Keys Configuration
+      - DJANGO_SECRET_KEY=prod-django-secret-key-change-in-production-make-it-50-chars-long
+      - JWT_LONG_LIVED_TOKEN_SECRET=jwt-llt-secret-key-32-chars-change-this
+      - JWT_SHORT_LIVED_TOKEN_SECRET=jwt-slt-secret-key-32-chars-change-this
+      - BROKER_API_ENCRYPTION_SECRET=broker-encryption-key-32-chars-change-this-for-production
+      - INTERNAL_SERVICE_TOKEN=internal-service-secret-token-change-in-production
+      
+      # Redis Configuration
       - REDIS_HOST=ats-redis
       - REDIS_PORT=6379
+      - REDIS_DB=0
+      - REDIS_SOCKET_TIMEOUT=5
+      - REDIS_SOCKET_CONNECT_TIMEOUT=5
+      - REDIS_HEALTH_CHECK_INTERVAL=30
+      
+      # Redis Stream Configuration
+      - REDIS_STREAM_SCANNING_QUEUE=scanning_queue
+      - REDIS_STREAM_INITIATION_QUEUE=initiation_queue
+      - REDIS_STREAM_SCANNER_STATUS=scanner_status_stream
+      
+      # Consumer Configuration
+      - REDIS_CONSUMER_BATCH_SIZE=10
+      - REDIS_CONSUMER_TIMEOUT=1000
+      
+      # Service URLs
+      - INTEGRATION_SERVICE_URL=http://ats-app:8000/integration
+      - TMU_SERVICE_URL=http://ats-app:8000/tmu
+      - SCANNING_SERVICE_URL=http://ats-app:8000/scanning_service
+      
+      # Service Timeouts
+      - SERVICE_REQUEST_TIMEOUT=30
+      - SERVICE_CONNECT_TIMEOUT=10
+      
+      # Django Configuration
       - DJANGO_DEBUG=True
+      - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,ats-app,ats-django-app,ats-scanning-service
       - DJANGO_SETTINGS_MODULE=ats_base.settings
-    command: python manage.py start_scanning_service --verbose
+    command: >
+      sh -c "
+        echo '⏳ Waiting for database to be ready...' &&
+        until nc -z -v -w30 ats-db 3306; do
+          echo 'Waiting for database connection...'
+          sleep 5
+        done &&
+        echo '✅ Database connection established!' &&
+        echo '🚀 Starting scanning service...' &&
+        python manage.py start_scanning_service --verbose
+      "
     networks:
       - ats-network
 

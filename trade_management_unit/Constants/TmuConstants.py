@@ -61,17 +61,17 @@ TRADE_TYPE = {"intraday":"equity_intraday"}
 DEFAULT_EXCHANGE = "NSE"
 MINIMUM_REQUIRED_BALANCE = 100
 TRADE_THRESHHOLD_PER_MINUTE = 10000
-FREQUENCY = ["minute", "3minute", "5minute", "10minute", "15minute", "30minute", "60minute", "day"]
+FREQUENCY = ["1-minute", "3-minute", "5-minute", "10-minute", "15-minute", "30-minute", "60-minute", "1-day"]
 NUM_CANDLES_FOR_TREND_ANALYSIS = 200
 MINIMUM_REWARD_RISK_RATIO = 2
 MAXIMUM_REWARD_RISK_RATIO = 3
 FRICTION_COEFFECIENT = 0.2 # Currently Zerodha take alsmost 0.8% of total buy value or sell value so proit amount should be atleast FRICTION_COEFFECIENT/100* price
 FREQUENCY_STEPS = {
-    "minute": ["minute", "10minute", "60minute"],
-    "3minute": ["3minute", "15minute", "60minute"],
-    "5minute": ["5minute", "30minute", "60minute"],
-    "10minute": ["10minute", "30minute", "60minute"],
-    "15minute": ["15minute", "60minute", "day"],
+    "1-minute": ["1-minute", "10-minute", "60-minute"],
+    "3-minute": ["3-minute", "15-minute", "60-minute"],
+    "5-minute": ["5-minute", "30-minute", "60-minute"],
+    "10-minute": ["10-minute", "30-minute", "60-minute"],
+    "15-minute": ["15-minute", "60-minute", "1-day"],
 }
 SCOPE_COLLECTION_FREQ_INDEX = 0  # This is the freq index from where the scope is calculated for price traversal
 

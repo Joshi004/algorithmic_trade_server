@@ -9,7 +9,10 @@ class Trade:
         logging.basicConfig(level=logging.DEBUG)
         self.user_id = user_id
         # Get integration service URL from settings or use default
-        self.integration_service_url = getattr(settings, 'INTEGRATION_SERVICE_URL', 'http://localhost:8000/integration_service')
+        self.integration_service_url = getattr(settings, 'INTEGRATION_SERVICE_URL', 'http://localhost:8000/integration')
+        self.headers = {
+            'X-Internal-Service-Token': getattr(settings, 'INTERNAL_SERVICE_TOKEN', 'internal-service-secret-token-change-in-production')
+        }
 
     def validate_params(self, params):
         # Check if 'symbol' and 'exchange' are present in params
@@ -48,7 +51,7 @@ class Trade:
                 'user_id': self.user_id
             }
             
-            response = requests.get(api_url, params=api_params)
+            response = requests.get(api_url, params=api_params, headers=self.headers)
             
             if response.status_code == 200:
                 data = response.json()

@@ -1,18 +1,6 @@
 import json
-import time
-from datetime import datetime
-from django.db.models import Q
 from urllib.parse import parse_qs
-from channels.layers import get_channel_layer
-from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
-from trade_management_unit.models.Instrument import Instrument
-from trade_management_unit.lib.Kite.KiteTickhandler import KiteTickhandler
-import threading
-
-from trade_management_unit.lib.Algorithms.TrackerAlgos.TrackerAlgoFactory import TrackerAlgoFactory
-from trade_management_unit.lib.Algorithms.ScannerAlgos.ScannerAlgoFactory import ScannerAlgoFactory
-from trade_management_unit.lib.TradeSession.TradeSession import TradeSession
 
 class TradeSessionConsumer(AsyncWebsocketConsumer):
 
