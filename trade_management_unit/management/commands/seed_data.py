@@ -2,10 +2,12 @@ import os
 import glob
 import re
 from django.core.management.base import BaseCommand
-from django.db import connection, transaction, IntegrityError
-from pathlib import Path
+from django.db import transaction, IntegrityError
 from django.conf import settings
-from django.apps import apps
+from django.core.management import call_command
+from django.db import connection
+from trade_management_unit.models.SeedTracker import SeedTracker
+
 
 class Command(BaseCommand):
     help = 'Seeds the database with initial data from seed files'
@@ -20,18 +22,24 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         force = options.get('force', False)
         
-        # Check if the seed tracking table exists, if not create it
-        self.setup_seed_tracking()
+        # Ensure all migrations are applied before seeding
+        self.ensure_migrations_applied()
         
         # Get all seed files
         base_dir = settings.BASE_DIR
         sql_seed_files = glob.glob(os.path.join(base_dir, 'data', '*.sql'))
         
+        if not sql_seed_files:
+            self.stdout.write(self.style.WARNING('No seed files found in data/ directory'))
+            return
+        
+        self.stdout.write(self.style.SUCCESS(f'Found {len(sql_seed_files)} seed files'))
+        
         for seed_file in sql_seed_files:
             seed_name = os.path.basename(seed_file)
             
             # Check if seed was already applied
-            if not force and self.is_seed_applied(seed_name):
+            if not force and SeedTracker.is_seed_applied(seed_name):
                 self.stdout.write(self.style.WARNING(f'Seed {seed_name} was already applied. Skipping.'))
                 continue
             
@@ -39,43 +47,49 @@ class Command(BaseCommand):
             try:
                 with transaction.atomic():
                     self.apply_seed(seed_file)
-                    self.mark_seed_as_applied(seed_name)
+                    SeedTracker.mark_seed_as_applied(seed_name)
                 self.stdout.write(self.style.SUCCESS(f'Successfully applied seed {seed_name}'))
             except Exception as e:
                 self.stdout.write(self.style.ERROR(f'Failed to apply seed {seed_name}: {str(e)}'))
-    
-    def setup_seed_tracking(self):
-        """Create a table to track which seeds have been applied"""
-        with connection.cursor() as cursor:
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS seed_tracker (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    seed_name VARCHAR(255) NOT NULL UNIQUE,
-                    applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-    
-    def is_seed_applied(self, seed_name):
-        """Check if a seed was already applied"""
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT COUNT(*) FROM seed_tracker WHERE seed_name = %s", [seed_name])
-            result = cursor.fetchone()
-            return result[0] > 0
-    
-    def mark_seed_as_applied(self, seed_name):
-        """Mark a seed as applied in the tracker"""
-        with connection.cursor() as cursor:
-            cursor.execute("INSERT INTO seed_tracker (seed_name) VALUES (%s)", [seed_name])
-    
+                if not force:
+                    raise  # Stop on error unless force is used
+
+    def ensure_migrations_applied(self):
+        """Ensure all migrations are applied before running seeds"""
+        self.stdout.write("Checking migration status...")
+        
+        # Check if there are any unapplied migrations
+        try:
+            from django.db.migrations.executor import MigrationExecutor
+            from django.db import DEFAULT_DB_ALIAS
+            
+            executor = MigrationExecutor(connection)
+            plan = executor.migration_plan(executor.loader.graph.leaf_nodes())
+            
+            if plan:
+                self.stdout.write(self.style.WARNING(
+                    f"Found {len(plan)} unapplied migrations. Running migrations first..."
+                ))
+                call_command('migrate', verbosity=0)
+                self.stdout.write(self.style.SUCCESS("All migrations applied successfully."))
+            else:
+                self.stdout.write(self.style.SUCCESS("All migrations are up to date."))
+                
+        except Exception as e:
+            self.stdout.write(self.style.ERROR(f"Error checking migrations: {str(e)}"))
+            raise
+
     def apply_seed(self, seed_file):
-        """Apply a seed file to the database"""
+        """Apply a seed file to the database - ONLY INSERT statements allowed"""
         with open(seed_file, 'r') as f:
             sql_content = f.read()
         
         # Split the SQL content into individual statements
-        # This simple approach assumes statements end with semicolons
-        statements = re.split(r';\s*$', sql_content, flags=re.MULTILINE)
+        statements = re.split(r';\s*(?:\n|$)', sql_content, flags=re.MULTILINE)
         statements = [stmt.strip() for stmt in statements if stmt.strip()]
+        
+        executed_count = 0
+        skipped_count = 0
         
         with connection.cursor() as cursor:
             for statement in statements:
@@ -83,33 +97,51 @@ class Command(BaseCommand):
                 if not statement:
                     continue
                 
-                # Check if it's an INSERT statement
-                if statement.upper().startswith('INSERT'):
-                    # Modify to handle duplicates
-                    table_match = re.search(r'INSERT INTO (\w+)', statement)
-                    if table_match:
-                        table_name = table_match.group(1)
-                        try:
-                            # Try executing the insert as is
-                            cursor.execute(statement)
-                        except IntegrityError as e:
-                            self.stdout.write(self.style.WARNING(
-                                f'Integrity error in {table_name}: {str(e)}. Skipping this insert.'
-                            ))
-                            self.stdout.write(self.style.WARNING(f'Statement: {statement}'))
-                        except Exception as e:
-                            self.stdout.write(self.style.ERROR(
-                                f'Error executing statement for {table_name}: {str(e)}'
-                            ))
-                            self.stdout.write(self.style.WARNING(f'Statement: {statement}'))
-                            raise
-                else:
-                    # Execute other statements as is
-                    cursor.execute(statement)
-    
-    def get_model_for_table(self, table_name):
-        """Get the Django model class for a table name"""
-        for model in apps.get_models():
-            if hasattr(model._meta, 'db_table') and model._meta.db_table == table_name:
-                return model
-        return None 
+                # Clean the statement by removing leading comments and empty lines
+                cleaned_lines = []
+                for line in statement.split('\n'):
+                    line = line.strip()
+                    # Skip comment lines and empty lines
+                    if line and not line.startswith('--'):
+                        cleaned_lines.append(line)
+                
+                if not cleaned_lines:
+                    continue
+                
+                cleaned_statement = ' '.join(cleaned_lines)
+                
+                # Only allow INSERT statements for seed data
+                if not cleaned_statement.upper().startswith('INSERT'):
+                    self.stdout.write(self.style.WARNING(
+                        f'Skipping non-INSERT statement in seed file: {cleaned_statement[:50]}...'
+                    ))
+                    skipped_count += 1
+                    continue
+                
+                try:
+                    # Execute the insert statement
+                    cursor.execute(cleaned_statement)
+                    executed_count += 1
+                    
+                except IntegrityError as e:
+                    if 'Duplicate entry' in str(e) or 'already exists' in str(e):
+                        self.stdout.write(self.style.WARNING(
+                            f'⚠ Skipping duplicate entry: {cleaned_statement[:50]}...'
+                        ))
+                        skipped_count += 1
+                    else:
+                        self.stdout.write(self.style.ERROR(
+                            f'✗ Integrity error: {str(e)}'
+                        ))
+                        raise
+                        
+                except Exception as e:
+                    self.stdout.write(self.style.ERROR(
+                        f'✗ Error executing statement: {str(e)}'
+                    ))
+                    self.stdout.write(self.style.ERROR(f'Statement: {cleaned_statement}'))
+                    raise
+        
+        self.stdout.write(self.style.SUCCESS(
+            f'Seed completed: {executed_count} statements executed, {skipped_count} skipped'
+        )) 

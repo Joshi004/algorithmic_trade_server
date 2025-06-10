@@ -21,12 +21,16 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/4.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-6@b!tg_a%y_-i#y#x89keub36fu6^fbx=-3a8d^4sa%y_qr)yf'
+# Use environment variable for security, fallback to development key
+SECRET_KEY = os.environ.get(
+    'DJANGO_SECRET_KEY', 
+    'django-insecure-6@b!tg_a%y_-i#y#x89keub36fu6^fbx=-3a8d^4sa%y_qr)yf'  # Development fallback
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1,ats-app,ats-django-app').split(',')
 
 # Disable automatic slash appending to prevent trailing slash issues
 APPEND_SLASH = False
@@ -46,6 +50,7 @@ INSTALLED_APPS = [
     'trade_management_unit',
     'ats_gateway',
     'integration_service',
+    'scanning_service',
 ]
 
 MIDDLEWARE = [
@@ -123,6 +128,13 @@ AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
+]
+
+# Password Hashers - BCrypt preferred with PBKDF2 fallback
+# BCrypt for new passwords, PBKDF2 as reliable fallback (no external dependencies)
+PASSWORD_HASHERS = [
+    'django.contrib.auth.hashers.BCryptSHA256PasswordHasher',  # Preferred: fast, secure
+    'django.contrib.auth.hashers.PBKDF2PasswordHasher',       # Fallback: reliable, no deps
 ]
 
 
@@ -207,3 +219,34 @@ LOGGING = {
         'level': 'DEBUG',
     },
 }
+
+# Service URLs Configuration
+# These URLs are used for inter-service communication in the microservices architecture
+INTEGRATION_SERVICE_URL = os.environ.get('INTEGRATION_SERVICE_URL', 'http://localhost:8000/integration')
+TMU_SERVICE_URL = os.environ.get('TMU_SERVICE_URL', 'http://localhost:8000/tmu')
+SCANNING_SERVICE_URL = os.environ.get('SCANNING_SERVICE_URL', 'http://localhost:8000/scanning_service')
+
+# Redis Configuration
+# Used for message queuing, caching, and inter-service communication
+REDIS_HOST = os.environ.get('REDIS_HOST', 'localhost')
+REDIS_PORT = int(os.environ.get('REDIS_PORT', 6379))
+REDIS_DB = int(os.environ.get('REDIS_DB', 0))
+
+# Redis Stream Configuration
+# Stream names for different event types
+REDIS_STREAM_SCANNING_QUEUE = os.environ.get('REDIS_STREAM_SCANNING_QUEUE', 'scanning_queue')
+REDIS_STREAM_INITIATION_QUEUE = os.environ.get('REDIS_STREAM_INITIATION_QUEUE', 'initiation_queue')
+REDIS_STREAM_SCANNER_STATUS = os.environ.get('REDIS_STREAM_SCANNER_STATUS', 'scanner_status_stream')
+
+# Service Communication Timeouts (in seconds)
+SERVICE_REQUEST_TIMEOUT = int(os.environ.get('SERVICE_REQUEST_TIMEOUT', 30))
+SERVICE_CONNECT_TIMEOUT = int(os.environ.get('SERVICE_CONNECT_TIMEOUT', 10))
+
+# Redis Connection Configuration
+REDIS_SOCKET_TIMEOUT = int(os.environ.get('REDIS_SOCKET_TIMEOUT', 5))
+REDIS_SOCKET_CONNECT_TIMEOUT = int(os.environ.get('REDIS_SOCKET_CONNECT_TIMEOUT', 5))
+REDIS_HEALTH_CHECK_INTERVAL = int(os.environ.get('REDIS_HEALTH_CHECK_INTERVAL', 30))
+
+# Consumer Configuration
+REDIS_CONSUMER_BATCH_SIZE = int(os.environ.get('REDIS_CONSUMER_BATCH_SIZE', 10))
+REDIS_CONSUMER_TIMEOUT = int(os.environ.get('REDIS_CONSUMER_TIMEOUT', 1000))  # milliseconds

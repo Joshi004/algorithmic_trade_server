@@ -19,7 +19,7 @@ TRADE_SESSION_ENDPOINT = "/tmu/initiate_trade_session/"
 
 # Test parameters
 TEST_PARAMS = {
-    "trading_frequency": "5minute",
+    "trading_frequency": "5-minute",
     "dummy": "1",
     "scanning_algorithm_id": "1", 
     "initiation_algorithm_id": "1",

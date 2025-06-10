@@ -4,6 +4,7 @@ from ..utils.jwt_utils import decode_llt, decode_slt
 import asyncio
 import logging
 import jwt
+from django.conf import settings
 
 # Get logger
 logger = logging.getLogger(__name__)
@@ -17,6 +18,7 @@ class JWTAuthMiddleware:
     Supports both LLT and SLT:
     - LLT (from 'llt' cookie) are only accepted for token refresh
     - SLT (from 'slt' cookie) are used for regular API access
+    - Internal service requests with 'X-Internal-Service-Token' header are allowed
     """
     def __init__(self, get_response):
         self.get_response = get_response
@@ -27,6 +29,8 @@ class JWTAuthMiddleware:
         ]
         # Refresh token endpoint - only accessible with LLT
         self.refresh_path = r'^/refresh-token/?$'
+        # Internal service token from settings
+        self.internal_service_token = getattr(settings, 'INTERNAL_SERVICE_TOKEN', 'internal-service-secret-token-change-in-production')
     
     def is_public_path(self, path):
         """Check if the path is public (doesn't require authentication)"""
@@ -35,6 +39,14 @@ class JWTAuthMiddleware:
                 return True
         return False
     
+    def is_internal_service_request(self, request):
+        """Check if the request is from an internal service"""
+        internal_token = request.headers.get('X-Internal-Service-Token')
+        if internal_token and internal_token == self.internal_service_token:
+            logger.info(f"Internal service request detected | Path: {request.path}")
+            return True
+        return False
+
     def extract_token(self, request):
         """Extract and validate token from HTTP-only cookies"""
         # Check if this is the refresh-token endpoint
@@ -61,7 +73,8 @@ class JWTAuthMiddleware:
         
         # Strip quotes if present (though cookies shouldn't have them)
         token = token.strip('"') if token else None
-        logger.info(f"Token extracted from cookie | Token prefix: {token[:15] if token else 'None'}... | Path: {request.path}")
+        # Log token extraction without exposing token value
+        logger.info(f"Token extracted from cookie | Path: {request.path}")
         return token, None
     
     def process_refresh_endpoint(self, token, request, is_async=False):
@@ -133,6 +146,11 @@ class JWTAuthMiddleware:
             logger.info(f"Public path detected, skipping authentication | Path: {request.path}")
             return self.get_response(request)
         
+        # Check if this is an internal service request
+        if self.is_internal_service_request(request):
+            logger.info(f"Internal service request, skipping JWT authentication | Path: {request.path}")
+            return self.get_response(request)
+        
         # Extract token from request
         token, error = self.extract_token(request)
         if error:
@@ -173,6 +191,11 @@ class JWTAuthMiddleware:
         # Skip authentication for public paths
         if self.is_public_path(request.path):
             logger.info(f"Public path detected (async), skipping authentication | Path: {request.path}")
+            return await self.get_response(request)
+        
+        # Check if this is an internal service request
+        if self.is_internal_service_request(request):
+            logger.info(f"Internal service request (async), skipping JWT authentication | Path: {request.path}")
             return await self.get_response(request)
         
         # Extract token from request

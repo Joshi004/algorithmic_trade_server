@@ -31,13 +31,31 @@ class SLTO(metaclass=IndicitorSingletonMeta):
     
     def get_timeout_period(self, trade_freq):
         division_factor =  20
-        # Check if the input is just a unit (day/minute)
-        if trade_freq in ['day', 'minute']:
+        # Check if the input is just a unit (1-day/1-minute)
+        if trade_freq in ['1-day', '1-minute']:
             number = 1
-            unit = trade_freq
+            unit = 'day' if trade_freq == '1-day' else 'minute'
         else:
-            # Extract the number and the unit (minute/day) from trade_freq
-            number, unit = int(trade_freq[:-6]), trade_freq[-6:]
+            # Extract the number and the unit from trade_freq
+            # Handle new format like "3-minute", "5-minute" etc.
+            if "-minute" in trade_freq:
+                number = int(trade_freq.replace("-minute", ""))
+                unit = 'minute'
+            elif "-day" in trade_freq:
+                number = int(trade_freq.replace("-day", ""))
+                unit = 'day'
+            elif trade_freq.endswith('minute'):
+                # Handle old format like "3minute", "5minute" for backward compatibility
+                number = int(trade_freq.replace("minute", ""))
+                unit = 'minute'
+            elif trade_freq == 'day':
+                # Handle old format for backward compatibility
+                number = 1
+                unit = 'day'
+            else:
+                # Default fallback
+                number = 1
+                unit = 'minute'
 
         # Convert the number to seconds
         if unit == 'minute':

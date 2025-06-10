@@ -1,14 +1,24 @@
 import jwt
 import datetime
+import os
 from typing import Dict, Any, Optional
 
-# Hard-coded secret keys
-LLT_SECRET_KEY = "ABCD1234"  # LLT (Long Lived Token) secret key
-SLT_SECRET_KEY = "9876ZYXW"  # SLT (Short Lived Token) secret key
+# JWT Secret Keys from Environment Variables
+# These keys are used to sign and verify JWT tokens
+# In production, set these as secure environment variables in docker-compose.yml
+LLT_SECRET_KEY = os.environ.get(
+    'JWT_LONG_LIVED_TOKEN_SECRET', 
+    'ABCD1234'  # Development fallback - change in production!
+)
+
+SLT_SECRET_KEY = os.environ.get(
+    'JWT_SHORT_LIVED_TOKEN_SECRET',
+    '9876ZYXW'  # Development fallback - change in production!
+)
 
 # Expiration times - Declared constants
 LLT_EXPIRY_HOURS = 24  # 24 hours for LLT
-SLT_EXPIRY_MINUTES = 15  # 1 minute for SLT
+SLT_EXPIRY_MINUTES = 15  # 15 minutes for SLT
 
 def generate_token(payload: Dict[str, Any]) -> str:
     """

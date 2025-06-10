@@ -4,9 +4,9 @@ from ats_gateway.models.User import User
 from trade_management_unit.models.ScanningAlgorithm import ScanningAlgorithm
 from trade_management_unit.models.InitiationAlgorithm import InitiationAlgorithm
 from trade_management_unit.models.TerminationAlgorithm import TerminationAlgorithm
-from trade_management_unit.Constants.TmuConstants import FREQUENCY  # assuming constants.py is in the same directory
-from trade_management_unit.lib.common.Utils.Utils import *
-from trade_management_unit.lib.common.event_publisher import get_trade_session_event_publisher
+from trade_management_unit.Constants.TmuConstants import FREQUENCY
+from trade_management_unit.lib.common.Utils.Utils import current_ist
+import logging
 
 
 class TradeSession(models.Model):
@@ -38,7 +38,7 @@ class TradeSession(models.Model):
     TRADING_FREQUENCY_CHOICES = [(freq, freq) for freq in FREQUENCY]
 
     TRADING_FREQUENCY_CHOICES = [(freq, freq) for freq in FREQUENCY]
-    trading_frequency = EnumField(choices=TRADING_FREQUENCY_CHOICES, default="10minute")
+    trading_frequency = EnumField(choices=TRADING_FREQUENCY_CHOICES, default="10-minute")
 
     @classmethod
     def fetch_or_create_trade_session(cls, scanning_algo_id, initiation_algo_id, termination_algo_id, trading_freq, is_dummy, user_id):
@@ -76,15 +76,6 @@ class TradeSession(models.Model):
             )
             trade_session.save()  # Save the new trade session to the database
             
-            # Publish event to Redis stream for new session creation
-            try:
-                event_publisher = get_trade_session_event_publisher()
-                event_publisher.publish_trade_session_initiated(trade_session, "New session created")
-            except Exception as e:
-                # Log error but don't fail the session creation
-                from trade_management_unit.lib.common.Utils.custome_logger import log
-                log(f"Failed to publish trade session initiation event for session {trade_session.id}: {str(e)}", level="error")
-            
             return trade_session, "New session created"
 
     @classmethod
@@ -95,29 +86,59 @@ class TradeSession(models.Model):
         return trade_session
 
     @classmethod
-    def fetch_active_trade_session(cls, user_id, scanning_algo_id, initiation_algo_id, termination_algo_id, trading_freq, is_dummy):
-        # If user_id is a string (UUID), fetch the User instance
-        if isinstance(user_id, str):
-            try:
-                user = User.objects.get(public_id=user_id)
-            except User.DoesNotExist:
-                return None
-        else:
-            user = user_id  # Assume it's already a User instance
+    def fetch_active_trade_session(cls, user_id=None, scanning_algo_id=None, initiation_algo_id=None, termination_algo_id=None, trading_freq=None, is_dummy=None):
+        """
+        Fetch active trade sessions with optional filtering.
+        Returns QuerySet of all matching active sessions.
+        """
+        logger = logging.getLogger(__name__)
+        
+        logger.info(f"[TMU-Model] fetch_active_trade_session called with params:")
+        logger.info(f"[TMU-Model] - user_id: {user_id}")
+        logger.info(f"[TMU-Model] - scanning_algo_id: {scanning_algo_id}")
+        logger.info(f"[TMU-Model] - initiation_algo_id: {initiation_algo_id}")
+        logger.info(f"[TMU-Model] - termination_algo_id: {termination_algo_id}")
+        logger.info(f"[TMU-Model] - trading_freq: {trading_freq}")
+        logger.info(f"[TMU-Model] - is_dummy: {is_dummy}")
+        
+        query = cls.objects.filter(status='started', is_active=True)
+        logger.info(f"[TMU-Model] Base query: status='started', is_active=True")
+        
+        if user_id is not None:
+            query = query.filter(user_id=user_id)
+            logger.info(f"[TMU-Model] Added filter: user_id={user_id}")
+        
+        if scanning_algo_id is not None:
+            query = query.filter(scanning_algorithm_id=scanning_algo_id)
+            logger.info(f"[TMU-Model] Added filter: scanning_algorithm_id={scanning_algo_id}")
             
+        if initiation_algo_id is not None:
+            query = query.filter(initiation_algorithm_id=initiation_algo_id)
+            logger.info(f"[TMU-Model] Added filter: initiation_algorithm_id={initiation_algo_id}")
+            
+        if termination_algo_id is not None:
+            query = query.filter(termination_algorithm_id=termination_algo_id)
+            logger.info(f"[TMU-Model] Added filter: termination_algorithm_id={termination_algo_id}")
+            
+        if trading_freq is not None:
+            query = query.filter(trading_frequency=trading_freq)
+            logger.info(f"[TMU-Model] Added filter: trading_frequency={trading_freq}")
+            
+        if is_dummy is not None:
+            query = query.filter(dummy=is_dummy)
+            logger.info(f"[TMU-Model] Added filter: dummy={is_dummy}")
+        
+        logger.info(f"[TMU-Model] Final query SQL: {query.query}")
+        
         try:
-            trade_session = cls.objects.get(
-                user_id=user,
-                scanning_algorithm_id=scanning_algo_id,
-                initiation_algorithm_id=initiation_algo_id,
-                termination_algorithm_id=termination_algo_id,
-                trading_frequency=trading_freq,
-                dummy=is_dummy,
-                status='started'
-            )
-            return trade_session
-        except cls.DoesNotExist:
-            return None
+            results = list(query)
+            logger.info(f"[TMU-Model] Query executed successfully, found {len(results)} sessions")
+            for session in results:
+                logger.info(f"[TMU-Model] Session: id={session.id}, user_id={session.user_id}, freq={session.trading_frequency}, scanning_algo={session.scanning_algorithm_id}")
+            return results
+        except Exception as e:
+            logger.error(f"[TMU-Model] Database query failed: {str(e)}", exc_info=True)
+            raise
 
     @classmethod
     def create_trade_session(cls, user_id, scanning_algo_id, initiation_algo_id, termination_algo_id, trading_freq, is_dummy):
@@ -142,15 +163,6 @@ class TradeSession(models.Model):
             dummy=is_dummy  # Set is_dummy based on the parameter
         )
         trade_session.save()  # Save the new trade session to the database
-        
-        # Publish event to Redis stream for new session creation
-        try:
-            event_publisher = get_trade_session_event_publisher()
-            event_publisher.publish_trade_session_initiated(trade_session, "New session created")
-        except Exception as e:
-            # Log error but don't fail the session creation
-            from trade_management_unit.lib.common.Utils.custome_logger import log
-            log(f"Failed to publish trade session initiation event for session {trade_session.id}: {str(e)}", level="error")
         
         return trade_session
 

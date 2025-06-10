@@ -8,12 +8,21 @@ do
   sleep 5
 done
 
-# Apply database migrations
+echo "✅ Database connection established!"
+
+# Apply database migrations first
+echo "🔄 Applying database migrations..."
 python manage.py migrate
 
-# Apply seed data
-echo "Applying seed data..."
+echo "✅ All migrations applied successfully!"
+
+# Apply seed data (this will now check migrations internally)
+echo "🌱 Applying seed data..."
 python manage.py seed_data
 
-# Start server
-exec python manage.py runserver 0.0.0.0:8000 
+echo "✅ Seed data applied successfully!"
+
+echo "🚀 Starting application..."
+
+# Execute the command passed to the container
+exec "$@" 

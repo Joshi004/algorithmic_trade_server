@@ -1,6 +1,6 @@
-
 import logging
-from kiteconnect import KiteConnect
+import requests
+from django.conf import settings
 import pandas as pd
 from trade_management_unit.models.Instrument import Instrument
 from django.utils.dateparse import parse_date
@@ -15,8 +15,10 @@ import json
 class Instruments:
     def __init__(self):
         logging.basicConfig(level=logging.DEBUG)
-
-
+        self.integration_service_url = getattr(settings, 'INTEGRATION_SERVICE_URL', 'http://localhost:8000/integration')
+        self.headers = {
+            'X-Internal-Service-Token': getattr(settings, 'INTERNAL_SERVICE_TOKEN', 'internal-service-secret-token-change-in-production')
+        }
 
     def fetch_instruments(self, req_params):
         query = Q()
@@ -64,34 +66,74 @@ class Instruments:
             }
         }
 
-    def update_instruments(self):     
-        instrument_dump=self.kite.instruments()
-        instrument_df = pd.DataFrame(instrument_dump)
+    def update_instruments(self, user_id):
+        """
+        Fetch instruments from integration service and update the database.
+        
+        Args:
+            user_id: User ID to use for the integration service call
+        """
+        try:
+            # Call integration service to get instruments
+            api_url = f"{self.integration_service_url}/get_instruments/"
+            api_params = {'user_id': user_id}
+            
+            response = requests.get(api_url, params=api_params, headers=self.headers)
+            
+            if response.status_code != 200:
+                logging.error(f"Failed to fetch instruments from integration service: {response.status_code}")
+                raise Exception(f"Integration service returned status {response.status_code}")
+                
+            response_data = response.json()
+            
+            if response_data.get('status') != 'success':
+                error_msg = response_data.get('error', 'Unknown error from integration service')
+                logging.error(f"Integration service returned error: {error_msg}")
+                raise Exception(f"Integration service error: {error_msg}")
+                
+            instruments_data = response_data.get('data', [])
+            
+            if not instruments_data:
+                logging.warning("No instruments data received from integration service")
+                raise Exception("No instruments data received from integration service")
+                
+            # Convert to DataFrame for processing
+            instrument_df = pd.DataFrame(instruments_data)
+            instrument_dict = instrument_df.to_dict('records')
 
-        instrument_dict = instrument_df.to_dict('records')
-
-        # Create Instrument instances
-        instrument_instances = [
-            Instrument(
-                id=instrument['instrument_token'],
-                instrument_token=instrument['instrument_token'],
-                exchange_token=instrument['exchange_token'],
-                trading_symbol=instrument['tradingsymbol'],
-                name=instrument['name'],
-                last_price=instrument['last_price'],
-                expiry = parse_date(instrument['expiry']) if isinstance(instrument['expiry'], str) else None,
-                strike=instrument['strike'],
-                tick_size=instrument['tick_size'],
-                lot_size=instrument['lot_size'],
-                instrument_type=instrument['instrument_type'],
-                segment=instrument['segment'],
-                exchange=instrument['exchange']
-            )
-            for instrument in instrument_dict
-        ]
-        with transaction.atomic():
-            with connection.cursor() as cursor:
-                cursor.execute('SET FOREIGN_KEY_CHECKS=0;')
-                cursor.execute('DELETE FROM instruments')
-                cursor.execute('SET FOREIGN_KEY_CHECKS=1;')
-            Instrument.objects.bulk_create(instrument_instances)
+            # Create Instrument instances
+            instrument_instances = [
+                Instrument(
+                    id=instrument['instrument_token'],
+                    instrument_token=instrument['instrument_token'],
+                    exchange_token=instrument['exchange_token'],
+                    trading_symbol=instrument['tradingsymbol'],
+                    name=instrument['name'],
+                    last_price=instrument['last_price'],
+                    expiry = parse_date(instrument['expiry']) if isinstance(instrument['expiry'], str) else None,
+                    strike=instrument['strike'],
+                    tick_size=instrument['tick_size'],
+                    lot_size=instrument['lot_size'],
+                    instrument_type=instrument['instrument_type'],
+                    segment=instrument['segment'],
+                    exchange=instrument['exchange']
+                )
+                for instrument in instrument_dict
+            ]
+            
+            # Update database with new instruments
+            with transaction.atomic():
+                with connection.cursor() as cursor:
+                    cursor.execute('SET FOREIGN_KEY_CHECKS=0;')
+                    cursor.execute('DELETE FROM instruments')
+                    cursor.execute('SET FOREIGN_KEY_CHECKS=1;')
+                Instrument.objects.bulk_create(instrument_instances)
+                
+            logging.info(f"Successfully updated {len(instrument_instances)} instruments")
+            
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Error calling integration service: {str(e)}")
+            raise Exception(f"Failed to connect to integration service: {str(e)}")
+        except Exception as e:
+            logging.error(f"Error updating instruments: {str(e)}")
+            raise
