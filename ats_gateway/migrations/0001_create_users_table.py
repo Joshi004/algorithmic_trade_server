@@ -31,6 +31,8 @@ class Migration(migrations.Migration):
                 # Custom User fields
                 ('email', models.EmailField(max_length=254, primary_key=True, serialize=False, unique=True)),
                 ('public_id', models.UUIDField(default=uuid.uuid4, editable=False, unique=True)),
+                ('first_name', models.CharField(max_length=150, blank=False)),
+                ('last_name', models.CharField(max_length=150, blank=True)),
                 ('is_active', models.BooleanField(default=False)),
                 ('is_staff', models.BooleanField(default=False)),
                 ('date_joined', models.DateTimeField(default=django.utils.timezone.now)),
