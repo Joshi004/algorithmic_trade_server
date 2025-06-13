@@ -31,12 +31,15 @@ class UserManager(BaseUserManager):
     Custom manager for the User model.
     """
     
-    def create_user(self, email, password, **extra_fields):
+    def create_user(self, email, password, first_name, **extra_fields):
         """
-        Create a new user with the given email and password.
+        Create a new user with the given email, password, and first_name.
         """
         if not email:
             raise ValueError("Users must have an email address")
+        
+        if not first_name:
+            raise ValueError("Users must have a first name")
         
         # Normalize the email
         email = self.normalize_email(email)
@@ -45,7 +48,7 @@ class UserManager(BaseUserManager):
         validate_password(password)
         
         # Create the user instance
-        user = self.model(email=email, **extra_fields)
+        user = self.model(email=email, first_name=first_name, **extra_fields)
         
         # Use Django's set_password method which will use our configured PASSWORD_HASHERS
         # This ensures proper integration with Django's auth system while using bcrypt
@@ -57,9 +60,9 @@ class UserManager(BaseUserManager):
         user.save(using=self._db)
         return user
     
-    def create_superuser(self, email, password, **extra_fields):
+    def create_superuser(self, email, password, first_name, **extra_fields):
         """
-        Create a superuser with the given email and password.
+        Create a superuser with the given email, password, and first_name.
         """
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
@@ -70,4 +73,4 @@ class UserManager(BaseUserManager):
         if extra_fields.get('is_superuser') is not True:
             raise ValueError('Superuser must have is_superuser=True.')
         
-        return self.create_user(email, password, **extra_fields) 
+        return self.create_user(email, password, first_name, **extra_fields) 

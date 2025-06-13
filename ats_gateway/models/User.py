@@ -12,6 +12,8 @@ class User(AbstractBaseUser, PermissionsMixin):
     """
     email = models.EmailField(primary_key=True, unique=True)
     public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    first_name = models.CharField(max_length=150, blank=False)
+    last_name = models.CharField(max_length=150, blank=True)
     is_active = models.BooleanField(default=False)
     is_staff = models.BooleanField(default=False)
     date_joined = models.DateTimeField(default=timezone.now)
@@ -37,7 +39,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     objects = UserManager()
 
     USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = []
+    REQUIRED_FIELDS = ['first_name']
 
     class Meta:
         db_table = "users"

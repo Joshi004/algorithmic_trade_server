@@ -23,7 +23,8 @@ def register(request):
         user = serializer.save()
         return Response({
             "email": user.email,
-            "public_id": user.public_id
+            "first_name": user.first_name,
+            "last_name": user.last_name
         }, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -37,7 +38,9 @@ def login(request):
         # Get user data from validated serializer
         user_data = {
             "public_id": str(serializer.validated_data["public_id"]),
-            "email": serializer.validated_data["email"]
+            "email": serializer.validated_data["email"],
+            "first_name": serializer.validated_data["first_name"],
+            "last_name": serializer.validated_data["last_name"]
         }
         
         # Log successful login without exposing email
@@ -59,7 +62,8 @@ def login(request):
             "message": "Login successful",
             "user": {
                 "email": user_data["email"],
-                "public_id": user_data["public_id"]
+                "first_name": user_data["first_name"],
+                "last_name": user_data["last_name"]
             },
             "token_info": {
                 "slt_expires_in_seconds": slt_expires_in_seconds,
