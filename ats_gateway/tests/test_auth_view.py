@@ -48,11 +48,15 @@ class AuthViewTestCase(TestCase):
         self.test_email = "test@example.com"
         self.test_password = "Password123!"
         self.test_public_id = str(uuid.uuid4())
+        self.test_first_name = "John"
+        self.test_last_name = "Doe"
         
         # Mock response data for serializer
         self.mock_validated_data = {
             'public_id': self.test_public_id,
             'email': self.test_email,
+            'first_name': self.test_first_name,
+            'last_name': self.test_last_name,
         }
 
     @patch('ats_gateway.views.AuthView.LoginSerializer')
@@ -86,25 +90,21 @@ class AuthViewTestCase(TestCase):
         
         # Validate response
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn('long_lived_token', response.data)
-        self.assertIn('short_lived_token', response.data)
+        self.assertIn('message', response.data)
+        self.assertIn('user', response.data)
+        self.assertIn('token_info', response.data)
         
-        # Verify tokens
-        long_lived_token = response.data['long_lived_token']
-        short_lived_token = response.data['short_lived_token']
+        # Verify user data in response (should not contain public_id)
+        user_data = response.data['user']
+        self.assertEqual(user_data['email'], self.test_email)
+        self.assertEqual(user_data['first_name'], self.test_first_name)
+        self.assertEqual(user_data['last_name'], self.test_last_name)
+        self.assertNotIn('public_id', user_data)
         
-        # Decode and validate token payloads
-        llt_payload = jwt.decode(long_lived_token, LLT_SECRET_KEY, algorithms=['HS256'])
-        slt_payload = jwt.decode(short_lived_token, SLT_SECRET_KEY, algorithms=['HS256'])
-        
-        # Validate token payload content
-        self.assertEqual(llt_payload['public_id'], self.test_public_id)
-        self.assertEqual(llt_payload['email'], self.test_email)
-        self.assertEqual(llt_payload['token_type'], 'long_lived')
-        
-        self.assertEqual(slt_payload['public_id'], self.test_public_id)
-        self.assertEqual(slt_payload['email'], self.test_email)
-        self.assertEqual(slt_payload['token_type'], 'short_lived')
+        # Verify token info
+        token_info = response.data['token_info']
+        self.assertIn('slt_expires_in_seconds', token_info)
+        self.assertIn('slt_expires_at', token_info)
 
     @patch('ats_gateway.views.AuthView.LoginSerializer')
     def test_login_invalid_credentials(self, MockLoginSerializer):
@@ -185,10 +185,10 @@ class AuthViewTestCase(TestCase):
         response = self.client.get(self.login_url)
         self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
 
-    @patch('ats_gateway.views.AuthView.generate_long_lived_token')
-    @patch('ats_gateway.views.AuthView.generate_short_lived_token')
+    @patch('ats_gateway.views.AuthView.generate_llt')
+    @patch('ats_gateway.views.AuthView.generate_slt')
     @patch('ats_gateway.views.AuthView.LoginSerializer')
-    def test_token_generation_in_login(self, MockLoginSerializer, mock_generate_short_lived, mock_generate_long_lived):
+    def test_token_generation_in_login(self, MockLoginSerializer, mock_generate_slt, mock_generate_llt):
         """Test that login calls token generation functions with correct parameters.
         
         Verifies that:
@@ -206,8 +206,8 @@ class AuthViewTestCase(TestCase):
         MockLoginSerializer.return_value = mock_serializer_instance
         
         # Mock token generation functions
-        mock_generate_long_lived.return_value = "long-lived-token"
-        mock_generate_short_lived.return_value = "short-lived-token"
+        mock_generate_llt.return_value = "long-lived-token"
+        mock_generate_slt.return_value = "short-lived-token"
         
         # Perform login request
         response = self.client.post(
@@ -222,12 +222,21 @@ class AuthViewTestCase(TestCase):
         # Check that token generation functions were called with correct params
         user_data = {
             "public_id": self.test_public_id,
-            "email": self.test_email
+            "email": self.test_email,
+            "first_name": self.test_first_name,
+            "last_name": self.test_last_name
         }
-        mock_generate_long_lived.assert_called_once_with(user_data)
-        mock_generate_short_lived.assert_called_once_with(user_data)
+        mock_generate_llt.assert_called_once_with(user_data)
+        mock_generate_slt.assert_called_once_with(user_data)
         
         # Validate response
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['long_lived_token'], "long-lived-token")
-        self.assertEqual(response.data['short_lived_token'], "short-lived-token")
+        self.assertIn('user', response.data)
+        self.assertIn('token_info', response.data)
+        
+        # Verify that user data does not contain public_id
+        user_response = response.data['user']
+        self.assertEqual(user_response['email'], self.test_email)
+        self.assertEqual(user_response['first_name'], self.test_first_name)
+        self.assertEqual(user_response['last_name'], self.test_last_name)
+        self.assertNotIn('public_id', user_response)
