@@ -129,6 +129,21 @@ class BaseScannerInterface(ABC):
         """
         pass
     
+    @abstractmethod
+    def resume_or_start_scanning(self, all_instruments):
+        """
+        Determine starting index for scanning based on saved state.
+        If valid state exists and instruments match, resume from last position.
+        Otherwise, start from beginning.
+        
+        Args:
+            all_instruments: List of instruments to scan
+            
+        Returns:
+            int: Starting index for scanning (0 to start fresh, >0 to resume)
+        """
+        pass
+    
     def format_eligible_instrument(self, instrument_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Format instrument data according to the standardized instrument data format.

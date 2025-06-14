@@ -18,6 +18,7 @@ import pandas as pd
 import threading
 from scanning_service.lib.utils.common import current_ist
 from scanning_service.lib.data_providers import IntegrationServiceProvider, TMUServiceProvider
+from scanning_service.lib.state_management import StateManagerFactory, StateManagementConfig
 
 
 class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
@@ -48,6 +49,10 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
         self._stop_event = threading.Event()
         self._is_running = False
         
+        # State management
+        self.state_manager = None
+        self.progress_update_interval = 10  # Update state every 10 instruments (configurable)
+        
         log(f"Initialized UDTSScanner singleton for {algorithm_type} algorithm with {frequency} frequency")
     
     def configure(self, trade_freq: str, **kwargs):
@@ -74,7 +79,141 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
         # Keep data_provider for backward compatibility (points to integration provider)
         self.data_provider = self.integration_provider
         
+        # Initialize state manager for this scanner
+        self._initialize_state_manager(**kwargs)
+        
         log(f"UDTS Scanner configured for frequency: {trade_freq}")
+
+    def _initialize_state_manager(self, **kwargs):
+        """
+        Initialize state manager for this scanner.
+        
+        Args:
+            **kwargs: Configuration parameters including ttl_hours, progress_update_interval
+        """
+        try:
+            # Extract configuration parameters
+            ttl_hours = kwargs.get('ttl_hours')  # Uses config default if None
+            self.progress_update_interval = StateManagementConfig.get_progress_update_interval(
+                kwargs.get('progress_update_interval')
+            )
+            
+            # Create state manager using factory
+            self.state_manager = StateManagerFactory.create_state_manager(
+                scanner_type=self.algorithm_type,
+                algorithm_type=self.algorithm_type,
+                frequency=self.frequency,
+                ttl_hours=ttl_hours
+            )
+            
+            if self.state_manager:
+                log(f"State manager initialized for {self.algorithm_type}_{self.frequency}")
+            else:
+                log(f"State management not available for {self.algorithm_type} scanner", level="warning")
+                
+        except Exception as e:
+            log(f"Error initializing state manager: {str(e)}", level="error")
+            self.state_manager = None
+
+    def resume_or_start_scanning(self, all_instruments):
+        """
+        Determine starting index for scanning based on saved state.
+        If valid state exists and instruments match, resume from last position.
+        Otherwise, start from beginning.
+        
+        Args:
+            all_instruments: List of instruments to scan
+            
+        Returns:
+            int: Starting index for scanning
+        """
+        if not self.state_manager:
+            log("No state manager available, starting from beginning")
+            return 0
+        
+        try:
+            # Get saved progress
+            progress = self.state_manager.get_progress()
+            
+            if not progress:
+                log("No saved progress found, starting from beginning")
+                return 0
+            
+            # Validate progress is still relevant
+            saved_total = progress.get('total_instruments', 0)
+            current_total = len(all_instruments)
+            
+            if saved_total != current_total:
+                log(f"Instrument count changed: saved={saved_total}, current={current_total}. Starting fresh.")
+                return 0
+            
+            # Check if progress is recent enough
+            from datetime import timedelta
+            last_update = progress.get('last_update_time')
+            max_age = timedelta(hours=StateManagementConfig.MAX_STATE_AGE_HOURS)
+            if last_update and (current_ist() - last_update) > max_age:
+                log(f"Saved progress is too old (>{StateManagementConfig.MAX_STATE_AGE_HOURS}h), starting fresh")
+                return 0
+            
+            saved_index = progress.get('current_index', 0)
+            last_symbol = progress.get('last_processed_symbol', '')
+            
+            # Validate the symbol at saved index matches
+            if saved_index < len(all_instruments):
+                expected_symbol = all_instruments[saved_index].get('trading_symbol', '')
+                if last_symbol == expected_symbol:
+                    log(f"Resuming scanning from index {saved_index + 1} after symbol '{last_symbol}'")
+                    return saved_index + 1
+            
+            log("Saved progress validation failed, starting from beginning")
+            return 0
+            
+        except Exception as e:
+            log(f"Error checking saved progress: {str(e)}", level="error")
+            return 0
+    
+    def _get_current_cycle(self):
+        """
+        Get current scan cycle number from state or start at 1.
+        
+        Returns:
+            int: Current scan cycle number
+        """
+        if not self.state_manager:
+            return 1
+            
+        try:
+            progress = self.state_manager.get_progress()
+            if progress:
+                return progress.get('scan_cycle', 1)
+        except Exception as e:
+            log(f"Error getting current cycle: {str(e)}", level="error")
+        
+        return 1
+
+    def _save_scanning_progress(self, current_index, last_processed_symbol):
+        """
+        Save current scanning progress to Redis state.
+        
+        Args:
+            current_index: Current index in the instrument list
+            last_processed_symbol: Symbol of the last processed instrument
+        """
+        if not self.state_manager:
+            return
+            
+        try:
+            self.state_manager.save_progress(
+                current_index=current_index,
+                total_instruments=len(self.all_instruments) if hasattr(self, 'all_instruments') else 0,
+                last_processed_symbol=last_processed_symbol,
+                scan_cycle=getattr(self, 'scan_cycle', 1),
+                cycle_start_time=getattr(self, 'cycle_start_time', current_ist())
+            )
+        except Exception as e:
+            log(f"Error saving scanning progress: {str(e)}", level="error")
+
+
 
     def fetch_instrument_tokens_and_start_tracking(self, user_id, trade_session_id, dummy):
         self._ensure_configured()
@@ -85,27 +224,29 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
     def scan_in_separate_thread(self, all_instruments):
         self._ensure_configured()
         
-        counter = 0
-        self._is_running = True
+        # Resume or start fresh
+        start_index = self.resume_or_start_scanning(all_instruments)
         
-
-        log(f'Scanning started for total {len(all_instruments)} instruments')
+        self._is_running = True
+        self.all_instruments = all_instruments
+        self.scan_cycle = self._get_current_cycle()
+        self.cycle_start_time = current_ist()
+        
+        log(f'Scanning started for {len(all_instruments)} instruments from index {start_index}')
         
         while not self._stop_event.is_set():
-            counter += 1
-            instrument_counter = 0
-            eligible_instrument_counter = 0
             scan_start_time = current_ist()
+            eligible_instrument_counter = 0
             
-            for instrument in all_instruments:
-                # Check for stop event during scanning
+            # Process instruments from resume point
+            for idx in range(start_index, len(all_instruments)):
                 if self._stop_event.is_set():
                     break
                     
-                instrument_counter += 1
+                instrument = all_instruments[idx]
                 symbol = instrument["trading_symbol"]
                 token = instrument["instrument_token"]
-                log(f'Scanning {instrument["trading_symbol"]} now')
+                log(f'Scanning {symbol} now (index {idx + 1}/{len(all_instruments)})')
                 
                 is_eligible, eligibility_obj = self.is_eligible(symbol)
                 
@@ -132,21 +273,36 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
                     self.publish_eligible_instruments([instrument_data])
                 else:
                     log(f'Not Eligible {eligibility_obj["message"]}')
+                
+                # Update state periodically (every N instruments)
+                if self.state_manager and (idx + 1) % self.progress_update_interval == 0:
+                    self._save_scanning_progress(idx, symbol)
                     
-            scan_end_time = current_ist()
-            scan_duration = (scan_end_time - scan_start_time).total_seconds()
-            
-
-            
-            log(f"Scan cycle {counter} completed - Duration: {scan_duration}s, Found: {eligible_instrument_counter}/{instrument_counter}")
-            log(f'Last scan total time taken {scan_duration} seconds')
-            
-            # Use wait instead of sleep to be interruptible
-            self._stop_event.wait(timeout=30)
+            # Cycle completed - update state and prepare for next cycle
+            if not self._stop_event.is_set():
+                scan_end_time = current_ist()
+                scan_duration = (scan_end_time - scan_start_time).total_seconds()
+                
+                # Save final state for this cycle
+                if self.state_manager:
+                    final_index = len(all_instruments) - 1
+                    final_symbol = all_instruments[final_index]["trading_symbol"] if all_instruments else ""
+                    self._save_scanning_progress(final_index, final_symbol)
+                
+                self.scan_cycle += 1
+                
+                log(f"Scan cycle {self.scan_cycle - 1} completed - Duration: {scan_duration}s, Found: {eligible_instrument_counter}")
+                log(f'Last scan total time taken {scan_duration} seconds')
+                
+                # Reset start_index for next cycle
+                start_index = 0
+                
+                # Use wait instead of sleep to be interruptible
+                self._stop_event.wait(timeout=30)
         
         # Scanner stopped
         self._is_running = False
-        log(f"Scanner thread for {self.trade_frequency} stopped after {counter} cycles")
+        log(f"Scanner thread for {self.trade_frequency} stopped after {self.scan_cycle} cycles")
 
 
     def is_eligible(self, symbol):
