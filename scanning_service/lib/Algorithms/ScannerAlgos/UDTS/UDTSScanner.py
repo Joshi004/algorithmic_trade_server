@@ -19,6 +19,11 @@ import threading
 from scanning_service.lib.utils.common import current_ist
 from scanning_service.lib.data_providers import IntegrationServiceProvider, TMUServiceProvider
 from scanning_service.lib.state_management import StateManagerFactory, StateManagementConfig
+from scanning_service.utils.websocket_publisher import (
+    can_publish_to_group,
+    get_group_name,
+    publish_scanner_update_sync
+)
 
 
 class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
@@ -44,6 +49,10 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
         self.data_provider = None
         self.event_publisher = None
         
+        # WebSocket publishing setup - algorithm_id extracted from algorithm_type
+        self.algorithm_id = algorithm_type.upper()  # Convert to uppercase for consistency
+        self.ws_group_name = get_group_name(self.algorithm_id, frequency)
+        
         # Thread management
         self._scanner_thread = None
         self._stop_event = threading.Event()
@@ -54,6 +63,41 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
         self.progress_update_interval = 10  # Update state every 10 instruments (configurable)
         
         log(f"Initialized UDTSScanner singleton for {algorithm_type} algorithm with {frequency} frequency")
+
+    def _publish_scanner_update(self, update_type, symbol, message, additional_data=None):
+        """
+        Publish scanner update to WebSocket subscribers if any exist
+        
+        Args:
+            update_type: Type of update (scanning_started, volume_check, etc.)
+            symbol: Trading symbol being analyzed
+            message: Human-readable message
+            additional_data: Optional additional data dictionary
+        """
+        # Only publish if there are active subscribers
+        if not can_publish_to_group(self.ws_group_name):
+            return
+        
+        # Prepare update data
+        update_data = {
+            'type': 'scanner_update',
+            'scanner_type': 'UDTS',
+            'algorithm_id': self.algorithm_id,
+            'frequency': self.frequency,
+            'update_type': update_type,
+            'symbol': symbol,
+            'message': message,
+            'timestamp': current_ist().isoformat()
+        }
+        
+        # Add additional data if provided
+        if additional_data:
+            update_data.update(additional_data)
+        
+        try:
+            publish_scanner_update_sync(self.algorithm_id, self.frequency, update_data)
+        except Exception as e:
+            log(f"Error publishing WebSocket update: {str(e)}", level="error")
     
     def configure(self, trade_freq: str, **kwargs):
         """
@@ -248,6 +292,14 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
                 token = instrument["instrument_token"]
                 log(f'Scanning {symbol} now (index {idx + 1}/{len(all_instruments)})')
                 
+                # Publish scanning started for this instrument
+                self._publish_scanner_update(
+                    'scanning_started', 
+                    symbol, 
+                    f'Scanning started for instrument {symbol}',
+                    {'index': idx + 1, 'total': len(all_instruments)}
+                )
+                
                 is_eligible, eligibility_obj = self.is_eligible(symbol)
                 
                 if is_eligible:
@@ -269,10 +321,33 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
                     # Format using base class method to ensure standardization
                     instrument_data = self.format_eligible_instrument(raw_instrument_data)
                     
+                    # Publish instrument accepted for initiation
+                    trading_pair_data = symbol_data_points.trading_pair
+                    self._publish_scanner_update(
+                        'instrument_accepted',
+                        symbol,
+                        f'Instrument {symbol} published for initiation',
+                        {
+                            'effective_trend': eligibility_obj["effective_trend"].value,
+                            'reward_risk_ratio': trading_pair_data.get("reward_risk_ratio", 0),
+                            'support_price': float(symbol_data_points.trading_pair["support"]),
+                            'resistance_price': float(symbol_data_points.trading_pair["resistance"]),
+                            'market_price': float(symbol_data_points.market_price),
+                            'required_action': raw_instrument_data["required_action"]
+                        }
+                    )
+                    
                     # This will now publish to ALL active trade sessions using this scanner using parent
                     self.publish_eligible_instruments([instrument_data])
                 else:
                     log(f'Not Eligible {eligibility_obj["message"]}')
+                    
+                    # Publish instrument rejected
+                    self._publish_scanner_update(
+                        'instrument_rejected',
+                        symbol,
+                        f'Instrument {symbol} rejected: {eligibility_obj["message"]}'
+                    )
                 
                 # Update state periodically (every N instruments)
                 if self.state_manager and (idx + 1) % self.progress_update_interval == 0:
@@ -343,6 +418,20 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
         
         # Check if volume meets minimum trading threshold
         is_volume_sufficient = self.get_volume_eligibility(current_quote_data)
+        
+        # Publish volume eligibility check result
+        volume_message = f'Volume eligibility check: {"PASSED" if is_volume_sufficient else "FAILED"}'
+        self._publish_scanner_update(
+            'volume_check',
+            symbol,
+            volume_message,
+            {
+                'volume': current_quote_data["volume"],
+                'last_price': current_quote_data["last_price"],
+                'volume_eligible': is_volume_sufficient
+            }
+        )
+        
         if not is_volume_sufficient:
             eligibility_data["message"] = symbol + " : Volume not eligible"
             return False, eligibility_data
@@ -389,16 +478,54 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
         # Determine overall trend consensus across timeframes
         consensus_trend = self.__get_effective_trend(eligibility_data)
         eligibility_data["effective_trend"] = consensus_trend
+        
+        # Publish effective trend identified
+        self._publish_scanner_update(
+            'trend_analysis',
+            symbol,
+            f'Effective trend identified as {consensus_trend.value}',
+            {'effective_trend': consensus_trend.value}
+        )
 
         # Validate that valid trading pairs exist
         valid_trading_pairs = primary_timeframe_chart.valid_pairs
-        if not valid_trading_pairs or len(valid_trading_pairs) < 1:
+        
+        # Publish trading pairs validation result
+        pairs_found = valid_trading_pairs and len(valid_trading_pairs) >= 1
+        pairs_message = f'Valid trading pairs: {"FOUND" if pairs_found else "NOT FOUND"}'
+        self._publish_scanner_update(
+            'trading_pairs_check',
+            symbol,
+            pairs_message,
+            {
+                'valid_pairs_count': len(valid_trading_pairs) if valid_trading_pairs else 0,
+                'pairs_found': pairs_found
+            }
+        )
+        
+        if not pairs_found:
             eligibility_data["message"] = symbol + " : No Valid Trading pairs Present"
             return False, eligibility_data
 
         # Extract reward-to-risk ratio for final eligibility check
         trading_pair_data = primary_timeframe_chart.trading_pair
         current_reward_risk_ratio = trading_pair_data.get("reward_risk_ratio", 0)
+        
+        # Publish reward-risk ratio comparison
+        ratio_passed = current_reward_risk_ratio > MINIMUM_REWARD_RISK_RATIO
+        ratio_message = f'Reward:Risk ratio {current_reward_risk_ratio:.2f} vs minimum {MINIMUM_REWARD_RISK_RATIO} - {"PASSED" if ratio_passed else "FAILED"}'
+        self._publish_scanner_update(
+            'reward_risk_check',
+            symbol,
+            ratio_message,
+            {
+                'current_ratio': current_reward_risk_ratio,
+                'minimum_required': MINIMUM_REWARD_RISK_RATIO,
+                'ratio_passed': ratio_passed,
+                'support_price': float(trading_pair_data.get("support", 0)),
+                'resistance_price': float(trading_pair_data.get("resistance", 0))
+            }
+        )
         
         # Update eligibility message with trend and ratio information
         eligibility_data["message"] = f"{symbol} : {consensus_trend.value} , Reward:Risk - {current_reward_risk_ratio}"

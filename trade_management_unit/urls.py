@@ -2,7 +2,6 @@ from django.urls import path, re_path
 # from django.urls import re_path
 
 from .views import instrument_view, trade_session_view
-from .consumers import trade_session_consumer
 
 urlpatterns = [
     # Instrument endpoints - handle both with and without trailing slash
