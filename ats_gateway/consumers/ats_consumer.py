@@ -3,7 +3,7 @@ import logging
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.http import parse_cookie
-from ..utils.jwt_utils import decode_slt
+from ..utils.jwt_utils import decode_slt, decode_websocket_token
 from ..utils.group_utils import (
     get_group_name, 
     increment_group_subscription, 
@@ -15,9 +15,22 @@ logger = logging.getLogger(__name__)
 
 class ATSConsumer(AsyncWebsocketConsumer):
     """
-    WebSocket consumer for ATS application real-time communication
-    Supports scanner subscriptions and other app-wide functionality
-    Uses JWT authentication from cookies
+    Professional WebSocket Consumer for ATS Real-Time Communication
+    
+    This consumer implements industry-standard WebSocket authentication using the 
+    Sec-WebSocket-Protocol header approach (same pattern used by Kubernetes and Jupyter).
+    
+    Authentication Flow:
+    1. Client sends SLT token via WebSocket subprotocol during handshake
+    2. Server extracts and validates token from subprotocol
+    3. Falls back to cookie authentication for backward compatibility
+    4. Accepts connection only if authentication succeeds
+    
+    Features:
+    - Scanner subscription management
+    - Real-time trade updates
+    - Group-based message routing
+    - Automatic cleanup on disconnect
     """
     
     def __init__(self, *args, **kwargs):
@@ -26,10 +39,10 @@ class ATSConsumer(AsyncWebsocketConsumer):
         self.user_data = None
     
     async def connect(self):
-        """Handle WebSocket connection"""
+        """Handle WebSocket connection with professional subprotocol authentication"""
         logger.info(f"WebSocket connection attempt from {self.channel_name}")
         
-        # Authenticate user using JWT from cookies
+        # Authenticate user using professional subprotocol method
         user_data = await self.authenticate_user()
         if not user_data:
             logger.warning(f"Authentication failed for {self.channel_name}")
@@ -39,27 +52,29 @@ class ATSConsumer(AsyncWebsocketConsumer):
         self.user_data = user_data
         logger.info(f"User authenticated: {user_data.get('username')} on channel {self.channel_name}")
         
-        # Accept the WebSocket connection
-        await self.accept()
+        # Accept connection with base protocol (Kubernetes/Jupyter pattern)
+        await self.accept(subprotocol='ats.token.v1')
         
-        # Send connection success message with user info
+        # Send connection confirmation
         await self.send(text_data=json.dumps({
             'type': 'connection_established',
-            'message': 'Connected successfully',
+            'message': 'WebSocket connection established successfully',
             'user': user_data.get('username'),
-            'channel_name': self.channel_name
+            'channel_name': self.channel_name,
+            'authentication_method': 'subprotocol'
         }))
-    
+
     async def disconnect(self, close_code):
-        """Handle WebSocket disconnection"""
+        """Handle WebSocket disconnection and cleanup"""
         logger.info(f"WebSocket disconnecting: {self.channel_name}, close_code: {close_code}")
         
         # Unsubscribe from all groups and decrement counters
         for group_name in self.subscribed_groups.copy():
             await self.leave_group(group_name)
         
-        logger.info(f"User {self.user_data.get('username') if self.user_data else 'unknown'} disconnected")
-    
+        username = self.user_data.get('username') if self.user_data else 'unknown'
+        logger.info(f"User {username} disconnected successfully")
+
     async def receive(self, text_data):
         """Handle incoming WebSocket messages"""
         try:
@@ -80,7 +95,7 @@ class ATSConsumer(AsyncWebsocketConsumer):
         except Exception as e:
             logger.error(f"Error processing message: {str(e)}")
             await self.send_error("Internal server error")
-    
+
     async def handle_subscribe_scanner(self, data):
         """Handle scanner subscription request"""
         algorithm_id = data.get('algorithm_id')
@@ -111,7 +126,7 @@ class ATSConsumer(AsyncWebsocketConsumer):
             
             logger.info(f"User {self.user_data.get('username')} subscribed to {group_name}")
             
-            # Send success response with group name for UI storage
+            # Send success response
             await self.send(text_data=json.dumps({
                 'type': 'subscription_success',
                 'action': 'subscribe_scanner',
@@ -124,7 +139,7 @@ class ATSConsumer(AsyncWebsocketConsumer):
         except Exception as e:
             logger.error(f"Error subscribing to {group_name}: {str(e)}")
             await self.send_error(f"Failed to subscribe to {group_name}")
-    
+
     async def handle_unsubscribe_scanner(self, data):
         """Handle scanner unsubscription request"""
         algorithm_id = data.get('algorithm_id')
@@ -161,7 +176,7 @@ class ATSConsumer(AsyncWebsocketConsumer):
         except Exception as e:
             logger.error(f"Error unsubscribing from {group_name}: {str(e)}")
             await self.send_error(f"Failed to unsubscribe from {group_name}")
-    
+
     async def leave_group(self, group_name):
         """Leave a group and decrement subscription count"""
         # Leave the channel group
@@ -172,43 +187,77 @@ class ATSConsumer(AsyncWebsocketConsumer):
         
         # Remove from local tracking
         self.subscribed_groups.discard(group_name)
-    
+
     async def scanner_update(self, event):
         """Handle scanner update messages from the group"""
         # Forward the message as-is to the WebSocket client
         await self.send(text_data=json.dumps(event['data']))
-    
+
     async def send_error(self, message):
         """Send error message to client"""
         await self.send(text_data=json.dumps({
             'type': 'error',
             'message': message
         }))
-    
+
     @database_sync_to_async
     def authenticate_user(self):
-        """Authenticate user using JWT from cookies"""
+        """
+        Professional WebSocket Authentication using Sec-WebSocket-Protocol Header
+        
+        This method implements the industry-standard approach used by Kubernetes and Jupyter:
+        1. Primary: Extract WebSocket token from WebSocket subprotocol header (30-second expiration)
+        2. Fallback: Extract SLT token from WebSocket subprotocol header (15-minute expiration)
+        3. Legacy: Extract SLT token from httpOnly cookies (backward compatibility)
+        4. Validate token using appropriate JWT utilities
+        
+        Returns:
+            dict: User data if authentication succeeds, None otherwise
+        """
         try:
-            # Parse cookies from the connection scope
-            cookies = {}
-            for header_name, header_value in self.scope.get('headers', []):
-                if header_name == b'cookie':
-                    cookies = parse_cookie(header_value.decode())
+            token = None
+            token_type = None
+            
+            # Method 1: Professional Sec-WebSocket-Protocol authentication (Primary)
+            subprotocols = self.scope.get('subprotocols', [])
+            
+            for protocol in subprotocols:
+                if protocol.startswith('ats.token.v1.'):
+                    # Extract token from subprotocol: 'ats.token.v1.{token}'
+                    token = protocol[len('ats.token.v1.'):]
+                    logger.info("Token found in subprotocol (professional method)")
                     break
             
-            # Extract SLT token from cookies
-            slt_token = cookies.get('slt')
-            if not slt_token:
-                logger.warning("No SLT token found in cookies")
+            # Method 2: Cookie authentication (Fallback for backward compatibility)
+            if not token:
+                cookies = {}
+                for header_name, header_value in self.scope.get('headers', []):
+                    if header_name == b'cookie':
+                        cookies = parse_cookie(header_value.decode())
+                        break
+                
+                token = cookies.get('slt')
+                if token:
+                    logger.info("Token found in cookies (fallback method)")
+            
+            if not token:
+                logger.warning("No token found in subprotocols or cookies")
                 return None
             
-            # Decode and validate the token
-            payload = decode_slt(slt_token)
-            if not payload:
-                logger.warning("Invalid SLT token")
-                return None
+            # Try to validate as WebSocket token first (preferred for security)
+            payload = decode_websocket_token(token)
+            if payload:
+                logger.info(f"WebSocket token authenticated successfully: {payload.get('username')} (30-second expiration, dedicated secret key)")
+                return payload
             
-            return payload
+            # Fallback to regular SLT token validation
+            payload = decode_slt(token)
+            if payload:
+                logger.info(f"SLT token authenticated successfully: {payload.get('username')} (15-minute expiration)")
+                return payload
+            
+            logger.warning("Invalid token provided - neither WebSocket nor SLT token")
+            return None
             
         except Exception as e:
             logger.error(f"Authentication error: {str(e)}")

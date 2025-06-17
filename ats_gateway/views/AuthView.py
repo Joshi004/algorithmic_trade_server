@@ -7,7 +7,7 @@ from ..serializers.RegistrationSerializer import RegistrationSerializer
 from ..serializers.LoginSerializer import LoginSerializer
 # No longer needed as we use the header token validated by middleware
 # from ..serializers.TokenRefreshSerializer import TokenRefreshSerializer
-from ..utils.jwt_utils import generate_llt, generate_slt, SLT_EXPIRY_MINUTES
+from ..utils.jwt_utils import generate_llt, generate_slt, generate_websocket_token, SLT_EXPIRY_MINUTES, WEBSOCKET_TOKEN_EXPIRY_SECONDS
 import logging
 import datetime
 
@@ -123,7 +123,9 @@ def refresh_token(request):
     # Extract user data from the token (already validated by middleware)
     user_data = {
         "public_id": request.user_data["public_id"],
-        "email": request.user_data["email"]
+        "email": request.user_data["email"],
+        "first_name": request.user_data.get("first_name"),
+        "last_name": request.user_data.get("last_name")
     }
     
     logger.info(f"Refreshing token for user ID: {user_data.get('user_id', 'unknown')}")
@@ -156,6 +158,68 @@ def refresh_token(request):
     )
     
     logger.info("Token refreshed successfully")
+    return response
+
+
+@api_view(['GET'])
+def get_websocket_token(request):
+    """
+    WebSocket Token Endpoint with Enhanced Security (30-second expiration)
+    
+    This endpoint generates WebSocket-specific tokens with very short expiration times
+    to minimize security risks from token exposure in browser network tabs.
+    
+    Security Features:
+    - 30-second expiration (vs 15 minutes for regular SLT)
+    - Special token type 'websocket' for identification
+    - Scope limited to 'websocket_only' connections
+    - Cannot be used for regular API calls
+    
+    The token is validated by the middleware before this view is called.
+    """
+    logger.info("WebSocket token request received")
+    
+    # The middleware has already validated the token and made user_data available
+    if not hasattr(request, 'user_data'):
+        logger.warning("No user_data found in WebSocket token request")
+        return Response({
+            "error": "No valid token found",
+            "redirect_to_login": True
+        }, status=status.HTTP_401_UNAUTHORIZED)
+        
+    # Extract user data from the token (already validated by middleware)
+    user_data = {
+        "public_id": request.user_data["public_id"],
+        "email": request.user_data["email"],
+        "first_name": request.user_data.get("first_name"),
+        "last_name": request.user_data.get("last_name")
+    }
+    
+    logger.info("Generating WebSocket-specific token with 30-second expiration")
+    
+    # Generate a WebSocket-specific token with 30-second expiration
+    websocket_token = generate_websocket_token(user_data)
+    
+    # Calculate token expiry times
+    websocket_expires_at = datetime.datetime.utcnow() + datetime.timedelta(seconds=WEBSOCKET_TOKEN_EXPIRY_SECONDS)
+    
+    # Return the WebSocket token in response body
+    response = Response({
+        "token": websocket_token,
+        "token_info": {
+            "expires_in_seconds": WEBSOCKET_TOKEN_EXPIRY_SECONDS,
+            "expires_at": websocket_expires_at.isoformat() + "Z",
+            "token_type": "websocket",
+            "scope": "websocket_only"
+        },
+        "user": {
+            "email": user_data["email"],
+            "first_name": user_data.get("first_name"),
+            "last_name": user_data.get("last_name")
+        }
+    }, status=status.HTTP_200_OK)
+    
+    logger.info("WebSocket token provided successfully with 30-second expiration")
     return response
 
 

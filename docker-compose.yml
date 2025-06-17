@@ -63,6 +63,7 @@ services:
       - DJANGO_SECRET_KEY=prod-django-secret-key-change-in-production-make-it-50-chars-long
       - JWT_LONG_LIVED_TOKEN_SECRET=jwt-llt-secret-key-32-chars-change-this
       - JWT_SHORT_LIVED_TOKEN_SECRET=jwt-slt-secret-key-32-chars-change-this
+      - JWT_WEBSOCKET_TOKEN_SECRET=jwt-websocket-secret-key-32-chars-change-this
       - BROKER_API_ENCRYPTION_SECRET=broker-encryption-key-32-chars-change-this-for-production
       - INTERNAL_SERVICE_TOKEN=internal-service-secret-token-change-in-production
       
@@ -107,6 +108,7 @@ services:
       - DJANGO_SECRET_KEY=prod-django-secret-key-change-in-production-make-it-50-chars-long
       - JWT_LONG_LIVED_TOKEN_SECRET=jwt-llt-secret-key-32-chars-change-this
       - JWT_SHORT_LIVED_TOKEN_SECRET=jwt-slt-secret-key-32-chars-change-this
+      - JWT_WEBSOCKET_TOKEN_SECRET=jwt-websocket-secret-key-32-chars-change-this
       - BROKER_API_ENCRYPTION_SECRET=broker-encryption-key-32-chars-change-this-for-production
       - INTERNAL_SERVICE_TOKEN=internal-service-secret-token-change-in-production
       
@@ -175,6 +177,7 @@ services:
       - DJANGO_SECRET_KEY=prod-django-secret-key-change-in-production-make-it-50-chars-long
       - JWT_LONG_LIVED_TOKEN_SECRET=jwt-llt-secret-key-32-chars-change-this
       - JWT_SHORT_LIVED_TOKEN_SECRET=jwt-slt-secret-key-32-chars-change-this
+      - JWT_WEBSOCKET_TOKEN_SECRET=jwt-websocket-secret-key-32-chars-change-this
       - BROKER_API_ENCRYPTION_SECRET=broker-encryption-key-32-chars-change-this-for-production
       - INTERNAL_SERVICE_TOKEN=internal-service-secret-token-change-in-production
       
