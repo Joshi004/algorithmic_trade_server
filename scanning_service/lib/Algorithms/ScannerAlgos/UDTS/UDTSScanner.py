@@ -25,6 +25,9 @@ from scanning_service.utils.websocket_publisher import (
     publish_scanner_update_sync
 )
 
+# UDTS Scanner specific constants
+# Lock TTL for distributed locking (5 minutes)
+UDTS_SCANNER_LOCK_TTL_SECONDS = 300
 
 class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
     def __init__(self, algorithm_type, frequency):
@@ -268,8 +271,8 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
             # Renew the Redis lock if lock manager is available
             # Lock manager is injected by the consumer when starting the scanner
             if hasattr(self, '_lock_manager') and hasattr(self, '_algorithm_id') and hasattr(self, '_frequency'):
-                # Get lock TTL from scanner configuration (default 5 minutes = 300 seconds)
-                lock_ttl = getattr(self, 'lock_ttl_seconds', 300)
+                # Get lock TTL from scanner configuration (default value from constant)
+                lock_ttl = getattr(self, 'lock_ttl_seconds', UDTS_SCANNER_LOCK_TTL_SECONDS)
                 
                 # Renew the lock
                 lock_renewed = self._lock_manager.renew_lock(
@@ -281,7 +284,27 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
                 if lock_renewed:
                     log(f"Successfully renewed scanner lock for {self.algorithm_type}:{self.frequency}")
                 else:
+                    # Lock renewal failed - check WHY it failed using hybrid approach
                     log(f"Failed to renew scanner lock for {self.algorithm_type}:{self.frequency}", level="warning")
+                    
+                    # Check if another container has acquired the lock
+                    lock_exists, current_owner = self._lock_manager.check_lock(
+                        self._algorithm_id,
+                        self._frequency
+                    )
+                    
+                    if lock_exists and current_owner and current_owner != self._lock_manager.container_id:
+                        # Another container has acquired this scanner - stop gracefully
+                        log(f"Lock now owned by container {current_owner}. Stopping scanner to avoid conflicts.", level="warning")
+                        self.stop_scanning()
+                        return  # Exit the save progress method immediately
+                    else:
+                        # Lock doesn't exist or we can't determine ownership (likely temporary issue)
+                        # Continue scanning - we'll try to renew/reacquire on next cycle
+                        if not lock_exists:
+                            log(f"Lock doesn't exist - likely expired. Continuing scanning, will attempt to reacquire on next cycle.", level="warning")
+                        else:
+                            log(f"Unable to determine lock ownership (likely temporary Redis issue). Continuing scanning.", level="warning")
                     
         except Exception as e:
             log(f"Error saving scanning progress: {str(e)}", level="error")
