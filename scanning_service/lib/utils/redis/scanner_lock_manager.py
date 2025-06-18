@@ -1,6 +1,8 @@
 import redis
 import time
 import uuid
+import os
+import socket
 from typing import Optional, Tuple
 from django.conf import settings
 from scanning_service.lib.utils.logger import log
@@ -33,9 +35,76 @@ class ScannerLockManager:
         else:
             self.redis_client = redis_client
         
-        # Generate unique container ID
-        self.container_id = f"container_{uuid.uuid4().hex[:8]}"
+        # Get actual container ID
+        self.container_id = self._get_container_id()
         log(f"ScannerLockManager initialized with container ID: {self.container_id}")
+    
+    def _get_container_id(self) -> str:
+        """
+        Get the actual container/pod ID from the environment.
+        
+        Returns:
+            str: The container/pod ID
+        """
+        # First, try to get from environment variables
+        # Docker container ID or Kubernetes pod name
+        container_id = os.environ.get('CONTAINER_ID')
+        if container_id:
+            return f"container_{container_id}"
+        
+        # In Kubernetes, hostname is often set to pod name
+        pod_name = os.environ.get('POD_NAME')
+        if pod_name:
+            return f"pod_{pod_name}"
+        
+        # Try hostname (in Docker, this is often the container ID)
+        hostname = os.environ.get('HOSTNAME')
+        if hostname:
+            return f"host_{hostname}"
+        
+        # Try socket hostname as fallback
+        try:
+            hostname = socket.gethostname()
+            if hostname and hostname != 'localhost':
+                return f"host_{hostname}"
+        except Exception:
+            pass
+        
+        # Try to read container ID from cgroup (Docker)
+        try:
+            with open('/proc/self/cgroup', 'r') as f:
+                for line in f:
+                    if 'docker' in line:
+                        # Extract container ID from cgroup path
+                        parts = line.strip().split('/')
+                        if len(parts) > 2:
+                            container_id = parts[-1][:12]  # First 12 chars like Docker CLI
+                            return f"docker_{container_id}"
+        except Exception:
+            pass
+        
+        # As a last resort, use machine-specific ID but log a warning
+        try:
+            # Try to get a persistent machine ID
+            machine_id = None
+            for path in ['/etc/machine-id', '/var/lib/dbus/machine-id']:
+                try:
+                    with open(path, 'r') as f:
+                        machine_id = f.read().strip()[:12]
+                        break
+                except Exception:
+                    continue
+            
+            if machine_id:
+                log("Warning: Using machine ID as container identifier. Consider setting CONTAINER_ID or POD_NAME environment variable.", level="warning")
+                return f"machine_{machine_id}"
+        except Exception:
+            pass
+        
+        # Final fallback - generate UUID but warn about potential issues
+        fallback_id = f"fallback_{uuid.uuid4().hex[:8]}"
+        log(f"Warning: Could not determine container ID, using fallback: {fallback_id}. This may cause locking issues in distributed environments.", level="warning")
+        return fallback_id
     
     def _get_lock_key(self, algorithm_id: int, frequency: str) -> str:
         """
@@ -67,10 +136,10 @@ class ScannerLockManager:
         try:
             # Try to set the lock with NX (only if not exists) and EX (expiry)
             result = self.redis_client.set(
-                lock_key,
-                self.container_id,
-                nx=True,  # Only set if key doesn't exist
-                ex=ttl_seconds  # Set expiry
+                lock_key,                # The Redis key for the scanner lock
+                self.container_id,       # Unique ID of this container instance
+                nx=True,                 # Only set if key doesn't exist (for atomic locking)
+                ex=ttl_seconds          # Set expiry time in seconds
             )
             
             if result:

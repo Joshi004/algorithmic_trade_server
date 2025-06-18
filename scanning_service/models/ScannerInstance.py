@@ -39,7 +39,7 @@ class ScannerInstance(models.Model):
             )
         ]
         indexes = [
-            models.Index(fields=['algorithm', 'frequency', 'is_active']),
+            models.Index(fields=['algorithm', 'frequency', 'is_active'], name='idx_scanner_algo_freq_active'),
         ]
     
     def __str__(self):

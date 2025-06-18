@@ -31,7 +31,7 @@ class Migration(migrations.Migration):
             options={
                 'db_table': 'scanner_instances',
                 'indexes': [
-                    models.Index(fields=['algorithm', 'frequency', 'is_active']),
+                    models.Index(fields=['algorithm', 'frequency', 'is_active'], name='idx_scanner_algo_freq_active'),
                 ],
             },
         ),
