@@ -7,7 +7,8 @@ from typing import Optional, Tuple
 from django.conf import settings
 from scanning_service.lib.utils.logger import log
 
-
+# Default Lock TTL for distributed locking (15 minutes)
+DEFAULT_SCANNER_LOCK_TTL_SECONDS = 900 
 class ScannerLockManager:
     """
     Manages distributed locks for scanner instances using Redis.
@@ -119,14 +120,13 @@ class ScannerLockManager:
         """
         return f"scanner_lock:{algorithm_id}:{frequency}"
     
-    def acquire_lock(self, algorithm_id: int, frequency: str, ttl_seconds: int = 300) -> bool:
+    def acquire_lock(self, algorithm_id: int, frequency: str, ttl_seconds: int = DEFAULT_SCANNER_LOCK_TTL_SECONDS ) -> bool:
         """
         Attempt to acquire a lock for a scanner instance.
         
         Args:
             algorithm_id: The scanning algorithm ID
             frequency: The trading frequency
-            ttl_seconds: Time to live for the lock in seconds (default: 300 = 5 minutes)
             
         Returns:
             bool: True if lock acquired, False otherwise
@@ -161,14 +161,13 @@ class ScannerLockManager:
             log(f"Error acquiring lock for scanner {algorithm_id}:{frequency}: {str(e)}", level="error")
             return False
     
-    def renew_lock(self, algorithm_id: int, frequency: str, ttl_seconds: int = 300) -> bool:
+    def renew_lock(self, algorithm_id: int, frequency: str, ttl_seconds: int = DEFAULT_SCANNER_LOCK_TTL_SECONDS) -> bool:
         """
         Renew an existing lock if owned by this container.
         
         Args:
             algorithm_id: The scanning algorithm ID
             frequency: The trading frequency
-            ttl_seconds: New time to live for the lock in seconds
             
         Returns:
             bool: True if lock renewed, False otherwise
