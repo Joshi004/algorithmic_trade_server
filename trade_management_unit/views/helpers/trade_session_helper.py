@@ -1,6 +1,7 @@
 from django.http import JsonResponse
 from django.utils.dateparse import parse_datetime
 import logging
+from trade_management_unit.models import ScanningAlgorithm, InitiationAlgorithm, TerminationAlgorithm
 
 
 class TradeSessionViewHelper:
@@ -132,15 +133,40 @@ class TradeSessionViewHelper:
         query_params = request.GET
         trading_frequency = query_params.get("trading_frequency")
         is_dummy = bool(query_params.get("dummy"))
-        scanning_algorithm_id = query_params.get("scanning_algorithm_id")
-        initiation_algorithm_id = query_params.get("initiation_algorithm_id")
-        termination_algorithm_id = query_params.get("termination_algorithm_id")
+        scanning_algorithm_name = query_params.get("scanning_algorithm_name")
+        initiation_algorithm_name = query_params.get("initiation_algorithm_name")
+        termination_algorithm_name = query_params.get("termination_algorithm_name")
 
         # Validate required parameters
-        if not all([scanning_algorithm_id, initiation_algorithm_id, termination_algorithm_id, trading_frequency]):
+        if not all([scanning_algorithm_name, initiation_algorithm_name, termination_algorithm_name, trading_frequency]):
             return None, JsonResponse({
                 'error': 'Missing required parameters',
-                'required_params': ['scanning_algorithm_id', 'initiation_algorithm_id', 'termination_algorithm_id', 'trading_frequency']
+                'required_params': ['scanning_algorithm_name', 'initiation_algorithm_name', 'termination_algorithm_name', 'trading_frequency']
+            }, status=400)
+
+        # Convert algorithm names to IDs for database storage
+        try:
+            scanning_algorithm = ScanningAlgorithm.objects.get(name=scanning_algorithm_name)
+            scanning_algorithm_id = scanning_algorithm.id
+        except ScanningAlgorithm.DoesNotExist:
+            return None, JsonResponse({
+                'error': f'Invalid scanning algorithm name: {scanning_algorithm_name}'
+            }, status=400)
+            
+        try:
+            initiation_algorithm = InitiationAlgorithm.objects.get(name=initiation_algorithm_name)
+            initiation_algorithm_id = initiation_algorithm.id
+        except InitiationAlgorithm.DoesNotExist:
+            return None, JsonResponse({
+                'error': f'Invalid initiation algorithm name: {initiation_algorithm_name}'
+            }, status=400)
+            
+        try:
+            termination_algorithm = TerminationAlgorithm.objects.get(name=termination_algorithm_name)
+            termination_algorithm_id = termination_algorithm.id
+        except TerminationAlgorithm.DoesNotExist:
+            return None, JsonResponse({
+                'error': f'Invalid termination algorithm name: {termination_algorithm_name}'
             }, status=400)
 
         params = {

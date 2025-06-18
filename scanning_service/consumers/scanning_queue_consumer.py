@@ -84,17 +84,17 @@ class ScanningQueueConsumer:
             trading_frequency = event_data.get('trading_frequency')
             is_dummy = event_data.get('is_dummy', False)
             
-            # Extract algorithm IDs directly from flat structure
-            scanning_algo_id = int(event_data.get('scanning_algorithm_id', 1))  # Default to UDTS (ID 1)
-            initiation_algo_id = int(event_data.get('initiation_algorithm_id', 1))  # Default to algo ID 1
-            termination_algo_id = int(event_data.get('termination_algorithm_id', 1))  # Default to algo ID 1
+            # Extract algorithm configuration from event data
+            scanning_algo_name = event_data.get('scanning_algorithm_name', 'UDTS')  # Default to UDTS
+            initiation_algo_name = event_data.get('initiation_algorithm_name', 'Udts_slto')  # Default to Udts_slto
+            termination_algo_name = event_data.get('termination_algorithm_name', 'Udts_slto')  # Default to Udts_slto
             
             log(f"Starting scanner for trade session {trade_session_id}:")
             log(f"  - User ID: {user_id}")
             log(f"  - Trading Frequency: {trading_frequency}")
-            log(f"  - Scanning Algorithm ID: {scanning_algo_id}")
-            log(f"  - Initiation Algorithm ID: {initiation_algo_id}")
-            log(f"  - Termination Algorithm ID: {termination_algo_id}")
+            log(f"  - Scanning Algorithm Name: {scanning_algo_name}")
+            log(f"  - Initiation Algorithm Name: {initiation_algo_name}")
+            log(f"  - Termination Algorithm Name: {termination_algo_name}")
             log(f"  - Is Dummy: {is_dummy}")
             
             # Create data providers
@@ -102,10 +102,10 @@ class ScanningQueueConsumer:
             tmu_provider = TMUServiceProvider(user_id)
             
             # Get scanner instance using factory (factory handles singleton behavior)
-            scanner = self._scanner_factory.get_scanner(scanning_algo_id, trading_frequency)
+            scanner = self._scanner_factory.get_scanner(scanning_algo_name, trading_frequency)
             
             if scanner is None:
-                log(f"Unknown scanning algorithm ID: {scanning_algo_id}", level="error")
+                log(f"Unknown scanning algorithm name: {scanning_algo_name}", level="error")
                 return False
             
             # Configure the scanner with required parameters

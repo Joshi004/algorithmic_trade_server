@@ -98,16 +98,16 @@ class ATSConsumer(AsyncWebsocketConsumer):
 
     async def handle_subscribe_scanner(self, data):
         """Handle scanner subscription request"""
-        algorithm_id = data.get('algorithm_id')
+        algorithm_name = data.get('algorithm_name') or data.get('algorithm_id')  # Support both for backward compatibility
         frequency = data.get('frequency')
         
         # Validate required fields
-        if not algorithm_id or not frequency:
-            await self.send_error("Missing algorithm_id or frequency")
+        if not algorithm_name or not frequency:
+            await self.send_error("Missing algorithm_name or frequency")
             return
         
         # Generate group name using convention
-        group_name = get_group_name(algorithm_id, frequency)
+        group_name = get_group_name(algorithm_name, frequency)
         
         # Check if already subscribed to this group
         if group_name in self.subscribed_groups:
@@ -131,7 +131,7 @@ class ATSConsumer(AsyncWebsocketConsumer):
                 'type': 'subscription_success',
                 'action': 'subscribe_scanner',
                 'group_name': group_name,
-                'algorithm_id': algorithm_id,
+                'algorithm_name': algorithm_name,
                 'frequency': frequency,
                 'message': f'Successfully subscribed to {group_name}'
             }))
@@ -142,16 +142,16 @@ class ATSConsumer(AsyncWebsocketConsumer):
 
     async def handle_unsubscribe_scanner(self, data):
         """Handle scanner unsubscription request"""
-        algorithm_id = data.get('algorithm_id')
+        algorithm_name = data.get('algorithm_name') or data.get('algorithm_id')  # Support both for backward compatibility
         frequency = data.get('frequency')
         
         # Validate required fields
-        if not algorithm_id or not frequency:
-            await self.send_error("Missing algorithm_id or frequency")
+        if not algorithm_name or not frequency:
+            await self.send_error("Missing algorithm_name or frequency")
             return
         
         # Generate group name using convention
-        group_name = get_group_name(algorithm_id, frequency)
+        group_name = get_group_name(algorithm_name, frequency)
         
         # Check if subscribed to this group
         if group_name not in self.subscribed_groups:
@@ -168,7 +168,7 @@ class ATSConsumer(AsyncWebsocketConsumer):
                 'type': 'unsubscription_success',
                 'action': 'unsubscribe_scanner',
                 'group_name': group_name,
-                'algorithm_id': algorithm_id,
+                'algorithm_name': algorithm_name,
                 'frequency': frequency,
                 'message': f'Successfully unsubscribed from {group_name}'
             }))

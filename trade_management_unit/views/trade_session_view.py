@@ -96,8 +96,11 @@ def get_active_trade_sessions(request, *args, **kwargs):
                 'started_at': session.started_at.isoformat() if session.started_at else None,
                 'closed_at': session.closed_at.isoformat() if session.closed_at else None,
                 'scanning_algorithm_id': session.scanning_algorithm_id,
+                'scanning_algorithm_name': session.scanning_algorithm.name,
                 'initiation_algorithm_id': session.initiation_algorithm_id,
-                'termination_algorithm_id': session.termination_algorithm_id
+                'initiation_algorithm_name': session.initiation_algorithm.name,
+                'termination_algorithm_id': session.termination_algorithm_id,
+                'termination_algorithm_name': session.termination_algorithm.name
             })
         
         logger.info(f"[TMU] Formatted {len(sessions_data)} sessions data")

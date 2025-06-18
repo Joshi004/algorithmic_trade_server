@@ -29,9 +29,9 @@ class BaseScannerInterface(ABC):
         'resistance_price',   # Optional: Resistance price level (None if not applicable)
         'required_action',    # Optional: "buy", "sell", or None
         'market_price',       # Required: Current market price
-        'scanning_algorithm_id',    # Required: ID of the scanning algorithm
-        'initiation_algorithm_id',  # Required: ID of the initiation algorithm
-        'termination_algorithm_id'  # Required: ID of the termination algorithm
+        'scanning_algorithm_name',    # Required: Name of the scanning algorithm
+        'initiation_algorithm_name',  # Required: Name of the initiation algorithm
+        'termination_algorithm_name'  # Required: Name of the termination algorithm
     ]
     
     # Instrument-specific fields (subset of STANDARD_EVENT_FIELDS for scanner output)
@@ -42,6 +42,16 @@ class BaseScannerInterface(ABC):
         'resistance_price',   # Optional: Resistance price level (None if not applicable)
         'required_action',    # Optional: "buy", "sell", or None
         'market_price'        # Required: Current market price
+    ]
+    
+    # Required fields for trade session integration
+    REQUIRED_SESSION_FIELDS = [
+        'trade_session_id',         # Required: ID of the trade session
+        'user_id',                  # Required: User ID owning the session
+        'trading_frequency',        # Required: Trading frequency (e.g., "5-minute")
+        'scanning_algorithm_name',  # Required: Name of the scanning algorithm
+        'initiation_algorithm_name',# Required: Name of the initiation algorithm
+        'termination_algorithm_name'# Required: Name of the termination algorithm
     ]
     
     def __init__(self):
@@ -221,7 +231,7 @@ class BaseScannerInterface(ABC):
         # Import here to avoid circular imports
         from trade_management_unit.models.ScanningAlgorithm import ScanningAlgorithm
         
-        # Find algorithm ID by name from database
+        # Find algorithm ID by name from database (for filtering active sessions)
         try:
             scanning_algo_obj = ScanningAlgorithm.objects.get(name=scanner_type)
             scanning_algo_id = scanning_algo_obj.id
@@ -247,20 +257,20 @@ class BaseScannerInterface(ABC):
             for session in active_sessions:
                 trade_session_id = str(session['id'])
                 
-                # Extract algorithm IDs from session
-                session_scanning_algo_id = session.get('scanning_algorithm_id')
-                session_initiation_algo_id = session.get('initiation_algorithm_id')
-                session_termination_algo_id = session.get('termination_algorithm_id')
+                # Extract algorithm names from session
+                session_scanning_algo_name = session.get('scanning_algorithm_name')
+                session_initiation_algo_name = session.get('initiation_algorithm_name')
+                session_termination_algo_name = session.get('termination_algorithm_name')
                 
                 for instrument in eligible_instruments:
                     try:
-                        # Publish the eligible instrument event using standardized format with algorithm IDs
+                        # Publish the eligible instrument event using standardized format with algorithm names
                         message_id = self.event_publisher.publish_eligible_instrument(
                             trade_session_id=trade_session_id,
                             instrument_data=instrument,
-                            scanning_algorithm_id=session_scanning_algo_id,
-                            initiation_algorithm_id=session_initiation_algo_id,
-                            termination_algorithm_id=session_termination_algo_id
+                            scanning_algorithm_name=session_scanning_algo_name,
+                            initiation_algorithm_name=session_initiation_algo_name,
+                            termination_algorithm_name=session_termination_algo_name
                         )
                         
                         if message_id:
