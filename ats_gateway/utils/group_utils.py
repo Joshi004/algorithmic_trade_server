@@ -27,7 +27,12 @@ def increment_group_subscription(group_name):
     """
     redis_key = f"subs:{group_name}"
     count = redis_client.incr(redis_key)
-    logger.info(f"Incremented subscription count for {group_name}: {count}")
+    
+    # Set TTL to 1 hour (3600 seconds) to prevent orphaned keys
+    # This ensures keys are automatically cleaned up if not refreshed
+    redis_client.expire(redis_key, 3600)
+    
+    logger.info(f"Incremented subscription count for {group_name}: {count} (TTL: 1h)")
     return count
 
 def decrement_group_subscription(group_name):

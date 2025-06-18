@@ -218,16 +218,17 @@ class BaseScannerInterface(ABC):
         if scanner_type is None:
             scanner_type = self.__class__.__name__.lower().replace('scanner', '')
         
-        # Map scanner type to algorithm ID for fetching active sessions
-        algorithm_id_map = {
-            'udts': 1,
-            # Add more mappings as algorithms are implemented
-            # 'rsi_divergence': 2,
-            # 'breakout_scanner': 3,
-            # 'momentum_surge': 4
-        }
+        # Import here to avoid circular imports
+        from trade_management_unit.models.ScanningAlgorithm import ScanningAlgorithm
         
-        scanning_algo_id = algorithm_id_map.get(scanner_type, 1)  # Default to UDTS (ID 1)
+        # Find algorithm ID by name from database
+        try:
+            scanning_algo_obj = ScanningAlgorithm.objects.get(name=scanner_type)
+            scanning_algo_id = scanning_algo_obj.id
+        except ScanningAlgorithm.DoesNotExist:
+            error_msg = f"Scanner algorithm '{scanner_type}' not found in database"
+            log(error_msg, level="error")
+            raise ValueError(error_msg)
         
         # Fetch active trade sessions for this scanner algorithm ID and frequency
         try:

@@ -12,6 +12,8 @@ import django
 import asyncio
 import redis
 import logging
+import threading
+import concurrent.futures
 
 # Add the project root to Python path and configure Django
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -54,6 +56,11 @@ def get_group_subscription_count(group_name):
     """
     redis_key = f"subs:{group_name}"
     count = redis_client.get(redis_key)
+    
+    # Refresh TTL if key exists to keep it alive during active scanning
+    if count is not None:
+        redis_client.expire(redis_key, 3600)  # Reset to 1 hour
+    
     return int(count) if count else 0
 
 def can_publish_to_group(group_name):
@@ -62,7 +69,14 @@ def can_publish_to_group(group_name):
     Returns True if count > 0, False otherwise
     """
     count = get_group_subscription_count(group_name)
-    return count > 0
+    can_publish = count > 0
+    logger.info(f"WebSocket: can_publish_to_group({group_name}) - Redis count: {count}, can_publish: {can_publish}")
+    
+    # Additional debugging for troubleshooting
+    if count == 0:
+        logger.warning(f"WebSocket: No subscribers found for group '{group_name}' - messages will be skipped")
+    
+    return can_publish
 
 async def publish_scanner_update(algorithm_id, frequency, data):
     """
@@ -105,15 +119,36 @@ def publish_scanner_update_sync(algorithm_id, frequency, data):
     Useful for scanner services that run in sync context
     """
     try:
-        # Create new event loop if none exists
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-    
-    return loop.run_until_complete(
-        publish_scanner_update(algorithm_id, frequency, data)
-    )
+        # Try to get the current event loop
+        try:
+            loop = asyncio.get_running_loop()
+            # If we're in an async context, use run_coroutine_threadsafe
+            future = asyncio.run_coroutine_threadsafe(
+                publish_scanner_update(algorithm_id, frequency, data), 
+                loop
+            )
+            return future.result(timeout=5.0)  # 5 second timeout
+        except RuntimeError:
+            # No running loop, we can safely create a new one
+            def run_in_thread():
+                # Create a new event loop in this thread
+                new_loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(new_loop)
+                try:
+                    return new_loop.run_until_complete(
+                        publish_scanner_update(algorithm_id, frequency, data)
+                    )
+                finally:
+                    new_loop.close()
+            
+            # Run in a separate thread to avoid event loop conflicts
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(run_in_thread)
+                return future.result(timeout=5.0)  # 5 second timeout
+                
+    except Exception as e:
+        logger.error(f"Error in publish_scanner_update_sync: {str(e)}")
+        return False
 
 def get_active_scanner_groups():
     """
