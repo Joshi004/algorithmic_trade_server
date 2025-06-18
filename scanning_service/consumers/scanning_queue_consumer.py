@@ -6,10 +6,14 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 
 from django.conf import settings
+from django.db import transaction
 from scanning_service.lib.utils.logger import log
 from scanning_service.lib.utils.redis import restore_from_redis_stream, create_consumer_client
+from scanning_service.lib.utils.redis.scanner_lock_manager import ScannerLockManager
 from scanning_service.lib.Algorithms.ScannerAlgos.ScannerAlgoFactory import ScannerAlgoFactory
 from scanning_service.lib.data_providers import IntegrationServiceProvider, TMUServiceProvider
+from scanning_service.models import ScannerInstance
+from trade_management_unit.models import ScanningAlgorithm
 
 
 class ScanningQueueConsumer:
@@ -27,6 +31,9 @@ class ScanningQueueConsumer:
         
         # Create Redis consumer client using new structure
         self.redis_consumer = create_consumer_client(self.consumer_group, self.consumer_name)
+        
+        # Initialize lock manager
+        self.lock_manager = ScannerLockManager()
         
         self._running = False
         self._scanner_factory = ScannerAlgoFactory()
@@ -97,36 +104,94 @@ class ScanningQueueConsumer:
             log(f"  - Termination Algorithm Name: {termination_algo_name}")
             log(f"  - Is Dummy: {is_dummy}")
             
-            # Create data providers
-            integration_provider = IntegrationServiceProvider(user_id)
-            tmu_provider = TMUServiceProvider(user_id)
-            
-            # Get scanner instance using factory (factory handles singleton behavior)
-            scanner = self._scanner_factory.get_scanner(scanning_algo_name, trading_frequency)
-            
-            if scanner is None:
-                log(f"Unknown scanning algorithm name: {scanning_algo_name}", level="error")
+            # Get the scanning algorithm from database
+            try:
+                scanning_algorithm = ScanningAlgorithm.objects.get(name=scanning_algo_name)
+                algorithm_id = scanning_algorithm.id
+            except ScanningAlgorithm.DoesNotExist:
+                log(f"Scanning algorithm '{scanning_algo_name}' not found in database", level="error")
                 return False
             
-            # Configure the scanner with required parameters
-            # Note: user_id and trade_session_id are passed but not stored as instance state
-            scanner.configure(
-                trade_freq=trading_frequency,
-                user_id=user_id,
-                trade_session_id=trade_session_id,
-                integration_provider=integration_provider,
-                tmu_provider=tmu_provider
-            )
+            # Try to acquire lock for this scanner
+            lock_acquired = self.lock_manager.acquire_lock(algorithm_id, trading_frequency)
             
-            # Start scanning in a separate thread
-            # Pass trade_session_id as parameter since it's not stored in scanner
-            scanner.fetch_instrument_tokens_and_start_tracking(user_id, trade_session_id, is_dummy)
+            if not lock_acquired:
+                log(f"Could not acquire lock for scanner {scanning_algo_name}:{trading_frequency}. Another container is processing it.")
+                return True  # Return True as this is expected behavior, not an error
             
-            log(f"Successfully started scanner for trade session {trade_session_id}")
-            return True
+            # Lock acquired, now create/update database entry
+            try:
+                with transaction.atomic():
+                    scanner_instance, created = ScannerInstance.objects.get_or_create(
+                        algorithm=scanning_algorithm,
+                        frequency=trading_frequency,
+                        defaults={'is_active': True}
+                    )
+                    
+                    if not created:
+                        # Existing instance found, ensure it's marked as active
+                        scanner_instance.is_active = True
+                        scanner_instance.save()
+                        log(f"Reactivated existing scanner instance for {scanning_algo_name}:{trading_frequency}")
+                    else:
+                        log(f"Created new scanner instance for {scanning_algo_name}:{trading_frequency}")
+                        
+            except Exception as e:
+                # Failed to create database entry, release the lock
+                self.lock_manager.release_lock(algorithm_id, trading_frequency)
+                log(f"Failed to create scanner instance in database: {str(e)}", level="error")
+                return False
+            
+            # Now proceed with creating the scanner
+            try:
+                # Create data providers
+                integration_provider = IntegrationServiceProvider(user_id)
+                tmu_provider = TMUServiceProvider(user_id)
+                
+                # Get scanner instance using factory (factory handles singleton behavior)
+                scanner = self._scanner_factory.get_scanner(scanning_algo_name, trading_frequency)
+                
+                if scanner is None:
+                    log(f"Unknown scanning algorithm name: {scanning_algo_name}", level="error")
+                    # Release lock and mark instance as inactive
+                    self.lock_manager.release_lock(algorithm_id, trading_frequency)
+                    scanner_instance.is_active = False
+                    scanner_instance.save()
+                    return False
+                
+                # Store lock manager reference in scanner for heartbeat updates
+                # This allows the scanner to renew the lock when saving progress
+                scanner._lock_manager = self.lock_manager
+                scanner._algorithm_id = algorithm_id
+                scanner._frequency = trading_frequency
+                
+                # Configure the scanner with required parameters
+                # Note: user_id and trade_session_id are passed but not stored as instance state
+                scanner.configure(
+                    trade_freq=trading_frequency,
+                    user_id=user_id,
+                    trade_session_id=trade_session_id,
+                    integration_provider=integration_provider,
+                    tmu_provider=tmu_provider
+                )
+                
+                # Start scanning in a separate thread
+                # Pass trade_session_id as parameter since it's not stored in scanner
+                scanner.fetch_instrument_tokens_and_start_tracking(user_id, trade_session_id, is_dummy)
+                
+                log(f"Successfully started scanner for trade session {trade_session_id}")
+                return True
+                
+            except Exception as e:
+                # Failed to start scanner, release lock and mark instance as inactive
+                self.lock_manager.release_lock(algorithm_id, trading_frequency)
+                scanner_instance.is_active = False
+                scanner_instance.save()
+                log(f"Error starting scanner: {str(e)}", level="error")
+                return False
             
         except Exception as e:
-            log(f"Error starting scanner: {str(e)}", level="error")
+            log(f"Error handling trade session initiated: {str(e)}", level="error")
             return False
     
     def _handle_trade_session_terminated(self, event_data: Dict[str, Any]) -> bool:

@@ -246,7 +246,7 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
 
     def _save_scanning_progress(self, current_index, last_processed_symbol):
         """
-        Save current scanning progress to Redis state.
+        Save current scanning progress to Redis state and renew the scanner lock.
         
         Args:
             current_index: Current index in the instrument list
@@ -256,6 +256,7 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
             return
             
         try:
+            # Save progress to state manager
             self.state_manager.save_progress(
                 current_index=current_index,
                 total_instruments=len(self.all_instruments) if hasattr(self, 'all_instruments') else 0,
@@ -263,6 +264,25 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
                 scan_cycle=getattr(self, 'scan_cycle', 1),
                 cycle_start_time=getattr(self, 'cycle_start_time', current_ist())
             )
+            
+            # Renew the Redis lock if lock manager is available
+            # Lock manager is injected by the consumer when starting the scanner
+            if hasattr(self, '_lock_manager') and hasattr(self, '_algorithm_id') and hasattr(self, '_frequency'):
+                # Get lock TTL from scanner configuration (default 5 minutes = 300 seconds)
+                lock_ttl = getattr(self, 'lock_ttl_seconds', 300)
+                
+                # Renew the lock
+                lock_renewed = self._lock_manager.renew_lock(
+                    self._algorithm_id,
+                    self._frequency,
+                    lock_ttl
+                )
+                
+                if lock_renewed:
+                    log(f"Successfully renewed scanner lock for {self.algorithm_type}:{self.frequency}")
+                else:
+                    log(f"Failed to renew scanner lock for {self.algorithm_type}:{self.frequency}", level="warning")
+                    
         except Exception as e:
             log(f"Error saving scanning progress: {str(e)}", level="error")
 
