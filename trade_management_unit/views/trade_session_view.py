@@ -188,3 +188,77 @@ def get_trade_session_details(request, *args, **kwargs):
             'error': str(e),
             'message': 'Failed to fetch trade session details'
         }, status=500)
+
+
+def pause_trade_session(request, *args, **kwargs):
+    """
+    API endpoint to pause a trade session.
+    Thin view layer - delegates parameter validation to helper and business logic to library.
+    """
+    try:
+        # Validate authentication
+        user_id_str, auth_error = TradeSessionViewHelper.validate_authentication(request)
+        if auth_error:
+            return auth_error
+        
+        # Validate and extract parameters (including session ownership)
+        params, param_error = TradeSessionViewHelper.validate_and_extract_pause_resume_params(request, user_id_str)
+        if param_error:
+            return param_error
+        
+        # Delegate business logic to library
+        result = TradeSession.pause_trade_session(
+            trade_session_id=params['trade_session_id'],
+            user_id_str=user_id_str
+        )
+        
+        return JsonResponse(result, status=200)
+        
+    except ValueError as e:
+        return JsonResponse({
+            'error': str(e),
+            'message': 'Invalid input provided'
+        }, status=400)
+        
+    except Exception as e:
+        return JsonResponse({
+            'error': str(e),
+            'message': 'Failed to pause trade session'
+        }, status=500)
+
+
+def resume_trade_session(request, *args, **kwargs):
+    """
+    API endpoint to resume a trade session.
+    Thin view layer - delegates parameter validation to helper and business logic to library.
+    """
+    try:
+        # Validate authentication
+        user_id_str, auth_error = TradeSessionViewHelper.validate_authentication(request)
+        if auth_error:
+            return auth_error
+        
+        # Validate and extract parameters (including session ownership)
+        params, param_error = TradeSessionViewHelper.validate_and_extract_pause_resume_params(request, user_id_str)
+        if param_error:
+            return param_error
+        
+        # Delegate business logic to library
+        result = TradeSession.resume_trade_session(
+            trade_session_id=params['trade_session_id'],
+            user_id_str=user_id_str
+        )
+        
+        return JsonResponse(result, status=200)
+        
+    except ValueError as e:
+        return JsonResponse({
+            'error': str(e),
+            'message': 'Invalid input provided'
+        }, status=400)
+        
+    except Exception as e:
+        return JsonResponse({
+            'error': str(e),
+            'message': 'Failed to resume trade session'
+        }, status=500)

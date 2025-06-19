@@ -251,4 +251,87 @@ class TradeSessionViewHelper:
             'trade_session_id': trade_session_id
         }
         
-        return params, None 
+        return params, None
+
+    @staticmethod
+    def validate_and_extract_pause_resume_params(request, user_id_str):
+        """
+        Validate and extract parameters for pause/resume trade session requests.
+        Validates:
+        - trade_session_id is provided and valid
+        - trade_session_id belongs to authenticated user
+        - session exists and user has permission to modify it
+        
+        Args:
+            request: Django request object
+            user_id_str: User's public ID from JWT authentication
+            
+        Returns:
+            tuple: (params_dict, error_response)
+                   params_dict is None if validation fails
+                   error_response is None if validation succeeds
+        """
+        # Handle both JSON (POST) and query parameters (GET)
+        if request.method == 'POST':
+            try:
+                import json
+                # Parse JSON data from request body
+                json_data = json.loads(request.body.decode('utf-8'))
+                trade_session_id = json_data.get("trade_session_id")
+            except (json.JSONDecodeError, UnicodeDecodeError) as e:
+                return None, JsonResponse({
+                    'error': 'Invalid JSON data in request body'
+                }, status=400)
+        else:
+            # Handle GET parameters
+            trade_session_id = request.GET.get("trade_session_id")
+        
+        # Validate required parameter
+        if not trade_session_id:
+            return None, JsonResponse({
+                'error': 'Missing required parameter: trade_session_id'
+            }, status=400)
+        
+        # Convert to int and validate
+        try:
+            trade_session_id = int(trade_session_id)
+        except ValueError:
+            return None, JsonResponse({
+                'error': 'Invalid trade_session_id, must be an integer'
+            }, status=400)
+        
+        if trade_session_id <= 0:
+            return None, JsonResponse({
+                'error': 'trade_session_id must be a positive integer'
+            }, status=400)
+        
+        # Validate session exists and belongs to user
+        try:
+            from trade_management_unit.models.TradeSession import TradeSession as TradeSessionModel
+            from ats_gateway.models.User import User
+            
+            # Get user object from JWT user_id
+            user = User.objects.get(public_id=user_id_str)
+            
+            # Check if session exists and belongs to user
+            session = TradeSessionModel.objects.get(id=trade_session_id, user_id=user)
+            
+        except User.DoesNotExist:
+            return None, JsonResponse({
+                'error': 'Invalid authenticated user'
+            }, status=400)
+        except TradeSessionModel.DoesNotExist:
+            return None, JsonResponse({
+                'error': 'Trade session not found or access denied'
+            }, status=404)
+        except Exception as e:
+            return None, JsonResponse({
+                'error': f'Error validating session access: {str(e)}'
+            }, status=500)
+        
+        # Return validated parameters
+        validated_params = {
+            'trade_session_id': trade_session_id
+        }
+        
+        return validated_params, None 

@@ -357,4 +357,118 @@ class TradeSession:
             logger.error(f"[TMU-Library] Error in get_trade_session_details: {str(e)}", exc_info=True)
             raise Exception(f"Failed to fetch trade session details: {str(e)}")
 
+    @staticmethod
+    def pause_trade_session(trade_session_id: str, user_id_str: str) -> dict:
+        """
+        Core business logic for pausing a trade session.
+        Performs direct database operations to update session status.
+        
+        Args:
+            trade_session_id: Trade session ID to pause
+            user_id_str: User's public ID from JWT authentication
+            
+        Returns:
+            dict: Response with success status and updated session data
+            
+        Raises:
+            ValueError: For validation errors
+            Exception: For other errors
+        """
+        from trade_management_unit.lib.common.Utils.Utils import current_ist
+        logger = logging.getLogger(__name__)
+        
+        try:
+            logger.info(f"[TMU-Library] pause_trade_session called for session: {trade_session_id}, user: {user_id_str}")
+            
+            # Get the trade session (validation already done in helper)
+            trade_session = TradeSessionModel.objects.get(id=trade_session_id, user_id=user_id_str)
+            
+            # Validate current status allows pausing
+            if trade_session.status != 'started':
+                raise ValueError(f"Cannot pause session with status '{trade_session.status}'. Only 'started' sessions can be paused.")
+            
+            # Update session status and is_active
+            trade_session.status = 'paused'
+            trade_session.is_active = False
+            trade_session.save()
+            
+            logger.info(f"[TMU-Library] Successfully paused trade session: {trade_session_id}")
+            
+            # Return success response
+            response_data = {
+                'success': True,
+                'message': f'Trade session {trade_session_id} paused successfully',
+                'data': {
+                    'trade_session_id': str(trade_session.id),
+                    'status': trade_session.status,
+                    'is_active': trade_session.is_active,
+                    'paused_at': current_ist().isoformat()
+                }
+            }
+            
+            return response_data
+            
+        except TradeSessionModel.DoesNotExist:
+            raise ValueError(f"Trade session {trade_session_id} not found or does not belong to user")
+        except Exception as e:
+            logger.error(f"[TMU-Library] Error pausing trade session: {str(e)}", exc_info=True)
+            raise Exception(f"Failed to pause trade session: {str(e)}")
+
+    @staticmethod  
+    def resume_trade_session(trade_session_id: str, user_id_str: str) -> dict:
+        """
+        Core business logic for resuming a trade session.
+        Performs direct database operations to update session status.
+        
+        Args:
+            trade_session_id: Trade session ID to resume
+            user_id_str: User's public ID from JWT authentication
+            
+        Returns:
+            dict: Response with success status and updated session data
+            
+        Raises:
+            ValueError: For validation errors
+            Exception: For other errors
+        """
+        from trade_management_unit.lib.common.Utils.Utils import current_ist
+        logger = logging.getLogger(__name__)
+        
+        try:
+            logger.info(f"[TMU-Library] resume_trade_session called for session: {trade_session_id}, user: {user_id_str}")
+            
+            # Get the trade session (validation already done in helper)
+            trade_session = TradeSessionModel.objects.get(id=trade_session_id, user_id=user_id_str)
+            
+            # Validate current status allows resuming
+            if trade_session.status != 'paused':
+                raise ValueError(f"Cannot resume session with status '{trade_session.status}'. Only 'paused' sessions can be resumed.")
+            
+            # Update session status and is_active
+            trade_session.status = 'started'
+            trade_session.is_active = True
+            trade_session.save()
+            
+            logger.info(f"[TMU-Library] Successfully resumed trade session: {trade_session_id}")
+            
+            # Return success response
+            response_data = {
+                'success': True,
+                'message': f'Trade session {trade_session_id} resumed successfully',
+                'data': {
+                    'trade_session_id': str(trade_session.id),
+                    'status': trade_session.status,
+                    'is_active': trade_session.is_active,
+                    'resumed_at': current_ist().isoformat()
+                }
+            }
+            
+            return response_data
+            
+        except TradeSessionModel.DoesNotExist:
+            raise ValueError(f"Trade session {trade_session_id} not found or does not belong to user")
+        except Exception as e:
+            logger.error(f"[TMU-Library] Error resuming trade session: {str(e)}", exc_info=True)
+            raise Exception(f"Failed to resume trade session: {str(e)}")
+
 
