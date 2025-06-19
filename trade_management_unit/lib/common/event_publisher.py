@@ -55,6 +55,45 @@ class TradeSessionEventPublisher:
             log(f"Error publishing trade session initiation event for session {trade_session_obj.id}: {str(e)}", level="error")
             return False
     
+    def publish_resume_scanner_event(self, trade_session_obj):
+        """
+        Publish resume scanner event to Redis stream.
+        This ensures a scanner instance is running for the trade session's algorithm and frequency.
+        
+        Args:
+            trade_session_obj: TradeSession model instance
+            
+        Returns:
+            bool: True if published successfully, False otherwise
+        """
+        try:
+            # Format resume scanner event data
+            event_data = {
+                "event_id": str(uuid.uuid4()),
+                "event_type": "resume_scanner",
+                "timestamp": current_ist().isoformat(),
+                "algorithm_id": trade_session_obj.scanning_algorithm.id,
+                "frequency": trade_session_obj.trading_frequency,
+                "triggered_by_session": trade_session_obj.id,
+            }
+            
+            # Publish to Redis stream
+            success = self.redis_client.publish_to_stream(
+                self.scanning_queue, 
+                event_data
+            )
+            
+            if success:
+                log(f"Published resume scanner event for algorithm_id: {trade_session_obj.scanning_algorithm.id}, frequency: {trade_session_obj.trading_frequency}")
+            else:
+                log(f"Failed to publish resume scanner event for session {trade_session_obj.id}", level="error")
+            
+            return success
+            
+        except Exception as e:
+            log(f"Error publishing resume scanner event for session {trade_session_obj.id}: {str(e)}", level="error")
+            return False
+    
     def _format_trade_session_event(self, trade_session_obj):
         """
         Format trade session data into flat event structure.

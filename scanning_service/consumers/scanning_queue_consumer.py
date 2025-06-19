@@ -6,14 +6,14 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 
 from django.conf import settings
-from django.db import transaction
+# Removed transaction import - no longer using database transactions for scanner instances
 from scanning_service.lib.utils.logger import log
 from scanning_service.lib.utils.redis import restore_from_redis_stream, create_consumer_client
 from scanning_service.lib.utils.redis.scanner_lock_manager import ScannerLockManager
 from scanning_service.lib.Algorithms.ScannerAlgos.ScannerAlgoFactory import ScannerAlgoFactory
 from scanning_service.lib.data_providers import IntegrationServiceProvider, TMUServiceProvider
-from scanning_service.models import ScannerInstance
-from trade_management_unit.models import ScanningAlgorithm
+# Removed ScannerInstance import - no longer using scanner instances table
+from trade_management_unit.models import ScanningAlgorithm, TradeSession
 
 
 class ScanningQueueConsumer:
@@ -66,6 +66,8 @@ class ScanningQueueConsumer:
                 return self._handle_trade_session_initiated(event_data)
             elif event_type == 'trade_session_terminated':
                 return self._handle_trade_session_terminated(event_data)
+            elif event_type == 'resume_scanner':
+                return self._handle_resume_scanner(event_data)
             else:
                 log(f"Skipping unknown event type: {event_type}", level="warning")
                 return True
@@ -119,28 +121,8 @@ class ScanningQueueConsumer:
                 log(f"Could not acquire lock for scanner {scanning_algo_name}:{trading_frequency}. Another container is processing it.")
                 return True  # Return True as this is expected behavior, not an error
             
-            # Lock acquired, now create/update database entry
-            try:
-                with transaction.atomic():
-                    scanner_instance, created = ScannerInstance.objects.get_or_create(
-                        algorithm=scanning_algorithm,
-                        frequency=trading_frequency,
-                        defaults={'is_active': True}
-                    )
-                    
-                    if not created:
-                        # Existing instance found, ensure it's marked as active
-                        scanner_instance.is_active = True
-                        scanner_instance.save()
-                        log(f"Reactivated existing scanner instance for {scanning_algo_name}:{trading_frequency}")
-                    else:
-                        log(f"Created new scanner instance for {scanning_algo_name}:{trading_frequency}")
-                        
-            except Exception as e:
-                # Failed to create database entry, release the lock
-                self.lock_manager.release_lock(algorithm_id, trading_frequency)
-                log(f"Failed to create scanner instance in database: {str(e)}", level="error")
-                return False
+            # Lock acquired, no need to create database entry (removed scanner instances table)
+            log(f"Acquired lock for scanner {scanning_algo_name}:{trading_frequency}, proceeding to start scanner")
             
             # Now proceed with creating the scanner
             try:
@@ -153,10 +135,8 @@ class ScanningQueueConsumer:
                 
                 if scanner is None:
                     log(f"Unknown scanning algorithm name: {scanning_algo_name}", level="error")
-                    # Release lock and mark instance as inactive
+                    # Release lock since scanner creation failed
                     self.lock_manager.release_lock(algorithm_id, trading_frequency)
-                    scanner_instance.is_active = False
-                    scanner_instance.save()
                     return False
                 
                 # Store lock manager reference in scanner for heartbeat updates
@@ -183,10 +163,8 @@ class ScanningQueueConsumer:
                 return True
                 
             except Exception as e:
-                # Failed to start scanner, release lock and mark instance as inactive
+                # Failed to start scanner, release lock
                 self.lock_manager.release_lock(algorithm_id, trading_frequency)
-                scanner_instance.is_active = False
-                scanner_instance.save()
                 log(f"Error starting scanner: {str(e)}", level="error")
                 return False
             
@@ -221,6 +199,119 @@ class ScanningQueueConsumer:
             log(f"Error handling session termination: {str(e)}", level="error")
             return False
     
+
+    def _handle_resume_scanner(self, event_data: Dict[str, Any]) -> bool:
+        """
+        Handle resume scanner event by validating active trade sessions and starting scanner if needed.
+        
+        Args:
+            event_data: The event data containing algorithm_id and frequency
+            
+        Returns:
+            bool: True if scanner resumed successfully or no action needed, False otherwise
+        """
+        try:
+            algorithm_id = event_data.get('algorithm_id')
+            frequency = event_data.get('frequency')
+            
+            log(f"Resuming scanner for algorithm_id: {algorithm_id}, frequency: {frequency}")
+            
+            # Validate required parameters
+            if not algorithm_id or not frequency:
+                log("Missing algorithm_id or frequency in resume_scanner event", level="error")
+                return False
+            
+            # Get algorithm details
+            try:
+                scanning_algorithm = ScanningAlgorithm.objects.get(id=algorithm_id)
+                algorithm_name = scanning_algorithm.name
+            except ScanningAlgorithm.DoesNotExist:
+                log(f"Scanning algorithm with ID '{algorithm_id}' not found in database", level="error")
+                return False
+            
+            # Validate that there is at least one active trade session using this combination
+            active_sessions = TradeSession.objects.filter(
+                scanning_algorithm_id=algorithm_id,
+                trading_frequency=frequency,
+                status__in=['started'],  # Consider only started  as active
+                is_active=True
+            )
+            
+            if not active_sessions.exists():
+                log(f"No active trade sessions found for {algorithm_name}:{frequency}. Cannot resume scanner.")
+                return False
+            
+            log(f"Found {active_sessions.count()} active trade sessions for {algorithm_name}:{frequency}")
+            
+            # Check if lock already exists
+            lock_exists, current_owner = self.lock_manager.check_lock(algorithm_id, frequency)
+            
+            if lock_exists:
+                log(f"Lock already exists for {algorithm_name}:{frequency} (owner: {current_owner}). No action needed.")
+                return True
+            
+            # Try to acquire lock
+            lock_acquired = self.lock_manager.acquire_lock(algorithm_id, frequency)
+            
+            if not lock_acquired:
+                log(f"Could not acquire lock for scanner {algorithm_name}:{frequency}. Another container may have acquired it.")
+                return True  # Return True as this is expected behavior, not an error
+            
+            log(f"Successfully acquired lock for {algorithm_name}:{frequency}")
+            
+            # Lock acquired, no need to create database entry (removed scanner instances table)
+            log(f"Acquired lock for scanner {algorithm_name}:{frequency}, proceeding to start scanner")
+            
+            # Get first active session for configuration (they should all have same config)
+            first_session = active_sessions.first()
+            user_id = first_session.user_id.public_id  # Get the user's public_id
+            
+            # Start the scanner
+            try:
+                # Create data providers using the first active session's user
+                integration_provider = IntegrationServiceProvider(user_id)
+                tmu_provider = TMUServiceProvider(user_id)
+                
+                # Get scanner instance using factory
+                scanner = self._scanner_factory.get_scanner(algorithm_name, frequency)
+                
+                if scanner is None:
+                    log(f"Unknown scanning algorithm name: {algorithm_name}", level="error")
+                    # Release lock since scanner creation failed
+                    self.lock_manager.release_lock(algorithm_id, frequency)
+                    return False
+                
+                # Store lock manager reference in scanner for heartbeat updates
+                scanner._lock_manager = self.lock_manager
+                scanner._algorithm_id = algorithm_id
+                scanner._frequency = frequency
+                
+                # Configure the scanner
+                scanner.configure(
+                    trade_freq=frequency,
+                    user_id=user_id,
+                    trade_session_id=first_session.id,  # Use first session ID
+                    integration_provider=integration_provider,
+                    tmu_provider=tmu_provider
+                )
+                
+                # Start scanning
+                scanner.fetch_instrument_tokens_and_start_tracking(user_id, first_session.id, first_session.dummy)
+                
+                log(f"Successfully resumed scanner for {algorithm_name}:{frequency}")
+                return True
+                
+            except Exception as e:
+                # Failed to start scanner, release lock
+                self.lock_manager.release_lock(algorithm_id, frequency)
+                log(f"Error starting scanner: {str(e)}", level="error")
+                return False
+            
+        except Exception as e:
+            log(f"Error handling resume scanner: {str(e)}", level="error")
+            return False
+    
+
     def start_consuming(self):
         """Start consuming messages from the scanning queue called from the start_scanning_service"""
         try:

@@ -318,151 +318,165 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
         self.scan_instruments(instrument_list, user_id, trade_session_id, dummy)
 
     def scan_in_separate_thread(self, all_instruments):
+        """
+        Main scanner thread entry point.
+        Uses the template method pattern for lifecycle management.
+        """
         self._ensure_configured()
         
-        # Resume or start fresh
-        start_index = self.resume_or_start_scanning(all_instruments)
-        
+        # Initialize scanning state
         self._is_running = True
-        self.all_instruments = all_instruments
-        self.scan_cycle = self._get_current_cycle()
         self.cycle_start_time = current_ist()
         
-        log(f'Scanning started for {len(all_instruments)} instruments from index {start_index}')
-        
-        while not self._stop_event.is_set():
-            scan_start_time = current_ist()
-            eligible_instrument_counter = 0
-            
-            # Process instruments from resume point
-            for idx in range(start_index, len(all_instruments)):
-                if self._stop_event.is_set():
-                    break
-                    
-                instrument = all_instruments[idx]
-                symbol = instrument["trading_symbol"]
-                token = instrument["instrument_token"]
-                log(f'Scanning {symbol} now (index {idx + 1}/{len(all_instruments)})')
-                
-                # Test WebSocket publishing every 50 instruments
-                if (idx + 1) % 50 == 0:
-                    self._publish_scanner_update(
-                        'test_progress',
-                        f'Test Progress',
-                        f'Test: Scanned {idx + 1} of {len(all_instruments)} instruments',
-                        {
-                            'total_scanned': idx + 1,
-                            'total_instruments': len(all_instruments),
-                            'test_message': True
-                        }
-                    )
-                
-                is_eligible, eligibility_obj = self.is_eligible(symbol)
-                
-                if is_eligible:
-                    instrument_id = token
-                    eligible_instrument_counter += 1
-                    log(f"found next eligible instrument -- {eligible_instrument_counter} {symbol}")
-                    symbol_data_points = eligibility_obj[self.trade_frequency]["chart"]
-                    
-                    # Prepare raw instrument data
-                    raw_instrument_data = {
-                        "instrument_id": instrument_id,
-                        "trading_symbol": symbol,
-                        "support_price": float(symbol_data_points.trading_pair["support"]),
-                        "resistance_price": float(symbol_data_points.trading_pair["resistance"]),
-                        "required_action": self.__get_required_actions__(eligibility_obj["effective_trend"]),
-                        "market_price": float(symbol_data_points.market_price)
-                    }
-                    
-                    # Format using base class method to ensure standardization
-                    instrument_data = self.format_eligible_instrument(raw_instrument_data)
-                    
-                    # Publish comprehensive eligible instrument information
-                    trading_pair_data = symbol_data_points.trading_pair
-                    self._publish_scanner_update(
-                        'instrument_eligible',
-                        symbol,
-                        f'Eligible instrument found: {symbol}',
-                        {
-                            'eligible_count': eligible_instrument_counter,
-                            'effective_trend': eligibility_obj["effective_trend"].value,
-                            'reward_risk_ratio': trading_pair_data.get("reward_risk_ratio", 0),
-                            'support_price': float(symbol_data_points.trading_pair["support"]),
-                            'resistance_price': float(symbol_data_points.trading_pair["resistance"]),
-                            'market_price': float(symbol_data_points.market_price),
-                            'required_action': raw_instrument_data["required_action"],
-                            'volume': getattr(self, 'volume', 0),
-                            'last_price': symbol_data_points.market_price
-                        }
-                    )
-                    
-                    # This will now publish to ALL active trade sessions using this scanner using parent
-                    self.publish_eligible_instruments([instrument_data])
-                else:
-                    log(f'Not Eligible {eligibility_obj["message"]}')
-                
-                # Send progress update every progress_update_interval instruments
-                if (idx + 1) % self.progress_update_interval == 0:
-                    remaining_count = len(all_instruments) - (idx + 1)
-                    self._publish_scanner_update(
-                        'progress_update',
-                        f'Progress Update',
-                        f'Scanned {idx + 1} of {len(all_instruments)} instruments',
-                        {
-                            'total_scanned': idx + 1,
-                            'total_instruments': len(all_instruments),
-                            'remaining_count': remaining_count,
-                            'eligible_found': eligible_instrument_counter,
-                            'progress_percentage': round(((idx + 1) / len(all_instruments)) * 100, 1)
-                        }
-                    )
-                    
-                    # Update state periodically
-                    if self.state_manager:
-                        self._save_scanning_progress(idx, symbol)
-                    
-            # Cycle completed - update state and prepare for next cycle
-            if not self._stop_event.is_set():
-                scan_end_time = current_ist()
-                scan_duration = (scan_end_time - scan_start_time).total_seconds()
-                
-                # Send final progress update for completed cycle
-                self._publish_scanner_update(
-                    'cycle_completed',
-                    f'Scan Cycle {self.scan_cycle} Completed',
-                    f'Cycle {self.scan_cycle} completed - {eligible_instrument_counter} eligible instruments found',
-                    {
-                        'cycle_number': self.scan_cycle,
-                        'total_scanned': len(all_instruments),
-                        'total_instruments': len(all_instruments),
-                        'remaining_count': 0,
-                        'eligible_found': eligible_instrument_counter,
-                        'cycle_duration': scan_duration,
-                        'progress_percentage': 100
-                    }
-                )
-                
-                # Save final state for this cycle
-                if self.state_manager:
-                    final_index = len(all_instruments) - 1
-                    final_symbol = all_instruments[final_index]["trading_symbol"] if all_instruments else ""
-                    self._save_scanning_progress(final_index, final_symbol)
-                
-                self.scan_cycle += 1
-                
-                log(f"Scan cycle {self.scan_cycle - 1} completed - Duration: {scan_duration}s, Found: {eligible_instrument_counter}")
-                log(f'Last scan total time taken {scan_duration} seconds')
-                
-                # Reset start_index for next cycle
-                start_index = 0
-                
-                # Use wait instead of sleep to be interruptible
-                self._stop_event.wait(timeout=30)
+        # Use template method for lifecycle management
+        self.scan_with_lifecycle_management(all_instruments)
         
         # Scanner stopped
         self._is_running = False
-        log(f"Scanner thread for {self.trade_frequency} stopped after {self.scan_cycle} cycles")
+        log(f"Scanner thread for {self.trade_frequency} stopped after {getattr(self, 'scan_cycle', 1)} cycles")
+    
+    def perform_scan_cycle(self, all_instruments, start_index: int = 0) -> dict:
+        """
+        Implementation of the abstract method from BaseScannerInterface.
+        Performs a single scan cycle through the instruments.
+        
+        Args:
+            all_instruments: List of instruments to scan
+            start_index: Index to start scanning from (for resume functionality)
+            
+        Returns:
+            dict: Scan cycle results
+        """
+        scan_start_time = current_ist()
+        eligible_instrument_counter = 0
+        total_scanned = 0
+        
+        # Process instruments from resume point
+        for idx in range(start_index, len(all_instruments)):
+            if self._stop_event.is_set():
+                break
+                
+            instrument = all_instruments[idx]
+            symbol = instrument["trading_symbol"]
+            token = instrument["instrument_token"]
+            total_scanned = idx + 1
+            
+            log(f'Scanning {symbol} now (index {idx + 1}/{len(all_instruments)})')
+            
+            # Test WebSocket publishing every 50 instruments
+            if (idx + 1) % 50 == 0:
+                self._publish_scanner_update(
+                    'test_progress',
+                    f'Test Progress',
+                    f'Test: Scanned {idx + 1} of {len(all_instruments)} instruments',
+                    {
+                        'total_scanned': idx + 1,
+                        'total_instruments': len(all_instruments),
+                        'test_message': True
+                    }
+                )
+            
+            is_eligible, eligibility_obj = self.is_eligible(symbol)
+            
+            if is_eligible:
+                instrument_id = token
+                eligible_instrument_counter += 1
+                log(f"found next eligible instrument -- {eligible_instrument_counter} {symbol}")
+                symbol_data_points = eligibility_obj[self.trade_frequency]["chart"]
+                
+                # Prepare raw instrument data
+                raw_instrument_data = {
+                    "instrument_id": instrument_id,
+                    "trading_symbol": symbol,
+                    "support_price": float(symbol_data_points.trading_pair["support"]),
+                    "resistance_price": float(symbol_data_points.trading_pair["resistance"]),
+                    "required_action": self.__get_required_actions__(eligibility_obj["effective_trend"]),
+                    "market_price": float(symbol_data_points.market_price)
+                }
+                
+                # Format using base class method to ensure standardization
+                instrument_data = self.format_eligible_instrument(raw_instrument_data)
+                
+                # Publish comprehensive eligible instrument information
+                trading_pair_data = symbol_data_points.trading_pair
+                self._publish_scanner_update(
+                    'instrument_eligible',
+                    symbol,
+                    f'Eligible instrument found: {symbol}',
+                    {
+                        'eligible_count': eligible_instrument_counter,
+                        'effective_trend': eligibility_obj["effective_trend"].value,
+                        'reward_risk_ratio': trading_pair_data.get("reward_risk_ratio", 0),
+                        'support_price': float(symbol_data_points.trading_pair["support"]),
+                        'resistance_price': float(symbol_data_points.trading_pair["resistance"]),
+                        'market_price': float(symbol_data_points.market_price),
+                        'required_action': raw_instrument_data["required_action"],
+                        'volume': getattr(self, 'volume', 0),
+                        'last_price': symbol_data_points.market_price
+                    }
+                )
+                
+                # This will now publish to ALL active trade sessions using this scanner using parent
+                self.publish_eligible_instruments([instrument_data])
+            else:
+                log(f'Not Eligible {eligibility_obj["message"]}')
+            
+            # Send progress update every progress_update_interval instruments
+            if (idx + 1) % self.progress_update_interval == 0:
+                remaining_count = len(all_instruments) - (idx + 1)
+                self._publish_scanner_update(
+                    'progress_update',
+                    f'Progress Update',
+                    f'Scanned {idx + 1} of {len(all_instruments)} instruments',
+                    {
+                        'total_scanned': idx + 1,
+                        'total_instruments': len(all_instruments),
+                        'remaining_count': remaining_count,
+                        'eligible_found': eligible_instrument_counter,
+                        'progress_percentage': round(((idx + 1) / len(all_instruments)) * 100, 1)
+                    }
+                )
+                
+                # Update state periodically
+                if self.state_manager:
+                    self._save_scanning_progress(idx, symbol)
+        
+        # Calculate scan duration
+        scan_end_time = current_ist()
+        scan_duration = (scan_end_time - scan_start_time).total_seconds()
+        
+        # Send final progress update for completed cycle
+        if not self._stop_event.is_set():
+            self._publish_scanner_update(
+                'cycle_completed',
+                f'Scan Cycle {getattr(self, "scan_cycle", 1)} Completed',
+                f'Cycle {getattr(self, "scan_cycle", 1)} completed - {eligible_instrument_counter} eligible instruments found',
+                {
+                    'cycle_number': getattr(self, 'scan_cycle', 1),
+                    'total_scanned': total_scanned,
+                    'total_instruments': len(all_instruments),
+                    'remaining_count': 0,
+                    'eligible_found': eligible_instrument_counter,
+                    'cycle_duration': scan_duration,
+                    'progress_percentage': 100
+                }
+            )
+            
+            # Save final state for this cycle
+            if self.state_manager and total_scanned > 0:
+                final_index = total_scanned - 1
+                final_symbol = all_instruments[final_index]["trading_symbol"] if all_instruments else ""
+                self._save_scanning_progress(final_index, final_symbol)
+        
+        log(f"Scan cycle completed - Duration: {scan_duration}s, Found: {eligible_instrument_counter}")
+        
+        # Return cycle results for template method
+        return {
+            'eligible_count': eligible_instrument_counter,
+            'total_scanned': total_scanned,
+            'scan_duration': scan_duration,
+            'should_reset_start_index': True  # Always reset to 0 for next cycle
+        }
 
 
     def is_eligible(self, symbol):

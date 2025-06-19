@@ -451,6 +451,20 @@ class TradeSession:
             
             logger.info(f"[TMU-Library] Successfully resumed trade session: {trade_session_id}")
             
+            # Publish resume scanner event to ensure scanner is running
+            try:
+                event_publisher = get_trade_session_event_publisher()
+                resume_event_success = event_publisher.publish_resume_scanner_event(trade_session)
+                
+                if resume_event_success:
+                    logger.info(f"[TMU-Library] Successfully published resume scanner event for session: {trade_session_id}")
+                else:
+                    logger.warning(f"[TMU-Library] Failed to publish resume scanner event for session: {trade_session_id}")
+                    
+            except Exception as e:
+                # Don't fail the resume operation if event publishing fails
+                logger.error(f"[TMU-Library] Error publishing resume scanner event for session {trade_session_id}: {str(e)}")
+            
             # Return success response
             response_data = {
                 'success': True,

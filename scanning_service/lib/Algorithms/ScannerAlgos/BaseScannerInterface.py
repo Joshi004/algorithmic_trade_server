@@ -154,6 +154,120 @@ class BaseScannerInterface(ABC):
         """
         pass
     
+    @abstractmethod
+    def perform_scan_cycle(self, all_instruments, start_index: int = 0) -> dict:
+        """
+        Perform a single scan cycle through the instruments.
+        This method must be implemented by each scanner to define its specific scanning logic.
+        
+        Args:
+            all_instruments: List of instruments to scan
+            start_index: Index to start scanning from (for resume functionality)
+            
+        Returns:
+            dict: Scan cycle results with keys:
+                - 'eligible_count': Number of eligible instruments found
+                - 'total_scanned': Total instruments processed in this cycle
+                - 'scan_duration': Duration of scan in seconds
+                - 'should_reset_start_index': Boolean, True to start next cycle from 0
+        """
+        pass
+    
+    def scan_with_lifecycle_management(self, all_instruments):
+        """
+        Template method that manages the complete scanner lifecycle.
+        This method enforces the active session check after each cycle and handles
+        the scanner stopping logic. All scanners must use this pattern.
+        
+        Subclasses should NOT override this method. Instead, implement perform_scan_cycle().
+        
+        Args:
+            all_instruments: List of instruments to scan
+        """
+        self._ensure_configured()
+        
+        # Resume or start fresh
+        start_index = self.resume_or_start_scanning(all_instruments)
+        
+        # Initialize scanning state
+        if not hasattr(self, '_is_running'):
+            self._is_running = True
+        if not hasattr(self, 'scan_cycle'):
+            self.scan_cycle = self._get_current_cycle() if hasattr(self, '_get_current_cycle') else 1
+        
+        # Store instruments reference for progress tracking
+        self.all_instruments = all_instruments
+        
+        log(f'Scanning started for {len(all_instruments)} instruments from index {start_index}')
+        
+        # Main scanning loop with mandatory lifecycle management
+        while not (hasattr(self, '_stop_event') and self._stop_event and self._stop_event.is_set()):
+            cycle_start_time = self._get_current_time()
+            
+            try:
+                # Delegate actual scanning logic to subclass
+                cycle_results = self.perform_scan_cycle(all_instruments, start_index)
+                
+                # Extract results
+                eligible_count = cycle_results.get('eligible_count', 0)
+                total_scanned = cycle_results.get('total_scanned', len(all_instruments))
+                scan_duration = cycle_results.get('scan_duration', 0)
+                should_reset_start_index = cycle_results.get('should_reset_start_index', True)
+                
+                # Update cycle counter
+                if hasattr(self, 'scan_cycle'):
+                    self.scan_cycle += 1
+                
+                log(f"Scan cycle completed - Duration: {scan_duration}s, Found: {eligible_count} eligible instruments")
+                
+                # MANDATORY: Check for active trade sessions after each cycle
+                if not self.has_active_trade_sessions():
+                    log(f"No active trade sessions found for scanner. Stopping scanner gracefully.")
+                    
+                    # Notify about scanner stopping (if scanner supports WebSocket updates)
+                    if hasattr(self, '_publish_scanner_update'):
+                        self._publish_scanner_update(
+                            'scanner_stopped',
+                            'Scanner Stopped',
+                            f'Scanner stopped - no active trade sessions found',
+                            {
+                                'reason': 'no_active_sessions',
+                                'total_cycles_completed': getattr(self, 'scan_cycle', 1) - 1
+                            }
+                        )
+                    
+                    break  # Exit the scanning loop
+                
+                log(f"Active trade sessions found. Continuing to next scan cycle.")
+                
+                # Reset start_index for next cycle if requested
+                if should_reset_start_index:
+                    start_index = 0
+                
+                # Brief pause between cycles (if stop event supports wait)
+                if hasattr(self, '_stop_event') and hasattr(self._stop_event, 'wait'):
+                    self._stop_event.wait(timeout=30)
+                else:
+                    # Fallback for basic implementations
+                    import time
+                    time.sleep(30)
+                    
+            except Exception as e:
+                log(f"Error in scan cycle: {str(e)}", level="error")
+                # Continue to next cycle after error
+                import time
+                time.sleep(5)
+        
+        # Scanner stopped
+        if hasattr(self, '_is_running'):
+            self._is_running = False
+        log(f"Scanner lifecycle management completed after {getattr(self, 'scan_cycle', 1)} cycles")
+    
+    def _get_current_time(self):
+        """Get current time - can be overridden by subclasses for custom time handling"""
+        from scanning_service.lib.utils.common import current_ist
+        return current_ist()
+    
     def format_eligible_instrument(self, instrument_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Format instrument data according to the standardized instrument data format.
@@ -283,4 +397,48 @@ class BaseScannerInterface(ABC):
         
         except Exception as e:
             log(f"Error fetching active trade sessions: {str(e)}", level="error")
+    
+    def has_active_trade_sessions(self, scanner_type: str = None) -> bool:
+        """
+        Check if there are any active trade sessions using this scanner combination.
+        This method should be called after each scan cycle to determine if the scanner
+        should continue running or stop gracefully.
+        
+        Args:
+            scanner_type: Type of scanner (auto-detected from class name if not provided)
+            
+        Returns:
+            bool: True if active sessions exist, False otherwise
+        """
+        self._ensure_configured()
+        
+        # Auto-detect scanner type from class name if not provided
+        if scanner_type is None:
+            scanner_type = self.__class__.__name__.lower().replace('scanner', '')
+        
+        # Import here to avoid circular imports
+        from trade_management_unit.models.ScanningAlgorithm import ScanningAlgorithm
+        
+        try:
+            # Find algorithm ID by name from database
+            scanning_algo_obj = ScanningAlgorithm.objects.get(name=scanner_type)
+            scanning_algo_id = scanning_algo_obj.id
+            
+            # Fetch active trade sessions for this scanner algorithm ID and frequency
+            active_sessions = self.tmu_provider.fetch_active_trade_sessions(
+                scanning_algo_id=scanning_algo_id,
+                trading_frequency=self.trade_frequency
+            )
+            
+            session_count = len(active_sessions) if active_sessions else 0
+            log(f"Active session check for {scanner_type}:{self.trade_frequency} - Found {session_count} active sessions")
+            
+            return session_count > 0
+            
+        except ScanningAlgorithm.DoesNotExist:
+            log(f"Scanner algorithm '{scanner_type}' not found in database", level="error")
+            return False
+        except Exception as e:
+            log(f"Error checking active trade sessions: {str(e)}", level="error")
+            return False  # Assume no active sessions on error to allow graceful shutdown
     

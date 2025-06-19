@@ -225,6 +225,69 @@ services:
     networks:
       - ats-network
 
+  # Dedicated session processor monitor service - monitors for orphaned processors
+  ats-session-monitor:
+    container_name: ats-session-monitor
+    build: .
+    restart: always
+    depends_on:
+      - ats-migrations
+    volumes:
+      - .:/app
+    environment:
+      # Database Configuration
+      - DATABASE_ENGINE=django.db.backends.mysql
+      - DATABASE_NAME=ats_db
+      - DATABASE_USER=ats_user
+      - DATABASE_PASSWORD=ats_password
+      - DATABASE_HOST=ats-db
+      - DATABASE_PORT=3306
+      
+      # Security Keys Configuration
+      - DJANGO_SECRET_KEY=prod-django-secret-key-change-in-production-make-it-50-chars-long
+      - JWT_LONG_LIVED_TOKEN_SECRET=jwt-llt-secret-key-32-chars-change-this
+      - JWT_SHORT_LIVED_TOKEN_SECRET=jwt-slt-secret-key-32-chars-change-this
+      - JWT_WEBSOCKET_TOKEN_SECRET=jwt-websocket-secret-key-32-chars-change-this
+      - BROKER_API_ENCRYPTION_SECRET=broker-encryption-key-32-chars-change-this-for-production
+      - INTERNAL_SERVICE_TOKEN=internal-service-secret-token-change-in-production
+      
+      # Redis Configuration
+      - REDIS_HOST=ats-redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+      - REDIS_SOCKET_TIMEOUT=5
+      - REDIS_SOCKET_CONNECT_TIMEOUT=5
+      - REDIS_HEALTH_CHECK_INTERVAL=30
+      
+      # Redis Stream Configuration
+      - REDIS_STREAM_SCANNING_QUEUE=scanning_queue
+      - REDIS_STREAM_INITIATION_QUEUE=initiation_queue
+      - REDIS_STREAM_SCANNER_STATUS=scanner_status_stream
+      
+      # Monitor Configuration
+      - MONITOR_INTERVAL_SECONDS=300  # 5 minutes
+      - MONITOR_DRY_RUN=false
+      - MONITOR_LOG_LEVEL=INFO
+      - MONITOR_PROCESSOR_TYPE=scanner
+      
+      # Django Configuration
+      - DJANGO_DEBUG=True
+      - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,ats-app,ats-django-app,ats-scanning-service,ats-session-monitor
+      - DJANGO_SETTINGS_MODULE=ats_base.settings
+    command: >
+      sh -c "
+        echo '⏳ Waiting for database to be ready...' &&
+        until nc -z -v -w30 ats-db 3306; do
+          echo 'Waiting for database connection...'
+          sleep 5
+        done &&
+        echo '✅ Database connection established!' &&
+        echo '🔍 Starting session processor monitor...' &&
+        python manage.py monitor_session_processors --daemon --processor-type scanner
+      "
+    networks:
+      - ats-network
+
 volumes:
   ats_mysql_data:
   ats_redis_data:
