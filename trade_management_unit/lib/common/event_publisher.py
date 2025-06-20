@@ -59,6 +59,7 @@ class TradeSessionEventPublisher:
         """
         Publish resume scanner event to Redis stream.
         This ensures a scanner instance is running for the trade session's algorithm and frequency.
+        Uses the same event structure as trade_session_initiated for consistency.
         
         Args:
             trade_session_obj: TradeSession model instance
@@ -67,15 +68,11 @@ class TradeSessionEventPublisher:
             bool: True if published successfully, False otherwise
         """
         try:
-            # Format resume scanner event data
-            event_data = {
-                "event_id": str(uuid.uuid4()),
-                "event_type": "resume_scanner",
-                "timestamp": current_ist().isoformat(),
-                "algorithm_id": trade_session_obj.scanning_algorithm.id,
-                "frequency": trade_session_obj.trading_frequency,
-                "triggered_by_session": trade_session_obj.id,
-            }
+            # Use the same event formatting as trade_session_initiated but with different event_type
+            event_data = self._format_trade_session_event(trade_session_obj)
+            
+            # Override the event_type to indicate this is a resume operation
+            event_data["event_type"] = "resume_scanner"
             
             # Publish to Redis stream
             success = self.redis_client.publish_to_stream(
@@ -84,7 +81,7 @@ class TradeSessionEventPublisher:
             )
             
             if success:
-                log(f"Published resume scanner event for algorithm_id: {trade_session_obj.scanning_algorithm.id}, frequency: {trade_session_obj.trading_frequency}")
+                log(f"Published resume scanner event for {trade_session_obj.scanning_algorithm.name}:{trade_session_obj.trading_frequency} (session: {trade_session_obj.id})")
             else:
                 log(f"Failed to publish resume scanner event for session {trade_session_obj.id}", level="error")
             

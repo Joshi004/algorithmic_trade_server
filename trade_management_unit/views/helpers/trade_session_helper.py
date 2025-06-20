@@ -132,7 +132,8 @@ class TradeSessionViewHelper:
         """
         query_params = request.GET
         trading_frequency = query_params.get("trading_frequency")
-        is_dummy = bool(query_params.get("dummy"))
+        dummy_param = query_params.get("dummy")
+        is_dummy = dummy_param in ('1', 'true', 'True', 'TRUE') if dummy_param is not None else False
         scanning_algorithm_name = query_params.get("scanning_algorithm_name")
         initiation_algorithm_name = query_params.get("initiation_algorithm_name")
         termination_algorithm_name = query_params.get("termination_algorithm_name")
