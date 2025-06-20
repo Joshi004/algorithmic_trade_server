@@ -1,45 +1,34 @@
-import logging
-from datetime import datetime
+"""
+Standardized logging for Initiation Service
 
+This module provides standardized logging using the centralized ATS logging utilities.
+"""
+
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+
+from ats_base.logging_utils import create_service_logger
+
+# Create standardized logger for initiation service
+logger = create_service_logger('initiation_service', 'initiation_utils')
 
 def log(message: str, level: str = "info") -> None:
     """
-    Simple logging function for initiation service.
+    Legacy logging function - migrated to use standardized logging.
     
     Args:
-        message (str): The message to log
-        level (str): Log level - "info", "warning", "error", "debug"
+        message: The message to log
+        level: Log level (debug, info, warning, error, critical)
     """
-    # Get the logger for initiation service
-    logger = logging.getLogger('initiation_service')
-    
-    # Set default level if not configured
-    if not logger.handlers:
-        handler = logging.StreamHandler()
-        formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
-        logger.setLevel(logging.INFO)
-    
-    # Map string levels to logging levels
+    # Map legacy levels to new logger methods
     level_mapping = {
-        "debug": logging.DEBUG,
-        "info": logging.INFO,
-        "warning": logging.WARNING,
-        "error": logging.ERROR,
-        "critical": logging.CRITICAL
+        'debug': logger.debug,
+        'info': logger.info, 
+        'warning': logger.warning,
+        'error': logger.error,
+        'critical': logger.critical
     }
     
-    log_level = level_mapping.get(level.lower(), logging.INFO)
-    
-    # Create timestamped message
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    formatted_message = f"[{timestamp}] [INITIATION_SERVICE] {message}"
-    
-    # Log the message
-    logger.log(log_level, formatted_message)
-    
-    # Also print to console for immediate visibility in Docker
-    print(formatted_message) 
+    log_func = level_mapping.get(level.lower(), logger.info)
+    log_func(message) 

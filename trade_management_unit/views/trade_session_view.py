@@ -1,8 +1,15 @@
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
+
 from django.http import JsonResponse
 from trade_management_unit.lib.TradeSession.TradeSession import TradeSession
 from trade_management_unit.models.TradeSession import TradeSession as TradeSessionModel
 from trade_management_unit.views.helpers.trade_session_helper import TradeSessionViewHelper
-import logging
+from ats_base.logging_utils import create_service_logger, log_api_call
+
+# Create standardized logger for TMU views
+logger = create_service_logger('trade_management_unit', 'views')
 
 
 def initiate_trade_session(request, *args, **kwargs):
@@ -60,21 +67,24 @@ def get_new_session_param_options(request, *args, **kwargs):
         }, status=500)
 
 
+@log_api_call(logger, endpoint='get_active_trade_sessions', method='GET')
 def get_active_trade_sessions(request, *args, **kwargs):
     """
     API endpoint to get active trade sessions with optional filtering.
     """
-    logger = logging.getLogger(__name__)
-    
     try:
-        logger.info(f"[TMU] get_active_trade_sessions called with method: {request.method}")
+        logger.debug("Validating and extracting parameters for active sessions query")
         
         # Validate and extract parameters
         params, param_error = TradeSessionViewHelper.validate_and_extract_active_sessions_params(request)
         if param_error:
+            logger.warning("Parameter validation failed for active sessions query")
             return param_error
         
-        logger.info(f"[TMU] Calling TradeSessionModel.fetch_active_trade_session with params")
+        logger.debug("Querying active trade sessions", context={
+            'scanning_algo_id': params['scanning_algo_id'],
+            'trading_frequency': params['trading_frequency']
+        })
         
         # Use the model method with optional parameters
         sessions = TradeSessionModel.fetch_active_trade_session(
@@ -82,7 +92,9 @@ def get_active_trade_sessions(request, *args, **kwargs):
             trading_freq=params['trading_frequency']
         )
         
-        logger.info(f"[TMU] Retrieved {len(sessions)} sessions from model")
+        logger.info("Active trade sessions query completed", context={
+            'sessions_count': len(sessions)
+        })
         
         # Format response data
         sessions_data = []
@@ -103,18 +115,15 @@ def get_active_trade_sessions(request, *args, **kwargs):
                 'termination_algorithm_name': session.termination_algorithm.name
             })
         
-        logger.info(f"[TMU] Formatted {len(sessions_data)} sessions data")
-        
         response_data = {
             'data': sessions_data,
             'meta': {'count': len(sessions_data)}
         }
         
-        logger.info(f"[TMU] Returning successful response with {len(sessions_data)} sessions")
         return JsonResponse(response_data, status=200)
         
     except Exception as e:
-        logger.error(f"[TMU] Exception in get_active_trade_sessions: {str(e)}", exc_info=True)
+        logger.error("Failed to fetch active trade sessions", context={'error': str(e)})
         return JsonResponse({
             'error': str(e),
             'message': 'Failed to fetch active trade sessions'

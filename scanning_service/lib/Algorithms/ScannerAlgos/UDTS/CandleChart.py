@@ -170,7 +170,7 @@ class CandleChart:
             self.trading_pair=trading_pair
             return
 
-        print("!! See from where mion rewrad is coming")
+        # TODO: Review reward calculation logic
         for support in support_points:
             for resist in resist_points:
                 if(self.__is_valid_pair(price,support,resist,self.trend,min_reward)):

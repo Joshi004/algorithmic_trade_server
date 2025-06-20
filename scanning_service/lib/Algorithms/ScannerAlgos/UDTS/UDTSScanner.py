@@ -1,4 +1,8 @@
 from scanning_service.lib.utils.logger import log
+from ats_base.logging_utils import log_scanner_result, create_service_logger
+
+# Create business logger for scanner decisions  
+business_logger = create_service_logger('scanning_service', 'udts_scanner')
 from scanning_service.lib.Algorithms.ScannerAlgos.UDTS.CandleChart import CandleChart
 from scanning_service.lib.Algorithms.ScannerAlgos.ScannerSingletonMeta import ScannerSingletonMeta
 from scanning_service.lib.Algorithms.ScannerAlgos.BaseScannerInterface import BaseScannerInterface
@@ -581,8 +585,33 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
         
         # Final eligibility decision based on minimum reward-risk threshold
         if current_reward_risk_ratio > MINIMUM_REWARD_RISK_RATIO:
+            log_scanner_result(
+                logger=business_logger,
+                symbol=symbol,
+                eligible=True,
+                algorithm="UDTS",
+                metrics={
+                    'reward_risk_ratio': current_reward_risk_ratio,
+                    'consensus_trend': consensus_trend.value,
+                    'trading_pairs_count': len(valid_trading_pairs),
+                    'minimum_threshold': MINIMUM_REWARD_RISK_RATIO
+                }
+            )
             return True, eligibility_data
 
+        log_scanner_result(
+            logger=business_logger,
+            symbol=symbol,
+            eligible=False,
+            algorithm="UDTS",
+            metrics={
+                'reward_risk_ratio': current_reward_risk_ratio,
+                'consensus_trend': consensus_trend.value,
+                'trading_pairs_count': len(valid_trading_pairs) if valid_trading_pairs else 0,
+                'minimum_threshold': MINIMUM_REWARD_RISK_RATIO,
+                'rejection_reason': 'Below minimum reward-risk ratio'
+            }
+        )
         return False, eligibility_data
 
     def get_volume_eligibility(self, quote):
@@ -621,7 +650,7 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
     def get_udts_eligibility(self,symbol,trade_freq):
         self._ensure_configured()
         
-        print("get token and send hereh !!! nOt Working !!!!")
+        log("UDTS eligibility check starting", level="debug")
         is_tradable,eligibility_obj =  self.is_eligible(symbol)
         result = eligibility_obj[trade_freq]["chart"]
         response_obj = {

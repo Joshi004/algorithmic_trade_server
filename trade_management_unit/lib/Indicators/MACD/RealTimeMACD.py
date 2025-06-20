@@ -49,7 +49,8 @@ class RealTimeMACD(metaclass=IndicitorSingletonMeta):
         self.__update_db(initial_data)
     
     def __update_db(self,tick_data):
-        print("Updating DB")
+        # Database update in progress
+        pass
 
 
 

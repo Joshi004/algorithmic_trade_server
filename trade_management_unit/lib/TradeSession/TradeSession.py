@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+
 from trade_management_unit.Constants.TmuConstants import FREQUENCY
 from trade_management_unit.models.ScanningAlgorithm import ScanningAlgorithm
 from trade_management_unit.models.InitiationAlgorithm import InitiationAlgorithm
@@ -9,7 +13,15 @@ from trade_management_unit.lib.common.event_publisher import get_trade_session_e
 from ats_gateway.models.User import User
 from django.db.models import Count, Sum, Max, Q
 from decimal import Decimal
-import logging
+from ats_base.logging_utils import (
+    create_service_logger, 
+    log_session_state_change, 
+    log_execution_time,
+    log_database_operation
+)
+
+# Create standardized logger for TMU library
+logger = create_service_logger('trade_management_unit', 'trade_session_lib')
 
 
 class TradeSession:
@@ -170,48 +182,54 @@ class TradeSession:
             ValueError: For validation errors
             Exception: For other errors
         """
-        logger = logging.getLogger(__name__)
-        
         try:
-            logger.info(f"[TMU-Library] get_user_trade_sessions called for user: {user_id_str}")
+            # Build context for logging
+            search_context = {
+                'user_id': user_id_str,
+                'scanning_algorithm_id': scanning_algorithm_id,
+                'initiation_algorithm_id': initiation_algorithm_id,
+                'termination_algorithm_id': termination_algorithm_id,
+                'is_dummy': is_dummy,
+                'trading_frequency': trading_frequency,
+                'status': status,
+                'start_date': start_date,
+                'end_date': end_date
+            }
+            
+            logger.debug("Building user trade sessions query", context=search_context)
             
             # Build query starting with user filter
             query = TradeSessionModel.objects.filter(user_id=user_id_str)
-            logger.info(f"[TMU-Library] Base query: user_id={user_id_str}")
             
             # Apply optional filters
             if scanning_algorithm_id:
                 query = query.filter(scanning_algorithm_id=scanning_algorithm_id)
-                logger.info(f"[TMU-Library] Added filter: scanning_algorithm_id={scanning_algorithm_id}")
             
             if initiation_algorithm_id:
                 query = query.filter(initiation_algorithm_id=initiation_algorithm_id)
-                logger.info(f"[TMU-Library] Added filter: initiation_algorithm_id={initiation_algorithm_id}")
             
             if termination_algorithm_id:
                 query = query.filter(termination_algorithm_id=termination_algorithm_id)
-                logger.info(f"[TMU-Library] Added filter: termination_algorithm_id={termination_algorithm_id}")
             
             if is_dummy is not None:
                 query = query.filter(dummy=is_dummy)
-                logger.info(f"[TMU-Library] Added filter: dummy={is_dummy}")
             
             if trading_frequency:
                 query = query.filter(trading_frequency=trading_frequency)
-                logger.info(f"[TMU-Library] Added filter: trading_frequency={trading_frequency}")
             
             if status:
                 query = query.filter(status=status)
-                logger.info(f"[TMU-Library] Added filter: status={status}")
             
             # Handle date range filtering
             if start_date and end_date:
                 query = query.filter(started_at__gte=start_date, started_at__lte=end_date)
-                logger.info(f"[TMU-Library] Added date range filter: {start_date} to {end_date}")
             
             # Execute query and get results
             sessions = list(query.order_by('-started_at'))
-            logger.info(f"[TMU-Library] Retrieved {len(sessions)} sessions from database")
+            logger.info("User trade sessions query completed", context={
+                'sessions_found': len(sessions),
+                'user_id': user_id_str
+            })
             
             # Format response data with specified fields
             sessions_data = []
@@ -259,8 +277,6 @@ class TradeSession:
             ValueError: For validation errors
             Exception: For other errors
         """
-        logger = logging.getLogger(__name__)
-        
         try:
             logger.info(f"[TMU-Library] get_trade_session_details called for session: {trade_session_id}")
             
@@ -375,10 +391,12 @@ class TradeSession:
             Exception: For other errors
         """
         from trade_management_unit.lib.common.Utils.Utils import current_ist
-        logger = logging.getLogger(__name__)
         
         try:
-            logger.info(f"[TMU-Library] pause_trade_session called for session: {trade_session_id}, user: {user_id_str}")
+            logger.debug("Pause trade session initiated", context={
+                'session_id': trade_session_id,
+                'user_id': user_id_str
+            })
             
             # Get the trade session (validation already done in helper)
             trade_session = TradeSessionModel.objects.get(id=trade_session_id, user_id=user_id_str)
@@ -388,11 +406,24 @@ class TradeSession:
                 raise ValueError(f"Cannot pause session with status '{trade_session.status}'. Only 'started' sessions can be paused.")
             
             # Update session status and is_active
+            old_status = trade_session.status
             trade_session.status = 'paused'
             trade_session.is_active = False
             trade_session.save()
             
-            logger.info(f"[TMU-Library] Successfully paused trade session: {trade_session_id}")
+            # Log business decision for session state change
+            log_session_state_change(
+                logger=logger,
+                session_id=str(trade_session_id),
+                old_state=old_status,
+                new_state='paused',
+                reason='User initiated pause'
+            )
+            
+            logger.info("Trade session paused successfully", context={
+                'session_id': trade_session_id,
+                'user_id': user_id_str
+            })
             
             # Return success response
             response_data = {
@@ -432,10 +463,12 @@ class TradeSession:
             Exception: For other errors
         """
         from trade_management_unit.lib.common.Utils.Utils import current_ist
-        logger = logging.getLogger(__name__)
         
         try:
-            logger.info(f"[TMU-Library] resume_trade_session called for session: {trade_session_id}, user: {user_id_str}")
+            logger.debug("Resume trade session initiated", context={
+                'session_id': trade_session_id,
+                'user_id': user_id_str
+            })
             
             # Get the trade session (validation already done in helper)
             trade_session = TradeSessionModel.objects.get(id=trade_session_id, user_id=user_id_str)
@@ -445,11 +478,24 @@ class TradeSession:
                 raise ValueError(f"Cannot resume session with status '{trade_session.status}'. Only 'paused' sessions can be resumed.")
             
             # Update session status and is_active
+            old_status = trade_session.status
             trade_session.status = 'started'
             trade_session.is_active = True
             trade_session.save()
             
-            logger.info(f"[TMU-Library] Successfully resumed trade session: {trade_session_id}")
+            # Log business decision for session state change
+            log_session_state_change(
+                logger=logger,
+                session_id=str(trade_session_id),
+                old_state=old_status,
+                new_state='started',
+                reason='User initiated resume'
+            )
+            
+            logger.info("Trade session resumed successfully", context={
+                'session_id': trade_session_id,
+                'user_id': user_id_str
+            })
             
             # Publish resume scanner event to ensure scanner is running
             try:

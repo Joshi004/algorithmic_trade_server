@@ -86,7 +86,7 @@ class UdtsSlto(metaclass=TrackerAlgoMeta):
             except Exception as e:
                 log(f"An error occurred: trade_id : {trade_id} {e}", "error")
                 raise (f"(!!!!! Order Placed On Zerodha but not updated in DB trade_id : {trade_id})")
-                print(f"(!!!!! Order Placed On Zerodha but not updated in DB trade_id : {trade_id})")
+                                    # TODO: Fix database update issue for trade_id after Zerodha order placement
         return (trade, order)
 
     def square_off_order_on_zerodha(self, trading_symbol, action, quantity, user_id, dummy, market_price):

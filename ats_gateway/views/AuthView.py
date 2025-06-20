@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
+
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework import status
@@ -8,11 +12,11 @@ from ..serializers.LoginSerializer import LoginSerializer
 # No longer needed as we use the header token validated by middleware
 # from ..serializers.TokenRefreshSerializer import TokenRefreshSerializer
 from ..utils.jwt_utils import generate_llt, generate_slt, generate_websocket_token, SLT_EXPIRY_MINUTES, WEBSOCKET_TOKEN_EXPIRY_SECONDS
-import logging
 import datetime
+from ats_base.logging_utils import create_service_logger, log_api_call
 
-# Get logger
-logger = logging.getLogger(__name__)
+# Create standardized logger for ATS Gateway views
+logger = create_service_logger('ats_gateway', 'auth_views')
 
 
 @api_view(['POST'])
