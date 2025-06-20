@@ -192,7 +192,7 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
             progress = self.state_manager.get_progress()
             
             if not progress:
-                log("No saved progress found, starting from beginning")
+                # log("No saved progress found, starting from beginning")
                 return 0
             
             # Validate progress is still relevant
