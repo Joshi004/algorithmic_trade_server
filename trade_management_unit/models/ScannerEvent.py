@@ -16,7 +16,7 @@ class ScannerEvent(models.Model):
             models.Index(fields=['trade_session_id']),
             models.Index(fields=['event_type']),
             models.Index(fields=['timestamp']),
-            models.Index(fields=['scanning_algorithm']),
+            models.Index(fields=['scanning_algorithm_name']),
             models.Index(fields=['instrument']),
         ]
 
@@ -36,10 +36,10 @@ class ScannerEvent(models.Model):
     required_action = models.CharField(max_length=10, null=True, blank=True)  # 'buy', 'sell', or null
     market_price = models.DecimalField(max_digits=12, decimal_places=2)
     
-    # Algorithm foreign keys
-    scanning_algorithm = models.ForeignKey(ScanningAlgorithm, on_delete=models.CASCADE)
-    initiation_algorithm = models.ForeignKey(InitiationAlgorithm, on_delete=models.CASCADE)
-    termination_algorithm = models.ForeignKey(TerminationAlgorithm, on_delete=models.CASCADE)
+    # Algorithm foreign keys based on names for data integrity
+    scanning_algorithm_name = models.ForeignKey(ScanningAlgorithm, to_field='name', on_delete=models.CASCADE)
+    initiation_algorithm_name = models.ForeignKey(InitiationAlgorithm, to_field='name', on_delete=models.CASCADE)
+    termination_algorithm_name = models.ForeignKey(TerminationAlgorithm, to_field='name', on_delete=models.CASCADE)
     
     created_at = models.DateTimeField(auto_now_add=True)
 

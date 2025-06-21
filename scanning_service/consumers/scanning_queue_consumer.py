@@ -2,6 +2,8 @@ import json
 import time
 import redis
 import os
+import signal
+import sys
 from datetime import datetime
 from typing import Dict, Any, Optional
 
@@ -15,6 +17,7 @@ from scanning_service.lib.data_providers import IntegrationServiceProvider, TMUS
 from integration_service.lib.common.system_user_utils import get_system_user_id
 # Removed ScannerInstance import - no longer using scanner instances table
 from trade_management_unit.models import ScanningAlgorithm, TradeSession
+import traceback
 
 
 class ScanningQueueConsumer:
@@ -39,7 +42,20 @@ class ScanningQueueConsumer:
         self._running = False
         self._scanner_factory = ScannerAlgoFactory()
         
+        # Set up signal handlers for graceful shutdown
+        self._setup_signal_handlers()
+        
         log(f"Initialized ScanningQueueConsumer with consumer name: {self.consumer_name}")
+    
+    def _setup_signal_handlers(self):
+        """Setup signal handlers for graceful shutdown"""
+        def signal_handler(signum, frame):
+            log(f"Received signal {signum}, initiating graceful shutdown...")
+            self.stop_consuming()
+        
+        # Handle SIGTERM and SIGINT (Ctrl+C)
+        signal.signal(signal.SIGTERM, signal_handler)
+        signal.signal(signal.SIGINT, signal_handler)
     
 
     
@@ -244,10 +260,23 @@ class ScanningQueueConsumer:
                 )
                 
                 # Start scanning in a separate thread
-                scanner.fetch_instrument_tokens_and_start_tracking(user_id, trade_session_id, is_dummy)
+                log(f"🚀 Starting scanner.fetch_instrument_tokens_and_start_tracking for {scanning_algo_name}:{trading_frequency}")
+                log(f"📍 Parameters: user_id={user_id}, trade_session_id={trade_session_id}, is_dummy={is_dummy}")
+                
+                try:
+                    scanner.fetch_instrument_tokens_and_start_tracking(user_id, trade_session_id, is_dummy)
+                    log(f"✅ Scanner fetch_instrument_tokens_and_start_tracking completed successfully")
+                except Exception as e:
+                    log(f"❌ ERROR in scanner.fetch_instrument_tokens_and_start_tracking: {str(e)}", level="error")
+                    import traceback
+                    log(f"❌ Full traceback: {traceback.format_exc()}", level="error")
+                    # Release lock since scanner failed to start
+                    self.lock_manager.release_lock(algorithm_id, trading_frequency)
+                    return False
                 
                 success_msg = f"Successfully {'resumed' if is_resume else 'started'} scanner for trade session {trade_session_id}"
                 log(success_msg)
+                log(f"📍 Scanner thread status: is_running={scanner.is_running()}")
                 return True
                 
             except Exception as e:
@@ -330,7 +359,33 @@ class ScanningQueueConsumer:
             log(f"Fatal error in consumer: {str(e)}", level="error")
         finally:
             self._running = False
-            self.redis_consumer.close()
+            log("Cleaning up scanning queue consumer...")
+            
+            # Stop any active scanners gracefully
+            try:
+                if hasattr(self, '_scanner_factory') and self._scanner_factory:
+                    log("Stopping active scanners...")
+                    # Note: Individual scanners should handle their own cleanup
+            except Exception as e:
+                log(f"Error stopping scanners: {str(e)}", level="error")
+            
+            # Close Redis connections
+            try:
+                if self.redis_consumer:
+                    log("Closing Redis consumer connection...")
+                    self.redis_consumer.close()
+            except Exception as e:
+                log(f"Error closing Redis consumer: {str(e)}", level="error")
+            
+            # Close lock manager Redis connection
+            try:
+                if hasattr(self, 'lock_manager') and self.lock_manager:
+                    if hasattr(self.lock_manager, 'redis_client') and self.lock_manager.redis_client:
+                        log("Closing lock manager Redis connection...")
+                        self.lock_manager.redis_client.close()
+            except Exception as e:
+                log(f"Error closing lock manager Redis connection: {str(e)}", level="error")
+            
             log("ScanningQueueConsumer stopped")
     
     def stop_consuming(self):

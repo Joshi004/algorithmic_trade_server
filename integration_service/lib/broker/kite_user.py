@@ -1,5 +1,5 @@
-import logging
 from kiteconnect import KiteConnect
+from integration_service.lib.utils.logger import log
 import requests
 from django.db import transaction
 from integration_service.models.UserBrokerCredential import UserBrokerCredential
@@ -7,8 +7,6 @@ from integration_service.lib.broker.broker_service import BrokerService
 
 class KiteUser:
     def __init__(self, user_id=None):
-        logging.basicConfig(level=logging.DEBUG)
-        self.logger = logging.getLogger(__name__)
         self.user_id = user_id
         self.api_key = None
         self.api_secret = None
@@ -28,11 +26,11 @@ class KiteUser:
             self.credential = UserBrokerCredential.get_default_credential(
                 user_id=self.user_id
             )
-            self.logger.warning (f"Creds for user ID  -  {self.user_id} - creds {self.credential}")
+            log(f"[KITE_USER] Creds for user ID  -  {self.user_id} - creds {self.credential}", level="warning")
             
             if self.credential:
-                self.logger.info(f"Found credential {self.credential.id} for user {self.user_id}")
-                self.logger.info("API credentials loaded and decrypted successfully")
+                log(f"[KITE_USER] Found credential {self.credential.id} for user {self.user_id}")
+                log(f"[KITE_USER] API credentials loaded and decrypted successfully")
                 
                 # Decrypt credentials for use
                 self.api_key = self.broker_service._decrypt_value(self.credential.api_key)
@@ -41,11 +39,11 @@ class KiteUser:
                 if self.credential.access_token:
                     self.access_token = self.broker_service._decrypt_value(self.credential.access_token)
             else:
-                self.logger.warning(f"No default credential found for user {self.user_id}")
-                
+                log(f"[KITE_USER] No default credential found for user {self.user_id}", level="warning")
+                    
         except Exception as e:
-            self.logger.error(f"Error loading credentials: {str(e)}")
-            self.logger.error(f"Credential details: {self.credential.id if self.credential else 'None'}")
+            log(f"[KITE_USER] Error loading credentials: {str(e)}", level="error")
+            log(f"[KITE_USER] Credential details: {self.credential.id if self.credential else 'None'}", level="error")
             raise
             
     def _save_access_token(self, user_data):
@@ -78,13 +76,13 @@ class KiteUser:
                 self.credential.validation_error = None
                 # Use login_time from Zerodha as last_refreshed_at
                 self.credential.last_refreshed_at = user_data.get("login_time")
-                self.logger.info(f"Credential {self.credential.id} validated and activated through successful token exchange")
+                log(f"[KITE_USER] Credential {self.credential.id} validated and activated through successful token exchange")
             
             self.credential.save()
             self.access_token = user_data["access_token"]  # Keep decrypted for current session
             
         except Exception as e:
-            self.logger.error(f"Error saving access token and session data: {str(e)}")
+            log(f"[KITE_USER] Error saving access token and session data: {str(e)}", level="error")
             # Mark as pending_verification if save fails
             if self.credential.status == 'pending_verification':
                 self.credential.status = 'pending_verification'
@@ -92,9 +90,23 @@ class KiteUser:
                 self.credential.save()
     
     def get_instance(self):
+        # Log authentication status for debugging
+        log(f"[KITE_USER] Creating Kite instance for user {self.user_id}")
+        log(f"[KITE_USER] API key available: {'Yes' if self.api_key else 'No'}")
+        log(f"[KITE_USER] Access token available: {'Yes' if self.access_token else 'No'}")
+        
+        if not self.api_key:
+            log(f"[KITE_USER] ❌ No API key available for user {self.user_id}", level="error")
+            raise ValueError(f"No API key available for user {self.user_id}")
+        
         kite_obj = KiteConnect(api_key=self.api_key)
+        
         if self.access_token:
             kite_obj.set_access_token(self.access_token)
+            log(f"[KITE_USER] ✅ Kite instance configured with access token for user {self.user_id}")
+        else:
+            log(f"[KITE_USER] ⚠️ Kite instance created without access token for user {self.user_id} - API calls may fail", level="warning")
+        
         return kite_obj
 
     @transaction.atomic
@@ -103,12 +115,12 @@ class KiteUser:
             kite = KiteConnect(api_key=self.api_key)
             user_data = kite.generate_session(request_token, api_secret=self.api_secret)
             # Log only non-sensitive session information
-            self.logger.info("Session data received from Kite successfully")
+            log(f"[KITE_USER] Session data received from Kite successfully")
             
             # Validate that we received the required access_token
             if not user_data or "access_token" not in user_data:
                 error_msg = "Failed to get access token from Kite session"
-                self.logger.error(error_msg)
+                log(f"[KITE_USER] {error_msg}", level="error")
                 # Update credential status to reflect the failure
                 if self.credential:
                     self.credential.status = 'pending_verification'
@@ -121,7 +133,7 @@ class KiteUser:
             missing_fields = [field for field in required_fields if field not in user_data]
             if missing_fields:
                 error_msg = f"Missing required fields in session response: {missing_fields}"
-                self.logger.error(error_msg)
+                log(f"[KITE_USER] {error_msg}", level="error")
                 if self.credential:
                     self.credential.status = 'pending_verification'
                     self.credential.validation_error = error_msg
@@ -149,7 +161,7 @@ class KiteUser:
             return public_data
             
         except Exception as e:
-            self.logger.error(f"Error setting session: {str(e)}")
+            log(f"[KITE_USER] Error setting session: {str(e)}", level="error")
             # Update credential status if available
             if self.credential:
                 self.credential.status = 'pending_verification'
@@ -159,16 +171,16 @@ class KiteUser:
     
     def get_login_url(self):
         # Log only non-sensitive information about login URL generation
-        self.logger.info("Generating login URL for Kite authentication")
+        log(f"[KITE_USER] Generating login URL for Kite authentication")
         
         if not self.api_key:
-            self.logger.error("No API key available for login URL generation")
+            log(f"[KITE_USER] No API key available for login URL generation", level="error")
             return {"error": "No API key available"}
             
         kite = KiteConnect(api_key=self.api_key)
         login_url = kite.login_url()
         
-        self.logger.info("Login URL generated successfully")
+        log(f"[KITE_USER] Login URL generated successfully")
         
         result = {
             "login_url": login_url

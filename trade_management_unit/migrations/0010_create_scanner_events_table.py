@@ -26,9 +26,9 @@ class Migration(migrations.Migration):
                 ('market_price', models.DecimalField(decimal_places=2, max_digits=12)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('instrument', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='trade_management_unit.instrument')),
-                ('scanning_algorithm', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='trade_management_unit.scanningalgorithm')),
-                ('initiation_algorithm', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='trade_management_unit.initiationalgorithm')),
-                ('termination_algorithm', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='trade_management_unit.terminationalgorithm')),
+                ('scanning_algorithm_name', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='trade_management_unit.scanningalgorithm', to_field='name')),
+                ('initiation_algorithm_name', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='trade_management_unit.initiationalgorithm', to_field='name')),
+                ('termination_algorithm_name', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='trade_management_unit.terminationalgorithm', to_field='name')),
             ],
             options={
                 'db_table': 'scanner_events',
@@ -48,7 +48,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name='scannerevent',
-            index=models.Index(fields=['scanning_algorithm'], name='scanner_eve_scannin_3e5b72_idx'),
+            index=models.Index(fields=['scanning_algorithm_name'], name='scanner_eve_scannin_3e5b72_idx'),
         ),
         migrations.AddIndex(
             model_name='scannerevent',

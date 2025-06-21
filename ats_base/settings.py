@@ -277,6 +277,7 @@ LOGGING = {
         # MAXBYTES: When file reaches 10MB (10485760 bytes), it rotates
         # BACKUPCOUNT: Keeps 5 backup files (debug.log.1, debug.log.2, etc.) then deletes oldest
         # FORMATTER: Uses 'verbose' format with maximum detail for debugging
+        # ROTATION: Only rotates on size limit - no rotation on restart/process changes
         'file_debug': {
             'level': 'DEBUG',
             'class': 'logging.handlers.RotatingFileHandler',  # RotatingFileHandler = auto file rotation
@@ -284,6 +285,9 @@ LOGGING = {
             'maxBytes': 10485760,  # 10MB - when file gets this big, rotate it
             'backupCount': 5,  # Keep 5 old files: debug.log.1, debug.log.2, etc.
             'formatter': 'verbose',  # Use detailed verbose format for debugging
+            'mode': 'a',  # Append mode - don't truncate existing log file
+            'delay': True,  # Don't create file until first log message is written
+            'encoding': 'utf-8',  # Consistent encoding for all log files
         },
         
         # APPLICATION INFO HANDLER - Saves general application logs
@@ -291,6 +295,7 @@ LOGGING = {
         # LEVEL: INFO+ (INFO, WARNING, ERROR, CRITICAL - no DEBUG to keep file focused)
         # BACKUPCOUNT: 5 files (application.log, application.log.1, etc.)
         # FORMATTER: Uses 'standard' format - clean but informative
+        # ROTATION: Only rotates on size limit - no rotation on restart/process changes
         'file_info': {
             'level': 'INFO',
             'class': 'logging.handlers.RotatingFileHandler',
@@ -298,6 +303,9 @@ LOGGING = {
             'maxBytes': 10485760,  # 10MB rotation
             'backupCount': 5,  # Keep 5 backup files
             'formatter': 'standard',  # Clean, standard formatting
+            'mode': 'a',  # Append mode - don't truncate existing log file
+            'delay': True,  # Don't create file until first log message is written
+            'encoding': 'utf-8',  # Consistent encoding for all log files
         },
         
         # BUSINESS LOGIC HANDLER - Saves trading/financial operation logs
@@ -305,6 +313,7 @@ LOGGING = {
         # LEVEL: INFO+ (business decisions and results, not debug details)
         # BACKUPCOUNT: 5 files (business.log, business.log.1, etc.)
         # FORMATTER: Uses 'business' format with [BUSINESS] tag for easy identification
+        # ROTATION: Only rotates on size limit - no rotation on restart/process changes
         'file_business': {
             'level': 'INFO',
             'class': 'logging.handlers.RotatingFileHandler',
@@ -312,6 +321,9 @@ LOGGING = {
             'maxBytes': 10485760,  # 10MB rotation
             'backupCount': 5,  # Keep 5 backup files
             'formatter': 'business',  # Special business format with [BUSINESS] tag
+            'mode': 'a',  # Append mode - don't truncate existing log file
+            'delay': True,  # Don't create file until first log message is written
+            'encoding': 'utf-8',  # Consistent encoding for all log files
         },
         
         # ERROR HANDLER - Saves only errors and critical issues
@@ -319,6 +331,7 @@ LOGGING = {
         # LEVEL: ERROR+ (only ERROR and CRITICAL messages)
         # BACKUPCOUNT: 10 files (more backups since errors are critical for troubleshooting)
         # FORMATTER: Uses 'verbose' format with full detail for error analysis
+        # ROTATION: Only rotates on size limit - no rotation on restart/process changes
         'file_error': {
             'level': 'ERROR',
             'class': 'logging.handlers.RotatingFileHandler',
@@ -326,6 +339,9 @@ LOGGING = {
             'maxBytes': 10485760,  # 10MB rotation
             'backupCount': 10,  # Keep 10 backup files (errors are important!)
             'formatter': 'verbose',  # Detailed formatting for error analysis
+            'mode': 'a',  # Append mode - don't truncate existing log file
+            'delay': True,  # Don't create file until first log message is written
+            'encoding': 'utf-8',  # Consistent encoding for all log files
         },
     },
     

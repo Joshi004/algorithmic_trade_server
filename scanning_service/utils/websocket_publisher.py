@@ -138,13 +138,40 @@ def publish_scanner_update_sync(algorithm_id, frequency, data):
                     return new_loop.run_until_complete(
                         publish_scanner_update(algorithm_id, frequency, data)
                     )
+                except Exception as e:
+                    logger.error(f"Error in event loop execution: {str(e)}")
+                    return False
                 finally:
-                    new_loop.close()
+                    # Properly close the event loop and clean up
+                    try:
+                        # Cancel any remaining tasks
+                        pending_tasks = asyncio.all_tasks(new_loop)
+                        if pending_tasks:
+                            logger.debug(f"Canceling {len(pending_tasks)} pending tasks before loop closure")
+                            for task in pending_tasks:
+                                if not task.done():
+                                    task.cancel()
+                            
+                            # Wait for tasks to complete cancellation
+                            new_loop.run_until_complete(
+                                asyncio.gather(*pending_tasks, return_exceptions=True)
+                            )
+                    except Exception as cleanup_error:
+                        logger.error(f"Error during task cleanup: {str(cleanup_error)}")
+                    finally:
+                        # Close the loop safely
+                        if not new_loop.is_closed():
+                            new_loop.close()
+                        asyncio.set_event_loop(None)
             
             # Run in a separate thread to avoid event loop conflicts
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(run_in_thread)
-                return future.result(timeout=5.0)  # 5 second timeout
+                try:
+                    return future.result(timeout=10.0)  # Increased timeout for cleanup
+                except concurrent.futures.TimeoutError:
+                    logger.error("WebSocket publish operation timed out")
+                    return False
                 
     except Exception as e:
         logger.error(f"Error in publish_scanner_update_sync: {str(e)}")
