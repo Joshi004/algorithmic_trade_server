@@ -1,18 +1,13 @@
 import logging
-import requests
 from trade_management_unit.models.Instrument import Instrument
 from trade_management_unit.models.Trade import Trade as TradeModel
-from django.conf import settings
+from trade_management_unit.lib.common.integration_service_provider import IntegrationServiceProvider
 
 class Trade:
     def __init__(self, user_id=None):
         logging.basicConfig(level=logging.DEBUG)
         self.user_id = user_id
-        # Get integration service URL from settings or use default
-        self.integration_service_url = getattr(settings, 'INTEGRATION_SERVICE_URL', 'http://localhost:8000/integration')
-        self.headers = {
-            'X-Internal-Service-Token': getattr(settings, 'INTERNAL_SERVICE_TOKEN', 'internal-service-secret-token-change-in-production')
-        }
+        self.user_integration_provider = IntegrationServiceProvider(user_id=user_id)
 
     def validate_params(self, params):
         # Check if 'symbol' and 'exchange' are present in params
@@ -41,48 +36,9 @@ class Trade:
             return validation_result
 
         symbols, exchange = validation_result
-
-        try:
-            # Make API call to integration service
-            api_url = f"{self.integration_service_url}/get_quotes/"
-            api_params = {
-                'symbol': params["symbol"],
-                'exchange': exchange,
-                'user_id': self.user_id
-            }
-            
-            response = requests.get(api_url, params=api_params, headers=self.headers)
-            
-            if response.status_code == 200:
-                data = response.json()
-                if data.get('status') == 'success':
-                    return {
-                        'data': data['data'],
-                        'meta': data['meta']
-                    }
-                else:
-                    return {
-                        'status_code': 500,
-                        'error_message': data.get('error', 'Unknown error from integration service')
-                    }
-            else:
-                return {
-                    'status_code': response.status_code,
-                    'error_message': f'Integration service error: {response.text}'
-                }
-                
-        except requests.exceptions.RequestException as e:
-            logging.error(f"Error calling integration service: {str(e)}")
-            return {
-                'status_code': 500,
-                'error_message': f'Failed to connect to integration service: {str(e)}'
-            }
-        except Exception as e:
-            logging.error(f"Unexpected error: {str(e)}")
-            return {
-                'status_code': 500,
-                'error_message': f'Unexpected error: {str(e)}'
-            }
+        
+        # Use the user integration service provider which has built-in retry logic
+        return self.user_integration_provider.get_quotes(params["symbol"], exchange)
 
     def fetch_all_trades_info(self, trade_session_id):
         sql_query = """

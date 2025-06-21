@@ -23,6 +23,7 @@ import threading
 from scanning_service.lib.utils.common import current_ist
 from scanning_service.lib.data_providers import IntegrationServiceProvider, TMUServiceProvider
 from scanning_service.lib.state_management import StateManagerFactory, StateManagementConfig
+from integration_service.lib.common.system_user_utils import get_system_user_id
 from scanning_service.utils.websocket_publisher import (
     can_publish_to_group,
     get_group_name,
@@ -51,8 +52,8 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
         self.frequency = frequency
         
         # Initialize scanner-specific attributes
-        self.integration_provider = None
-        self.tmu_provider = None
+        self.system_integration_provider = None
+        self.system_tmu_provider = None
         self.data_provider = None
         self.event_publisher = None
         
@@ -129,15 +130,16 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
         # Call parent configure (handles event publisher setup)
         super().configure(trade_freq, **kwargs)
         
-        # Extract user_id from kwargs for provider initialization
-        user_id = kwargs.get('user_id')
+        # Use system user ID for scanner operations (market data, quotes, historical data)
+        # Scanner operations are shared across all users and don't require personal credentials
+        system_user_id = get_system_user_id()
         
-        # Use provided providers or create default ones
-        self.integration_provider = kwargs.get('integration_provider') or IntegrationServiceProvider(user_id) if user_id else None
-        self.tmu_provider = kwargs.get('tmu_provider') or TMUServiceProvider(user_id) if user_id else None
+        # Use provided providers or create default ones with system credentials
+        self.system_integration_provider = kwargs.get('integration_provider') or IntegrationServiceProvider(system_user_id)
+        self.system_tmu_provider = kwargs.get('tmu_provider') or TMUServiceProvider(system_user_id)
         
-        # Keep data_provider for backward compatibility (points to integration provider)
-        self.data_provider = self.integration_provider
+        # Keep data_provider for backward compatibility (points to system integration provider)
+        self.data_provider = self.system_integration_provider
         
         # Initialize state manager for this scanner
         self._initialize_state_manager(**kwargs)

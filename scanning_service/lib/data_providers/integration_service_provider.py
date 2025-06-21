@@ -1,9 +1,11 @@
 """
 Data provider for the scanning service that calls integration service APIs.
 """
+import time
 import requests
 from django.conf import settings
 from scanning_service.lib.utils.logger import log
+from integration_service.lib.common.error_classifier import is_temporary_error
 
 
 class IntegrationServiceProvider:
@@ -35,33 +37,49 @@ class IntegrationServiceProvider:
         Returns:
             dict: Quote data with structure {"data": {...}, "meta": {...}}
         """
-        try:
-            url = f"{self.base_url}/get_quotes/"
-            params = {
-                "symbol": symbol,
-                "exchange": exchange
-            }
-            
-            if self.user_id:
-                params["user_id"] = self.user_id
+        max_attempts = 3
+        base_delay = 1.0
+        multiplier = 2
+        
+        for attempt in range(max_attempts):
+            try:
+                url = f"{self.base_url}/get_quotes/"
+                params = {
+                    "symbol": symbol,
+                    "exchange": exchange
+                }
                 
-            log(f"Fetching quotes for {symbol} from {exchange}")
-            response = requests.get(url, params=params, headers=self.headers)
-            
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("status") == "success":
-                    return {"data": data.get("data", {}), "meta": data.get("meta", {})}
+                if self.user_id:
+                    params["user_id"] = self.user_id
+                    
+                log(f"Fetching quotes for {symbol} from {exchange} (attempt {attempt + 1}/{max_attempts})")
+                response = requests.get(url, params=params, headers=self.headers)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("status") == "success":
+                        return {"data": data.get("data", {}), "meta": data.get("meta", {})}
+                    else:
+                        error_msg = data.get('error', 'Unknown error')
+                        log(f"Error getting quotes: {error_msg}", level="error")
+                        if not is_temporary_error(error_msg) or attempt == max_attempts - 1:
+                            return {"data": {}, "meta": {"error": error_msg}}
                 else:
-                    log(f"Error getting quotes: {data.get('error')}", level="error")
-                    return {"data": {}, "meta": {"error": data.get("error")}}
-            else:
-                log(f"Failed to get quotes, status code: {response.status_code}", level="error")
-                return {"data": {}, "meta": {"error": f"HTTP {response.status_code}"}}
-                
-        except Exception as e:
-            log(f"Exception getting quotes: {str(e)}", level="error")
-            return {"data": {}, "meta": {"error": str(e)}}
+                    log(f"Failed to get quotes, status code: {response.status_code}", level="error")
+                    if not is_temporary_error(response.status_code) or attempt == max_attempts - 1:
+                        return {"data": {}, "meta": {"error": f"HTTP {response.status_code}"}}
+                        
+            except Exception as e:
+                log(f"Exception getting quotes (attempt {attempt + 1}/{max_attempts}): {str(e)}", level="error")
+                if not is_temporary_error(str(e)) or attempt == max_attempts - 1:
+                    return {"data": {}, "meta": {"error": str(e)}}
+            
+            # Wait before retry if not the last attempt
+            if attempt < max_attempts - 1:
+                delay = base_delay * (multiplier ** attempt)
+                time.sleep(delay)
+        
+        return {"data": {}, "meta": {"error": "Max retries exceeded"}}
     
     def fetch_historical_candle_data_from_kite(self, symbol, token, interval, number_of_candles, trade_date=None):
         """
@@ -77,38 +95,54 @@ class IntegrationServiceProvider:
         Returns:
             list: Historical candle data
         """
-        try:
-            url = f"{self.base_url}/get_historical_data/"
-            params = {
-                "symbol": symbol,
-                "token": token,
-                "interval": interval,
-                "number_of_candles": number_of_candles
-            }
-            
-            if self.user_id:
-                params["user_id"] = self.user_id
+        max_attempts = 3
+        base_delay = 1.0
+        multiplier = 2
+        
+        for attempt in range(max_attempts):
+            try:
+                url = f"{self.base_url}/get_historical_data/"
+                params = {
+                    "symbol": symbol,
+                    "token": token,
+                    "interval": interval,
+                    "number_of_candles": number_of_candles
+                }
                 
-            if trade_date:
-                params["trade_date"] = trade_date.isoformat() if hasattr(trade_date, 'isoformat') else str(trade_date)
+                if self.user_id:
+                    params["user_id"] = self.user_id
+                    
+                if trade_date:
+                    params["trade_date"] = trade_date.isoformat() if hasattr(trade_date, 'isoformat') else str(trade_date)
+                    
+                log(f"Fetching historical data for {symbol}, interval: {interval}, candles: {number_of_candles} (attempt {attempt + 1}/{max_attempts})")
+                response = requests.get(url, params=params, headers=self.headers)
                 
-            log(f"Fetching historical data for {symbol}, interval: {interval}, candles: {number_of_candles}")
-            response = requests.get(url, params=params, headers=self.headers)
-            
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("status") == "success":
-                    return data.get("data", [])
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("status") == "success":
+                        return data.get("data", [])
+                    else:
+                        error_msg = data.get('error', 'Unknown error')
+                        log(f"Error getting historical data: {error_msg}", level="error")
+                        if not is_temporary_error(error_msg) or attempt == max_attempts - 1:
+                            return []
                 else:
-                    log(f"Error getting historical data: {data.get('error')}", level="error")
+                    log(f"Failed to get historical data, status code: {response.status_code}", level="error")
+                    if not is_temporary_error(response.status_code) or attempt == max_attempts - 1:
+                        return []
+                        
+            except Exception as e:
+                log(f"Exception getting historical data (attempt {attempt + 1}/{max_attempts}): {str(e)}", level="error")
+                if not is_temporary_error(str(e)) or attempt == max_attempts - 1:
                     return []
-            else:
-                log(f"Failed to get historical data, status code: {response.status_code}", level="error")
-                return []
-                
-        except Exception as e:
-            log(f"Exception getting historical data: {str(e)}", level="error")
-            return []
+            
+            # Wait before retry if not the last attempt
+            if attempt < max_attempts - 1:
+                delay = base_delay * (multiplier ** attempt)
+                time.sleep(delay)
+        
+        return []
     
     def fetch_instruments(self, search_params):
         """
