@@ -10,17 +10,9 @@ from django.core.exceptions import FieldError
 
 def update_instruments(request, *args, **kwargs):
     try:
-        # Extract user_id from the request
-        user_id = request.user_data.get('public_id') if hasattr(request, 'user_data') else request.GET.get('user_id')
-        
-        if not user_id:
-            return JsonResponse({
-                "status": "error",
-                "error": "User ID is required"
-            }, status=400)
-        
+        # This is a system-level operation - use "system" to automatically get system user credentials
         instruments = Instruments()
-        instruments.update_instruments(user_id)
+        instruments.update_instruments("system")
         
         return JsonResponse({
             "status": "success",

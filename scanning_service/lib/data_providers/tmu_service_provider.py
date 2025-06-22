@@ -5,6 +5,7 @@ Handles all communication with the Trade Management Unit (TMU) service.
 import requests
 from django.conf import settings
 from scanning_service.lib.utils.logger import log
+from integration_service.lib.common.system_user_utils import get_system_user_id
 
 
 class TMUServiceProvider:
@@ -17,10 +18,16 @@ class TMUServiceProvider:
         Initialize the TMU service provider.
         
         Args:
-            user_id: User ID for service identification
+            user_id: User ID for service identification. Use "system" for system-level operations.
             auth_token: JWT token for authentication (if needed)
         """
-        self.user_id = user_id
+        # Handle system user ID resolution
+        if user_id == "system":
+            self.user_id = get_system_user_id()
+            log(f"Using system user ID: {self.user_id}")
+        else:
+            self.user_id = user_id
+            
         self.auth_token = auth_token
         # Get TMU service URL from settings or use default
         self.base_url = getattr(settings, 'TMU_SERVICE_URL', 'http://localhost:8000/tmu')

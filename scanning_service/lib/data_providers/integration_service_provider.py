@@ -6,6 +6,7 @@ import requests
 from django.conf import settings
 from scanning_service.lib.utils.logger import log
 from integration_service.lib.common.error_classifier import is_temporary_error
+from integration_service.lib.common.system_user_utils import get_system_user_id
 
 
 class IntegrationServiceProvider:
@@ -18,9 +19,15 @@ class IntegrationServiceProvider:
         Initialize the data provider.
         
         Args:
-            user_id: User ID for authentication (if needed)
+            user_id: User ID for authentication. Use "system" for system-level operations.
         """
-        self.user_id = user_id
+        # Handle system user ID resolution
+        if user_id == "system":
+            self.user_id = get_system_user_id()
+            log(f"Using system user ID: {self.user_id}")
+        else:
+            self.user_id = user_id
+            
         self.base_url = getattr(settings, 'INTEGRATION_SERVICE_URL', 'http://localhost:8000/integration')
         self.headers = {
             'X-Internal-Service-Token': getattr(settings, 'INTERNAL_SERVICE_TOKEN', 'internal-service-secret-token-change-in-production')

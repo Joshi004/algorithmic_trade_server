@@ -14,7 +14,7 @@ from scanning_service.lib.utils.redis import restore_from_redis_stream, create_c
 from scanning_service.lib.utils.redis.scanner_lock_manager import ScannerLockManager
 from scanning_service.lib.Algorithms.ScannerAlgos.ScannerAlgoFactory import ScannerAlgoFactory
 from scanning_service.lib.data_providers import IntegrationServiceProvider, TMUServiceProvider
-from integration_service.lib.common.system_user_utils import get_system_user_id
+
 # Removed ScannerInstance import - no longer using scanner instances table
 from trade_management_unit.models import ScanningAlgorithm, TradeSession
 import traceback
@@ -232,9 +232,8 @@ class ScanningQueueConsumer:
                 # Create data providers using system credentials
                 # Scanning operations should use system credentials as they fetch market data
                 # that can be shared across all users
-                system_user_id = get_system_user_id()
-                system_integration_provider = IntegrationServiceProvider(system_user_id)
-                system_tmu_provider = TMUServiceProvider(system_user_id)
+                system_integration_provider = IntegrationServiceProvider("system")
+                system_tmu_provider = TMUServiceProvider("system")
                 
                 # Get scanner instance using factory (factory handles singleton behavior)
                 scanner = self._scanner_factory.get_scanner(scanning_algo_name, trading_frequency)

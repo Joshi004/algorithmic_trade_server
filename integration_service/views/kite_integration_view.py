@@ -467,6 +467,9 @@ def get_quotes(request, *args, **kwargs):
 def get_instruments(request, *args, **kwargs):
     """
     API endpoint to get all instruments from Kite API
+    
+    Since instruments are system-level master data shared across all users,
+    this endpoint uses system credentials when no user_id is provided.
     """
     if request.method != 'GET':
         return JsonResponse({
@@ -475,16 +478,10 @@ def get_instruments(request, *args, **kwargs):
         }, status=405)
     
     try:
-        # Extract user_id from the request (assuming it's set by auth middleware)
+        # Extract user_id from the request (optional for instruments endpoint)
         user_id = request.user_data.get('public_id') if hasattr(request, 'user_data') else request.GET.get('user_id')
         
-        if not user_id:
-            return JsonResponse({
-                "status": "error",
-                "error": "User ID is required"
-            }, status=400)
-        
-        # Initialize the instruments provider
+        # Initialize the instruments provider - will use system user if user_id is None
         instruments_provider = InstrumentsProvider(user_id)
         
         # Get all instruments

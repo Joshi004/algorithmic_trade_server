@@ -8,7 +8,7 @@ from typing import Dict, Any, Optional, List
 # Import dependencies that were previously scattered in methods
 from scanning_service.lib.utils.redis import get_scanning_event_publisher
 from scanning_service.lib.data_providers import TMUServiceProvider
-from integration_service.lib.common.system_user_utils import get_system_user_id
+
 from scanning_service.lib.utils.logger import log
 
 
@@ -87,8 +87,7 @@ class BaseScannerInterface(ABC):
         # Initialize TMU service provider for fetching active trade sessions
         # Use system credentials for scanner base operations
         if not hasattr(self, 'system_tmu_provider') or not self.system_tmu_provider:
-            system_user_id = get_system_user_id()
-            self.system_tmu_provider = TMUServiceProvider(system_user_id)
+            self.system_tmu_provider = TMUServiceProvider("system")
         
         self._configured = True
     
