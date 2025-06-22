@@ -3,7 +3,7 @@ Instruments library for integration service.
 Handles fetching instruments data from Kite API.
 """
 from integration_service.lib.broker.fetch_data import FetchData
-from integration_service.lib.common.system_user_utils import get_system_user_id
+from integration_service.lib.common.system_user_utils import get_system_admin_user_id
 
 
 class InstrumentsProvider:
@@ -20,7 +20,7 @@ class InstrumentsProvider:
         """
         # Use system credentials for instrument master data as it's shared across all users
         if not user_id:
-            user_id = get_system_user_id()
+            user_id = get_system_admin_user_id()
         
         self.user_id = user_id
         self.fetch_data = FetchData(user_id)

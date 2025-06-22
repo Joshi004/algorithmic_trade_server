@@ -7,9 +7,14 @@ from trade_management_unit.lib.TradeSession.TradeSession import TradeSession
 from trade_management_unit.models.TradeSession import TradeSession as TradeSessionModel
 from trade_management_unit.views.helpers.trade_session_helper import TradeSessionViewHelper
 from ats_base.logging_utils import create_service_logger, log_api_call
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from django.views.decorators.csrf import csrf_exempt
+from ats_base.logging_utils import create_service_logger, log_api_call
+from trade_management_unit.lib.common.Utils.custome_logger import log
 
-# Create standardized logger for TMU views
-logger = create_service_logger('trade_management_unit', 'views')
+# Logger utility imported from trade_management_unit.lib.common.Utils.custome_logger
 
 
 def initiate_trade_session(request, *args, **kwargs):
@@ -67,66 +72,73 @@ def get_new_session_param_options(request, *args, **kwargs):
         }, status=500)
 
 
-@log_api_call(logger, endpoint='get_active_trade_sessions', method='GET')
-def get_active_trade_sessions(request, *args, **kwargs):
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+@log_api_call('trade_management_unit')
+def get_active_trade_sessions(request):
     """
-    API endpoint to get active trade sessions with optional filtering.
+    Get active trade sessions with optional filtering by scanning algorithm and frequency.
+    
+    Query Parameters:
+        scanning_algo_id (int, optional): Filter by scanning algorithm ID
+        trading_frequency (str, optional): Filter by trading frequency
+    
+    Returns:
+        JSON response with active trade sessions
     """
     try:
-        logger.debug("Validating and extracting parameters for active sessions query")
+        # Extract and validate query parameters
+        scanning_algo_id = request.GET.get('scanning_algo_id')
+        trading_frequency = request.GET.get('trading_frequency')
         
-        # Validate and extract parameters
-        params, param_error = TradeSessionViewHelper.validate_and_extract_active_sessions_params(request)
-        if param_error:
-            logger.warning("Parameter validation failed for active sessions query")
-            return param_error
+        log("Validating and extracting parameters for active sessions query", level="debug")
         
-        logger.debug("Querying active trade sessions", context={
-            'scanning_algo_id': params['scanning_algo_id'],
-            'trading_frequency': params['trading_frequency']
+        # Validate scanning_algo_id if provided
+        if scanning_algo_id is not None:
+            try:
+                scanning_algo_id = int(scanning_algo_id)
+            except (ValueError, TypeError):
+                log("Parameter validation failed for active sessions query", level="warning")
+                return JsonResponse({
+                    'error': 'Invalid scanning_algo_id parameter',
+                    'message': 'scanning_algo_id must be a valid integer'
+                }, status=400)
+        
+        log("Querying active trade sessions", level="debug", context={
+            'scanning_algo_id': scanning_algo_id,
+            'trading_frequency': trading_frequency
         })
         
-        # Use the model method with optional parameters
-        sessions = TradeSessionModel.fetch_active_trade_session(
-            scanning_algo_id=params['scanning_algo_id'],
-            trading_freq=params['trading_frequency']
+        # Use the model method to fetch active sessions
+        active_sessions = TradeSession.get_active_sessions(
+            scanning_algo_id=scanning_algo_id,
+            trading_frequency=trading_frequency
         )
         
-        logger.info("Active trade sessions query completed", context={
-            'sessions_count': len(sessions)
+        log("Active trade sessions query completed", level="info", context={
+            'session_count': len(active_sessions),
+            'scanning_algo_id': scanning_algo_id,
+            'trading_frequency': trading_frequency
         })
         
-        # Format response data
-        sessions_data = []
-        for session in sessions:
-            sessions_data.append({
-                'id': session.id,
-                'user_id': session.user_id.public_id,
-                'trading_frequency': session.trading_frequency,
-                'dummy': session.dummy,
-                'status': session.status,
-                'started_at': session.started_at.isoformat() if session.started_at else None,
-                'closed_at': session.closed_at.isoformat() if session.closed_at else None,
-                'scanning_algorithm_id': session.scanning_algorithm_id,
-                'scanning_algorithm_name': session.scanning_algorithm.name,
-                'initiation_algorithm_id': session.initiation_algorithm_id,
-                'initiation_algorithm_name': session.initiation_algorithm.name,
-                'termination_algorithm_id': session.termination_algorithm_id,
-                'termination_algorithm_name': session.termination_algorithm.name
-            })
-        
-        response_data = {
-            'data': sessions_data,
-            'meta': {'count': len(sessions_data)}
-        }
-        
-        return JsonResponse(response_data, status=200)
+        return JsonResponse({
+            'status': 'success',
+            'data': active_sessions,
+            'meta': {
+                'count': len(active_sessions),
+                'filters': {
+                    'scanning_algo_id': scanning_algo_id,
+                    'trading_frequency': trading_frequency
+                }
+            }
+        }, status=200)
         
     except Exception as e:
-        logger.error("Failed to fetch active trade sessions", context={'error': str(e)})
+        log("Failed to fetch active trade sessions", level="error", context={'error': str(e)})
         return JsonResponse({
-            'error': str(e),
-            'message': 'Failed to fetch active trade sessions'
+            'status': 'error',
+            'error': 'Failed to fetch active trade sessions',
+            'message': str(e)
         }, status=500)
 
 

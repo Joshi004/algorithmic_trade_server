@@ -1,9 +1,6 @@
 import redis
 from django.conf import settings
-import logging
-
-# Get logger
-logger = logging.getLogger(__name__)
+from ats_gateway.utils.logger import log
 
 # Redis connection for subscription tracking
 redis_client = redis.Redis(
@@ -32,7 +29,7 @@ def increment_group_subscription(group_name):
     # This ensures keys are automatically cleaned up if not refreshed
     redis_client.expire(redis_key, 3600)
     
-    logger.info(f"Incremented subscription count for {group_name}: {count} (TTL: 1h)")
+    log(f"Incremented subscription count for {group_name}: {count} (TTL: 1h)", level="info")
     return count
 
 def decrement_group_subscription(group_name):
@@ -46,7 +43,7 @@ def decrement_group_subscription(group_name):
     if count < 0:
         redis_client.set(redis_key, 0)
         count = 0
-    logger.info(f"Decremented subscription count for {group_name}: {count}")
+    log(f"Decremented subscription count for {group_name}: {count}", level="info")
     return count
 
 def get_group_subscription_count(group_name):
@@ -66,4 +63,4 @@ def cleanup_group_subscription(group_name):
     count = get_group_subscription_count(group_name)
     if count <= 0:
         redis_client.delete(redis_key)
-        logger.info(f"Cleaned up subscription tracking for {group_name}") 
+        log(f"Cleaned up subscription tracking for {group_name}", level="info") 

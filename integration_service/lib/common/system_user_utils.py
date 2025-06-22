@@ -1,81 +1,83 @@
 """
-System User Utilities for Integration Service.
+System user utilities for Integration Service
 
-This module provides utilities to get the system admin user's credentials
-for system-level operations like market data fetching, quote retrieval, etc.
+This module provides utilities for managing system-level users and credentials
+that are used for cross-service operations.
 """
-import logging
+
+import time
 from django.core.cache import cache
-from ats_gateway.models.User import User
-from integration_service.models.UserBrokerCredential import UserBrokerCredential
+from django.contrib.auth import get_user_model
+from integration_service.lib.utils.logger import log
 
-logger = logging.getLogger(__name__)
+# Cache configuration
+ADMIN_USER_CACHE_KEY = "system_admin_user_id"
+ADMIN_USER_CACHE_TTL = 3600  # 1 hour
 
-# Cache key for admin user public_id
-ADMIN_USER_CACHE_KEY = "system_admin_user_public_id"
-ADMIN_USER_EMAIL = "admin@ats.com"
+User = get_user_model()
 
-def get_system_user_id():
+def get_system_admin_user_id():
     """
-    Get the system admin user's public_id for system-level operations.
+    Get the system admin user ID with caching.
     
-    This function should be used when making API calls that require system-level
-    access such as:
-    - Fetching market quotes for scanning
-    - Getting historical data for analysis
-    - Retrieving instrument master data
-    - Live market data streaming
+    The system admin user is used for internal operations that require
+    a valid user context but are not tied to a specific end user.
     
     Returns:
-        str: The admin user's public_id as a string
+        str: Public ID of the system admin user
         
     Raises:
-        RuntimeError: If admin user doesn't exist or doesn't have proper credentials
+        RuntimeError: If system admin user is not found
     """
     # Try to get from cache first
     cached_admin_id = cache.get(ADMIN_USER_CACHE_KEY)
     if cached_admin_id:
-        logger.debug(f"Retrieved admin user ID from cache: {cached_admin_id}")
+        log(f"Retrieved admin user ID from cache: {cached_admin_id}", level="debug")
         return cached_admin_id
     
-    # Get from database
     try:
-        admin_user = User.objects.filter(email=ADMIN_USER_EMAIL).first()
+        # Look for admin user by username
+        admin_user = User.objects.get(email='admin@ats.com')
+        admin_public_id = admin_user.public_id
         
-        if not admin_user:
-            raise RuntimeError(
-                f"System admin user ({ADMIN_USER_EMAIL}) does not exist. "
-                "Please create the admin user with proper broker credentials."
-            )
+        # Cache the result for future use
+        cache.set(ADMIN_USER_CACHE_KEY, admin_public_id, ADMIN_USER_CACHE_TTL)
         
-        if not admin_user.is_active:
-            raise RuntimeError(
-                f"System admin user ({ADMIN_USER_EMAIL}) is not active. "
-                "Please activate the admin user."
-            )
-        
-        # Verify admin user has broker credentials
-        credentials = UserBrokerCredential.objects.filter(
-            user_id=admin_user.public_id,
-            status='active'
-        )
-        
-        if not credentials.exists():
-            raise RuntimeError(
-                f"System admin user ({ADMIN_USER_EMAIL}) does not have active broker credentials. "
-                "Please register broker credentials for the admin user."
-            )
-        
-        # Cache the result for 1 hour
-        admin_public_id = str(admin_user.public_id)
-        cache.set(ADMIN_USER_CACHE_KEY, admin_public_id, 3600)
-        
-        logger.info(f"Retrieved and cached admin user ID: {admin_public_id}")
+        log(f"Retrieved and cached admin user ID: {admin_public_id}", level="info")
         return admin_public_id
         
+    except User.DoesNotExist:
+        error_msg = "System admin user not found. Please ensure an admin user exists in the database."
+        log(f"Error getting system admin user ID: {error_msg}", level="error")
+        raise RuntimeError(error_msg)
     except Exception as e:
-        logger.error(f"Error getting system admin user ID: {str(e)}")
-        raise RuntimeError(f"Failed to get system admin user ID: {str(e)}")
+        log(f"Error getting system admin user ID: {str(e)}", level="error")
+        raise
+
+def get_system_user_credentials():
+    """
+    Get system user credentials for broker operations.
+    
+    Returns:
+        dict: System user credentials
+        
+    Note: This is a placeholder implementation. In production,
+          credentials should be securely managed and retrieved.
+    """
+    return {
+        'user_id': get_system_admin_user_id(),
+        'broker_user_id': 'system',
+        'api_key': 'system_api_key',  # Should be from secure config
+        'access_token': 'system_access_token'  # Should be from secure config
+    }
+
+def clear_system_admin_user_cache():
+    """
+    Clear the cached system admin user ID.
+    Useful for cache invalidation when admin user is updated.
+    """
+    cache.delete(ADMIN_USER_CACHE_KEY)
+    log("Cleared system admin user cache", level="info")
 
 def is_system_user(user_id):
     """
@@ -88,25 +90,17 @@ def is_system_user(user_id):
         bool: True if user_id belongs to system admin user
     """
     try:
-        system_user_id = get_system_user_id()
+        system_user_id = get_system_admin_user_id()
         return str(user_id) == system_user_id
     except Exception:
         return False
 
-def clear_system_user_cache():
-    """
-    Clear the cached system admin user ID.
-    Use this if admin user credentials are updated.
-    """
-    cache.delete(ADMIN_USER_CACHE_KEY)
-    logger.info("Cleared system admin user cache")
-
 # For backward compatibility and easy access
 def get_admin_user_id():
     """
-    Alias for get_system_user_id() for backward compatibility.
+    Alias for get_system_admin_user_id() for backward compatibility.
     
     Returns:
         str: The admin user's public_id
     """
-    return get_system_user_id() 
+    return get_system_admin_user_id() 

@@ -9,14 +9,13 @@ import base64
 import hashlib
 from cryptography.fernet import Fernet
 from integration_service.lib.common.env_utils import get_env_variable
-from ats_base.logging_utils import create_service_logger
+from integration_service.lib.utils.logger import log
 
-# Create standardized logger for integration service
-logger = create_service_logger('integration_service', 'broker_service')
+
 
 class BrokerService:
     def __init__(self):
-        self.logger = logger
+        pass
     
     def _get_encryption_key(self):
         # Get encryption secret from environment and convert to Fernet-compatible key
@@ -68,7 +67,7 @@ class BrokerService:
                 api_secret=encrypted_api_secret
             )
             
-            self.logger.info(f"Broker credential stored with encrypted API key and secret")
+            log(f"Broker credential stored with encrypted API key and secret", level="info")
             
             return {
                 "status": "success",
@@ -80,7 +79,7 @@ class BrokerService:
                 }
             }
         except Exception as e:
-            self.logger.error(f"Error registering broker: {str(e)}")
+            log(f"Error registering broker: {str(e)}", level="error")
             return {
                 "status": "error",
                 "error": str(e)
@@ -99,7 +98,7 @@ class BrokerService:
                 }
             }
         except Exception as e:
-            self.logger.error(f"Error setting default broker: {str(e)}")
+            log(f"Error setting default broker: {str(e)}", level="error")
             return {
                 "status": "error",
                 "error": str(e)
@@ -127,7 +126,7 @@ class BrokerService:
                 }
             }
         except Exception as e:
-            self.logger.error(f"Error getting user brokers: {str(e)}")
+            log(f"Error getting user brokers: {str(e)}", level="error")
             return {
                 "status": "error",
                 "error": str(e)

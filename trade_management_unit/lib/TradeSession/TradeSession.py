@@ -19,6 +19,7 @@ from ats_base.logging_utils import (
     log_execution_time,
     log_database_operation
 )
+from trade_management_unit.lib.common.Utils.custome_logger import log
 
 # Create standardized logger for TMU library
 logger = create_service_logger('trade_management_unit', 'trade_session_lib')
@@ -196,7 +197,7 @@ class TradeSession:
                 'end_date': end_date
             }
             
-            logger.debug("Building user trade sessions query", context=search_context)
+            log("Building user trade sessions query", level="debug")
             
             # Build query starting with user filter
             query = TradeSessionModel.objects.filter(user_id=user_id_str)
@@ -226,10 +227,7 @@ class TradeSession:
             
             # Execute query and get results
             sessions = list(query.order_by('-started_at'))
-            logger.info("User trade sessions query completed", context={
-                'sessions_found': len(sessions),
-                'user_id': user_id_str
-            })
+            log(f"User trade sessions query completed - found {len(sessions)} sessions for user {user_id_str}", level="info")
             
             # Format response data with specified fields
             sessions_data = []
@@ -255,11 +253,11 @@ class TradeSession:
                 }
             }
             
-            logger.info(f"[TMU-Library] Returning successful response with {len(sessions_data)} sessions")
+            log(f"[TMU-Library] Returning successful response with {len(sessions_data)} sessions", level="info")
             return response_data
             
         except Exception as e:
-            logger.error(f"[TMU-Library] Exception in get_user_trade_sessions: {str(e)}", exc_info=True)
+            log(f"[TMU-Library] Exception in get_user_trade_sessions: {str(e)}", level="error")
             raise Exception(f"Failed to fetch user trade sessions: {str(e)}")
 
     @staticmethod
@@ -278,7 +276,7 @@ class TradeSession:
             Exception: For other errors
         """
         try:
-            logger.info(f"[TMU-Library] get_trade_session_details called for session: {trade_session_id}")
+            log(f"[TMU-Library] get_trade_session_details called for session: {trade_session_id}", level="info")
             
             # Validate and fetch trade session
             try:
@@ -363,14 +361,14 @@ class TradeSession:
                 }
             }
             
-            logger.info(f"[TMU-Library] Successfully compiled trade session details for session: {trade_session_id}")
+            log(f"[TMU-Library] Successfully compiled trade session details for session: {trade_session_id}", level="info")
             return response_data
             
         except ValueError as e:
-            logger.error(f"[TMU-Library] Validation error in get_trade_session_details: {str(e)}")
+            log(f"[TMU-Library] Validation error in get_trade_session_details: {str(e)}", level="error")
             raise e
         except Exception as e:
-            logger.error(f"[TMU-Library] Error in get_trade_session_details: {str(e)}", exc_info=True)
+            log(f"[TMU-Library] Error in get_trade_session_details: {str(e)}", level="error")
             raise Exception(f"Failed to fetch trade session details: {str(e)}")
 
     @staticmethod
@@ -393,10 +391,7 @@ class TradeSession:
         from trade_management_unit.lib.common.Utils.Utils import current_ist
         
         try:
-            logger.debug("Pause trade session initiated", context={
-                'session_id': trade_session_id,
-                'user_id': user_id_str
-            })
+            log(f"Pause trade session initiated for session {trade_session_id} by user {user_id_str}", level="debug")
             
             # Get the trade session (validation already done in helper)
             trade_session = TradeSessionModel.objects.get(id=trade_session_id, user_id=user_id_str)
@@ -420,10 +415,7 @@ class TradeSession:
                 reason='User initiated pause'
             )
             
-            logger.info("Trade session paused successfully", context={
-                'session_id': trade_session_id,
-                'user_id': user_id_str
-            })
+            log(f"Trade session {trade_session_id} paused successfully by user {user_id_str}", level="info")
             
             # Return success response
             response_data = {
@@ -442,7 +434,7 @@ class TradeSession:
         except TradeSessionModel.DoesNotExist:
             raise ValueError(f"Trade session {trade_session_id} not found or does not belong to user")
         except Exception as e:
-            logger.error(f"[TMU-Library] Error pausing trade session: {str(e)}", exc_info=True)
+            log(f"[TMU-Library] Error pausing trade session: {str(e)}", level="error")
             raise Exception(f"Failed to pause trade session: {str(e)}")
 
     @staticmethod  
@@ -465,10 +457,7 @@ class TradeSession:
         from trade_management_unit.lib.common.Utils.Utils import current_ist
         
         try:
-            logger.debug("Resume trade session initiated", context={
-                'session_id': trade_session_id,
-                'user_id': user_id_str
-            })
+            log(f"Resume trade session initiated for session {trade_session_id} by user {user_id_str}", level="debug")
             
             # Get the trade session (validation already done in helper)
             trade_session = TradeSessionModel.objects.get(id=trade_session_id, user_id=user_id_str)
@@ -492,10 +481,7 @@ class TradeSession:
                 reason='User initiated resume'
             )
             
-            logger.info("Trade session resumed successfully", context={
-                'session_id': trade_session_id,
-                'user_id': user_id_str
-            })
+            log(f"Trade session {trade_session_id} resumed successfully by user {user_id_str}", level="info")
             
             # Publish resume scanner event to ensure scanner is running
             try:
@@ -503,13 +489,13 @@ class TradeSession:
                 resume_event_success = event_publisher.publish_resume_scanner_event(trade_session)
                 
                 if resume_event_success:
-                    logger.info(f"[TMU-Library] Successfully published resume scanner event for session: {trade_session_id}")
+                    log(f"[TMU-Library] Successfully published resume scanner event for session: {trade_session_id}", level="info")
                 else:
-                    logger.warning(f"[TMU-Library] Failed to publish resume scanner event for session: {trade_session_id}")
+                    log(f"[TMU-Library] Failed to publish resume scanner event for session: {trade_session_id}", level="warning")
                     
             except Exception as e:
                 # Don't fail the resume operation if event publishing fails
-                logger.error(f"[TMU-Library] Error publishing resume scanner event for session {trade_session_id}: {str(e)}")
+                log(f"[TMU-Library] Error publishing resume scanner event for session {trade_session_id}: {str(e)}", level="error")
             
             # Return success response
             response_data = {
@@ -528,7 +514,7 @@ class TradeSession:
         except TradeSessionModel.DoesNotExist:
             raise ValueError(f"Trade session {trade_session_id} not found or does not belong to user")
         except Exception as e:
-            logger.error(f"[TMU-Library] Error resuming trade session: {str(e)}", exc_info=True)
+            log(f"[TMU-Library] Error resuming trade session: {str(e)}", level="error")
             raise Exception(f"Failed to resume trade session: {str(e)}")
 
 

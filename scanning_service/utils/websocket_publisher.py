@@ -1,343 +1,286 @@
 """
-WebSocket Publisher Utility for Scanning Service
+WebSocket Publisher for Scanner Updates
 
-This module provides functionality for the scanning service to publish
-scanner updates to connected WebSocket clients via the gateway service.
-Completely independent from ats_gateway to avoid tight coupling.
+This module provides utilities for publishing scanner updates to WebSocket subscribers
+through the Django Channels framework.
 """
 
-import sys
-import os
-import django
 import asyncio
-import redis
-import logging
-import threading
-import concurrent.futures
-
-# Add the project root to Python path and configure Django
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ats_base.settings')
-
-try:
-    django.setup()
-except RuntimeError:
-    # Django is already configured
-    pass
-
-from django.conf import settings
+import json
+import time
+from typing import Dict, Any, Optional
 from channels.layers import get_channel_layer
+from django.conf import settings
+import redis
+from scanning_service.lib.utils.logger import log
 
-# Get logger
-logger = logging.getLogger(__name__)
-
-# Redis connection for subscription tracking
+# Redis client for subscription tracking
 redis_client = redis.Redis(
-    host=settings.REDIS_HOST,
-    port=settings.REDIS_PORT,
-    db=settings.REDIS_DB,
+    host=getattr(settings, 'REDIS_HOST', 'localhost'),
+    port=getattr(settings, 'REDIS_PORT', 6379),
+    db=getattr(settings, 'REDIS_DB', 0),
     decode_responses=True
 )
 
-# Get the default channel layer
-channel_layer = get_channel_layer()
-
-def get_group_name(algorithm_id, frequency):
+def get_group_name(algorithm_id: str, frequency: str) -> str:
     """
-    Generate group name using convention: scanner_<algorithm>_<frequency>
-    Example: scanner_2_5min
+    Generate standardized group name for WebSocket subscriptions.
+    
+    Args:
+        algorithm_id: Scanner algorithm ID
+        frequency: Trading frequency
+        
+    Returns:
+        str: Standardized group name
     """
     return f"scanner_{algorithm_id}_{frequency}"
 
-def get_group_subscription_count(group_name):
+def can_publish_to_group(group_name: str) -> bool:
     """
-    Get current subscriber count for a group
-    Returns 0 if key doesn't exist
-    """
-    redis_key = f"subs:{group_name}"
-    count = redis_client.get(redis_key)
-    
-    # Refresh TTL if key exists to keep it alive during active scanning
-    if count is not None:
-        redis_client.expire(redis_key, 3600)  # Reset to 1 hour
-    
-    return int(count) if count else 0
-
-def can_publish_to_group(group_name):
-    """
-    Check if there are active subscribers for a group
-    Returns True if count > 0, False otherwise
-    """
-    count = get_group_subscription_count(group_name)
-    can_publish = count > 0
-    logger.info(f"WebSocket: can_publish_to_group({group_name}) - Redis count: {count}, can_publish: {can_publish}")
-    
-    # Additional debugging for troubleshooting
-    if count == 0:
-        logger.warning(f"WebSocket: No subscribers found for group '{group_name}' - messages will be skipped")
-    
-    return can_publish
-
-async def publish_scanner_update(algorithm_id, frequency, data):
-    """
-    Publish a scanner update to the appropriate group
-    Only publishes if there are active subscribers
+    Check if there are active subscribers for a WebSocket group.
     
     Args:
-        algorithm_id: The scanner algorithm ID
-        frequency: The scanning frequency (e.g., '5min')
-        data: The scanner update data to send
+        group_name: WebSocket group name
+        
+    Returns:
+        bool: True if there are subscribers, False otherwise
     """
-    # Generate group name using the same convention
-    group_name = get_group_name(algorithm_id, frequency)
-    
-    # Check if there are active subscribers
-    if not can_publish_to_group(group_name):
-        logger.debug(f"No active subscribers for {group_name}, skipping publish")
-        return False
-    
     try:
-        # Send message to the group
+        # Check Redis for active subscribers
+        redis_key = f"subs:{group_name}"
+        count = redis_client.get(redis_key)
+        count = int(count) if count else 0
+        
+        can_publish = count > 0
+        log(f"WebSocket: can_publish_to_group({group_name}) - Redis count: {count}, can_publish: {can_publish}", level="info")
+        
+        if not can_publish:
+            log(f"WebSocket: No subscribers found for group '{group_name}' - messages will be skipped", level="warning")
+        
+        return can_publish
+        
+    except Exception as e:
+        log(f"Error checking subscribers for {group_name}: {str(e)}", level="error")
+        return False
+
+async def publish_scanner_update_async(algorithm_id: str, frequency: str, update_data: Dict[str, Any]) -> bool:
+    """
+    Asynchronously publish scanner update to WebSocket subscribers.
+    
+    Args:
+        algorithm_id: Scanner algorithm ID
+        frequency: Trading frequency  
+        update_data: Update data to publish
+        
+    Returns:
+        bool: True if published successfully, False otherwise
+    """
+    try:
+        group_name = get_group_name(algorithm_id, frequency)
+        
+        # Check if there are subscribers before publishing
+        if not can_publish_to_group(group_name):
+            log(f"No active subscribers for {group_name}, skipping publish", level="debug")
+            return False
+        
+        # Get channel layer and publish
+        channel_layer = get_channel_layer()
+        if not channel_layer:
+            log(f"No channel layer available for WebSocket publishing", level="error")
+            return False
+        
         await channel_layer.group_send(
             group_name,
             {
-                'type': 'scanner_update',  # This calls the scanner_update method in the consumer
-                'data': data
+                'type': 'scanner_update',
+                'data': update_data
             }
         )
         
-        logger.info(f"Published scanner update to {group_name}")
+        log(f"Published scanner update to {group_name}", level="info")
         return True
         
     except Exception as e:
-        logger.error(f"Error publishing to {group_name}: {str(e)}")
+        log(f"Error publishing to {group_name}: {str(e)}", level="error")
         return False
 
-def publish_scanner_update_sync(algorithm_id, frequency, data):
+def run_async_in_thread(coro):
     """
-    Synchronous wrapper for publish_scanner_update
-    Useful for scanner services that run in sync context
+    Run an async coroutine in a separate thread with proper event loop management.
+    
+    Args:
+        coro: Coroutine to run
+        
+    Returns:
+        Any: Result of the coroutine
     """
     try:
-        # Try to get the current event loop
+        # Try to get existing event loop
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # If loop is already running, we need to run in a thread
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, coro)
+                return future.result(timeout=30)
+        else:
+            # Loop exists but not running, we can use it
+            return loop.run_until_complete(coro)
+    except RuntimeError:
+        # No event loop exists, create a new one
         try:
-            loop = asyncio.get_running_loop()
-            # If we're in an async context, use run_coroutine_threadsafe
-            future = asyncio.run_coroutine_threadsafe(
-                publish_scanner_update(algorithm_id, frequency, data), 
-                loop
-            )
-            return future.result(timeout=5.0)  # 5 second timeout
-        except RuntimeError:
-            # No running loop, we can safely create a new one
-            def run_in_thread():
-                # Create a new event loop in this thread
-                new_loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(new_loop)
-                try:
-                    return new_loop.run_until_complete(
-                        publish_scanner_update(algorithm_id, frequency, data)
-                    )
-                except Exception as e:
-                    logger.error(f"Error in event loop execution: {str(e)}")
-                    return False
-                finally:
-                    # Properly close the event loop and clean up
-                    try:
-                        # Cancel any remaining tasks
-                        pending_tasks = asyncio.all_tasks(new_loop)
-                        if pending_tasks:
-                            logger.debug(f"Canceling {len(pending_tasks)} pending tasks before loop closure")
-                            for task in pending_tasks:
-                                if not task.done():
-                                    task.cancel()
-                            
-                            # Wait for tasks to complete cancellation
-                            new_loop.run_until_complete(
-                                asyncio.gather(*pending_tasks, return_exceptions=True)
-                            )
-                    except Exception as cleanup_error:
-                        logger.error(f"Error during task cleanup: {str(cleanup_error)}")
-                    finally:
-                        # Close the loop safely
-                        if not new_loop.is_closed():
-                            new_loop.close()
-                        asyncio.set_event_loop(None)
-            
-            # Run in a separate thread to avoid event loop conflicts
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(run_in_thread)
-                try:
-                    return future.result(timeout=10.0)  # Increased timeout for cleanup
-                except concurrent.futures.TimeoutError:
-                    logger.error("WebSocket publish operation timed out")
-                    return False
-                
+            return asyncio.run(coro)
+        except Exception as e:
+            log(f"Error in event loop execution: {str(e)}", level="error")
+            return False
     except Exception as e:
-        logger.error(f"Error in publish_scanner_update_sync: {str(e)}")
+        log(f"Unexpected error in async execution: {str(e)}", level="error")
         return False
+    finally:
+        # Clean up any pending tasks
+        try:
+            pending_tasks = [task for task in asyncio.all_tasks() if not task.done()]
+            if pending_tasks:
+                log(f"Canceling {len(pending_tasks)} pending tasks before loop closure", level="debug")
+                for task in pending_tasks:
+                    task.cancel()
+                
+                # Wait for tasks to complete cancellation
+                loop = asyncio.get_event_loop()
+                if not loop.is_closed():
+                    loop.run_until_complete(asyncio.gather(*pending_tasks, return_exceptions=True))
+                    
+        except Exception as cleanup_error:
+            log(f"Error during task cleanup: {str(cleanup_error)}", level="error")
 
-def get_active_scanner_groups():
+def publish_scanner_update_sync(algorithm_id: str, frequency: str, update_data: Dict[str, Any]) -> bool:
     """
-    Get all scanner groups that have active subscribers
-    Returns a list of group names
+    Synchronously publish scanner update to WebSocket subscribers.
+    This is a wrapper around the async function for use in synchronous contexts.
+    
+    Args:
+        algorithm_id: Scanner algorithm ID
+        frequency: Trading frequency
+        update_data: Update data to publish
+        
+    Returns:
+        bool: True if published successfully, False otherwise
     """
-    # Get all subscription keys
-    pattern = "subs:scanner_*"
-    keys = redis_client.keys(pattern)
-    
-    active_groups = []
-    for key in keys:
-        count = redis_client.get(key)
-        if count and int(count) > 0:
-            # Extract group name from Redis key (remove 'subs:' prefix)
-            group_name = key[5:]  # Remove 'subs:' prefix
-            active_groups.append(group_name)
-    
-    return active_groups
+    try:
+        coro = publish_scanner_update_async(algorithm_id, frequency, update_data)
+        result = run_async_in_thread(coro)
+        return bool(result)
+        
+    except asyncio.TimeoutError:
+        log("WebSocket publish operation timed out", level="error")
+        return False
+    except Exception as e:
+        log(f"Error in publish_scanner_update_sync: {str(e)}", level="error")
+        return False
 
 class ScannerWebSocketPublisher:
     """
-    Publisher class for scanner services to send real-time updates
-    to WebSocket clients through the gateway service
+    Publisher class for scanner WebSocket updates with automatic subscriber checking.
     """
     
-    def __init__(self, algorithm_id, frequency):
+    def __init__(self, algorithm_id: str, frequency: str):
         """
-        Initialize publisher for a specific algorithm and frequency
+        Initialize publisher for specific algorithm and frequency.
         
         Args:
-            algorithm_id: The scanner algorithm ID
-            frequency: The scanning frequency (e.g., '5min', '1min')
+            algorithm_id: Scanner algorithm ID
+            frequency: Trading frequency
         """
         self.algorithm_id = algorithm_id
         self.frequency = frequency
         self.group_name = get_group_name(algorithm_id, frequency)
-        logger.info(f"Scanner WebSocket publisher initialized for {self.group_name}")
+        
+        log(f"Scanner WebSocket publisher initialized for {self.group_name}", level="info")
     
-    def has_subscribers(self):
+    def can_publish(self) -> bool:
         """
-        Check if there are active subscribers for this scanner
-        Returns True if there are subscribers, False otherwise
+        Check if there are active subscribers for this publisher's group.
+        
+        Returns:
+            bool: True if there are subscribers, False otherwise
         """
         return can_publish_to_group(self.group_name)
     
-    def publish_update(self, update_data):
+    async def publish_async(self, update_data: Dict[str, Any]) -> bool:
         """
-        Publish a scanner update to connected WebSocket clients
-        Only publishes if there are active subscribers
+        Asynchronously publish update data.
         
         Args:
-            update_data: Dictionary containing the scanner update data
+            update_data: Data to publish
             
         Returns:
             bool: True if published successfully, False otherwise
         """
-        if not self.has_subscribers():
-            logger.debug(f"No subscribers for {self.group_name}, skipping update")
+        return await publish_scanner_update_async(self.algorithm_id, self.frequency, update_data)
+    
+    def publish(self, update_data: Dict[str, Any]) -> bool:
+        """
+        Synchronously publish update data.
+        
+        Args:
+            update_data: Data to publish
+            
+        Returns:
+            bool: True if published successfully, False otherwise
+        """
+        # Quick check for subscribers before attempting async operation
+        if not self.can_publish():
+            log(f"No subscribers for {self.group_name}, skipping update", level="debug")
             return False
         
         try:
-            # Add metadata to the update
-            message = {
-                'type': 'scanner_update',
-                'algorithm_id': self.algorithm_id,
-                'frequency': self.frequency,
-                'group_name': self.group_name,
-                'timestamp': update_data.get('timestamp'),
-                'data': update_data
-            }
+            result = publish_scanner_update_sync(self.algorithm_id, self.frequency, update_data)
             
-            # Publish the update
-            success = publish_scanner_update_sync(
-                self.algorithm_id,
-                self.frequency,
-                message
-            )
-            
-            if success:
-                logger.info(f"Published scanner update for {self.group_name}")
+            if result:
+                log(f"Published scanner update for {self.group_name}", level="info")
             else:
-                logger.warning(f"Failed to publish scanner update for {self.group_name}")
+                log(f"Failed to publish scanner update for {self.group_name}", level="warning")
             
-            return success
+            return result
             
         except Exception as e:
-            logger.error(f"Error publishing scanner update: {str(e)}")
+            log(f"Error publishing scanner update: {str(e)}", level="error")
             return False
-    
-    def publish_scanner_status(self, status, message=None):
-        """
-        Publish scanner status updates (started, stopped, error, etc.)
-        
-        Args:
-            status: Status string ('started', 'stopped', 'error', 'processing')
-            message: Optional status message
-        """
-        status_data = {
-            'type': 'scanner_status',
-            'algorithm_id': self.algorithm_id,
-            'frequency': self.frequency,
-            'group_name': self.group_name,
-            'status': status,
-            'message': message,
-            'timestamp': None  # Will be set by the calling service
-        }
-        
-        return self.publish_update(status_data)
-    
-    def publish_scan_result(self, result_data):
-        """
-        Publish scan results to subscribers
-        
-        Args:
-            result_data: Dictionary containing scan results
-        """
-        scan_data = {
-            'type': 'scan_result',
-            'algorithm_id': self.algorithm_id,
-            'frequency': self.frequency,
-            'group_name': self.group_name,
-            'result': result_data,
-            'timestamp': result_data.get('timestamp')
-        }
-        
-        return self.publish_update(scan_data)
 
-def get_all_active_scanners():
+# Utility functions for backward compatibility
+def validate_group_name(group_name: str) -> bool:
     """
-    Get list of all active scanner groups that have subscribers
-    Useful for scanning service to know which scanners to run
-    
-    Returns:
-        list: List of tuples (algorithm_id, frequency) for active scanners
-    """
-    active_groups = get_active_scanner_groups()
-    active_scanners = []
-    
-    for group_name in active_groups:
-        # Parse group name: scanner_<algorithm>_<frequency>
-        if group_name.startswith('scanner_'):
-            parts = group_name[8:].split('_', 1)  # Remove 'scanner_' prefix
-            if len(parts) >= 2:
-                algorithm_id = parts[0]
-                frequency = parts[1]
-                active_scanners.append((algorithm_id, frequency))
-            else:
-                logger.warning(f"Invalid group name format: {group_name}")
-    
-    return active_scanners
-
-def should_run_scanner(algorithm_id, frequency):
-    """
-    Check if a scanner should be running based on subscriber count
+    Validate WebSocket group name format.
     
     Args:
-        algorithm_id: The scanner algorithm ID
-        frequency: The scanning frequency
+        group_name: Group name to validate
         
     Returns:
-        bool: True if scanner should run, False otherwise
+        bool: True if valid, False otherwise
     """
-    group_name = get_group_name(algorithm_id, frequency)
-    return can_publish_to_group(group_name) 
+    if not group_name:
+        return False
+    
+    # Expected format: scanner_{algorithm_id}_{frequency}
+    parts = group_name.split('_')
+    if len(parts) != 3 or parts[0] != 'scanner':
+        log(f"Invalid group name format: {group_name}", level="warning")
+        return False
+    
+    return True
+
+def extract_algorithm_and_frequency(group_name: str) -> tuple[Optional[str], Optional[str]]:
+    """
+    Extract algorithm ID and frequency from group name.
+    
+    Args:
+        group_name: WebSocket group name
+        
+    Returns:
+        tuple: (algorithm_id, frequency) or (None, None) if invalid
+    """
+    if not validate_group_name(group_name):
+        return None, None
+    
+    parts = group_name.split('_')
+    return parts[1], parts[2] 

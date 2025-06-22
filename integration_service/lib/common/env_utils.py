@@ -1,30 +1,32 @@
 import os
-import logging
-from dotenv import load_dotenv, find_dotenv
+from dotenv import load_dotenv
+from integration_service.lib.utils.logger import log
 
-logger = logging.getLogger(__name__)
+def load_env_variables():
+    """Load environment variables from .env file."""
+    env_file = os.path.join(os.path.dirname(__file__), '..', '..', '..', '.env')
+    if os.path.exists(env_file):
+        load_dotenv(env_file)
+        log(f"Loaded environment variables from {env_file}", level="info")
+    else:
+        log("No .env file found, will use OS environment variables", level="warning")
 
-# Load environment variables from .env file
-env_file = find_dotenv(raise_error_if_not_found=False)
-if env_file:
-    load_dotenv(env_file)
-    logger.info(f"Loaded environment variables from {env_file}")
-else:
-    logger.warning("No .env file found, will use OS environment variables")
-
-
-def get_env_variable(key, default=None):
+def get_env_variable(key, default=None, required=False):
     """
-    Get an environment variable from .env file or OS environment
+    Get environment variable with optional default value.
     
     Args:
-        key (str): The name of the environment variable
-        default: The default value to return if the variable is not found
-        
+        key: Environment variable name
+        default: Default value if not found
+        required: If True, raise exception if not found
+    
     Returns:
-        The value of the environment variable or the default value
+        Environment variable value or default
     """
     value = os.environ.get(key, default)
-    if value is None:
-        logger.warning(f"Environment variable {key} not found")
+    
+    if required and value is None:
+        log(f"Environment variable {key} not found", level="warning")
+        raise EnvironmentError(f"Required environment variable '{key}' not found")
+    
     return value 

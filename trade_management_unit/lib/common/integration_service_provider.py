@@ -6,7 +6,7 @@ import requests
 from django.conf import settings
 import logging
 from integration_service.lib.common.error_classifier import is_temporary_error
-from integration_service.lib.common.system_user_utils import get_system_user_id
+from integration_service.lib.common.system_user_utils import get_system_admin_user_id
 
 
 class IntegrationServiceProvider:
@@ -23,7 +23,7 @@ class IntegrationServiceProvider:
         """
         # Handle system user ID resolution
         if user_id == "system":
-            self.user_id = get_system_user_id()
+            self.user_id = get_system_admin_user_id()
             logging.info(f"Using system user ID: {self.user_id}")
         else:
             self.user_id = user_id

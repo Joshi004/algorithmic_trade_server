@@ -11,12 +11,15 @@ from trade_management_unit.models.TerminationAlgorithm import TerminationAlgorit
 from trade_management_unit.Constants.TmuConstants import FREQUENCY
 from trade_management_unit.lib.common.Utils.Utils import current_ist
 from ats_base.logging_utils import create_service_logger, log_database_operation
+from trade_management_unit.lib.common.Utils.custome_logger import log
 
-# Create standardized logger for TMU models
-logger = create_service_logger('trade_management_unit', 'models')
+# Logger utility imported from trade_management_unit.lib.common.Utils.custome_logger
 
 
 class TradeSession(models.Model):
+    """
+    Model representing a trading session with associated algorithms and configuration.
+    """
     class Meta:
         db_table = "trade_sessions"
         indexes = [
@@ -93,7 +96,6 @@ class TradeSession(models.Model):
         return trade_session
 
     @classmethod
-    @log_database_operation(logger, 'SELECT', 'trade_sessions')
     def fetch_active_trade_session(cls, user_id=None, scanning_algo_id=None, initiation_algo_id=None, termination_algo_id=None, trading_freq=None, is_dummy=None):
         """
         Fetch active trade sessions with optional filtering.
@@ -109,7 +111,7 @@ class TradeSession(models.Model):
             'is_dummy': is_dummy
         }
         
-        logger.debug("Building active trade sessions query", context=search_context)
+        log("Building active trade sessions query", level="debug", context=search_context)
         
         query = cls.objects.filter(status='started', is_active=True)
         
@@ -134,13 +136,13 @@ class TradeSession(models.Model):
         
         try:
             results = list(query)
-            logger.info("Active trade sessions query completed", context={
+            log("Active trade sessions query completed", level="info", context={
                 'sessions_found': len(results),
                 **search_context
             })
             return results
         except Exception as e:
-            logger.error("Active trade sessions query failed", context={
+            log("Active trade sessions query failed", level="error", context={
                 'error': str(e),
                 **search_context
             })

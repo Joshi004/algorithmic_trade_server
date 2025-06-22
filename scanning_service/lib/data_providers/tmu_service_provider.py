@@ -5,7 +5,7 @@ Handles all communication with the Trade Management Unit (TMU) service.
 import requests
 from django.conf import settings
 from scanning_service.lib.utils.logger import log
-from integration_service.lib.common.system_user_utils import get_system_user_id
+from integration_service.lib.common.system_user_utils import get_system_admin_user_id
 
 
 class TMUServiceProvider:
@@ -23,7 +23,7 @@ class TMUServiceProvider:
         """
         # Handle system user ID resolution
         if user_id == "system":
-            self.user_id = get_system_user_id()
+            self.user_id = get_system_admin_user_id()
             log(f"Using system user ID: {self.user_id}")
         else:
             self.user_id = user_id
