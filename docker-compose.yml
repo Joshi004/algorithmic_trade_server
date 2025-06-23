@@ -57,7 +57,6 @@ services:
       - DATABASE_PASSWORD=ats_password
       - DATABASE_HOST=ats-db
       - DATABASE_PORT=3306
-      - TEST_DATABASE_NAME=test_ats_db
       
       # Security Keys Configuration
       - DJANGO_SECRET_KEY=prod-django-secret-key-change-in-production-make-it-50-chars-long
@@ -102,7 +101,6 @@ services:
       - DATABASE_PASSWORD=ats_password
       - DATABASE_HOST=ats-db
       - DATABASE_PORT=3306
-      - TEST_DATABASE_NAME=test_ats_db
       
       # Security Keys Configuration
       - DJANGO_SECRET_KEY=prod-django-secret-key-change-in-production-make-it-50-chars-long
