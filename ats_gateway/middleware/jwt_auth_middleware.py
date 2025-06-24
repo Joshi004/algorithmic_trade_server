@@ -23,6 +23,7 @@ class JWTAuthMiddleware():
         self.public_paths = [
             r'^/login/?$',
             r'^/register/?$',
+            r'^/logout/?$',
         ]
         # Refresh token endpoint - only accessible with LLT
         self.refresh_path = r'^/refresh-token/?$'

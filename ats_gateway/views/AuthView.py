@@ -224,6 +224,7 @@ def get_websocket_token(request):
 
 
 @api_view(['POST'])
+@permission_classes([AllowAny])
 def logout(request):
     """
     Logout endpoint that clears authentication cookies

@@ -103,8 +103,8 @@ def get_profile_info(request, *args, **kwargs):
         }, status=405)
     
     try:
-        # Extract user_id from the request (assuming it's set by auth middleware)
-        user_id = request.user_data.get('public_id') if hasattr(request, 'user_data') else request.GET.get('user_id')
+        # Extract user_id from auth middleware only
+        user_id = request.user_data.get('public_id') if hasattr(request, 'user_data') else None
         
         if not user_id:
             return JsonResponse({

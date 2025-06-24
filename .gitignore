@@ -17,6 +17,11 @@ media
 ats_env
 .env
 
+# Coverage reports #
+.coverage
+htmlcov/
+.pytest_cache/
+
 # Log files and directories #
 logs/
 *.log

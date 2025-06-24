@@ -26,8 +26,8 @@ def register_broker(request, *args, **kwargs):
             # Handle form data
             data = request.POST.dict()
             
-        # Extract user_id from the request (assuming it's set by auth middleware)
-        user_id = request.user_data.get('public_id') if hasattr(request, 'user_data') else data.get('user_id')
+        # Extract user_id from the request (must be set by auth middleware)
+        user_id = request.user_data.get('public_id') if hasattr(request, 'user_data') else None
         
         if not user_id:
             return JsonResponse({
@@ -77,8 +77,8 @@ def get_user_brokers(request, *args, **kwargs):
         }, status=405)
     
     try:
-        # Extract user_id from the request (assuming it's set by auth middleware)
-        user_id = request.user_data.get('public_id') if hasattr(request, 'user_data') else request.GET.get('user_id')
+        # Extract user_id from the request (must be set by auth middleware)
+        user_id = request.user_data.get('public_id') if hasattr(request, 'user_data') else None
         
         if not user_id:
             return JsonResponse({
@@ -127,8 +127,8 @@ def set_default_broker(request, *args, **kwargs):
             # Handle form data
             data = request.POST.dict()
         
-        # Extract user_id from the request (assuming it's set by auth middleware)
-        user_id = request.user_data.get('public_id') if hasattr(request, 'user_data') else data.get('user_id')
+        # Extract user_id from the request (must be set by auth middleware)
+        user_id = request.user_data.get('public_id') if hasattr(request, 'user_data') else None
         
         if not user_id:
             return JsonResponse({
