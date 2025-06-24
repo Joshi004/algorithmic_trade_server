@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
+
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework import status
@@ -5,14 +9,12 @@ from rest_framework.permissions import AllowAny
 from django.conf import settings
 from ..serializers.RegistrationSerializer import RegistrationSerializer
 from ..serializers.LoginSerializer import LoginSerializer
-# No longer needed as we use the header token validated by middleware
-# from ..serializers.TokenRefreshSerializer import TokenRefreshSerializer
-from ..utils.jwt_utils import generate_llt, generate_slt, SLT_EXPIRY_MINUTES
-import logging
+from ..utils.jwt_utils import generate_llt, generate_slt, generate_websocket_token, SLT_EXPIRY_MINUTES, WEBSOCKET_TOKEN_EXPIRY_SECONDS
 import datetime
+from ats_base.logging_utils import create_service_logger, log_api_call
+from ats_gateway.utils.logger import log
 
-# Get logger
-logger = logging.getLogger(__name__)
+
 
 
 @api_view(['POST'])
@@ -32,7 +34,7 @@ def register(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def login(request):
-    logger.info("Login request received")
+    log("Login request received", level="info")
     serializer = LoginSerializer(data=request.data)
     if serializer.is_valid():
         # Get user data from validated serializer
@@ -43,15 +45,13 @@ def login(request):
             "last_name": serializer.validated_data["last_name"]
         }
         
-        # Log successful login without exposing email
-        logger.info("User login successful")
+        log("User login successful", level="info")
         
         # Generate tokens
         llt = generate_llt(user_data)
         slt = generate_slt(user_data)
         
-        # Log token generation without exposing token values
-        logger.info("Authentication tokens generated successfully")
+        log("Authentication tokens generated successfully", level="info")
         
         # Calculate token expiry times for the frontend
         slt_expires_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=SLT_EXPIRY_MINUTES)
@@ -94,10 +94,10 @@ def login(request):
             path='/'  # Ensure cookie is sent for all paths
         )
         
-        logger.info("Cookies set successfully")
+        log("Cookies set successfully", level="info")
         return response
     
-    logger.warning(f"Login failed: {serializer.errors}")
+    log(f"Login failed: {serializer.errors}", level="warning")
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -110,11 +110,11 @@ def refresh_token(request):
     
     The token is validated by the middleware before this view is called.
     """
-    logger.info("Token refresh request received")
+    log("Token refresh request received", level="info")
     
     # The middleware has already validated the token and made user_data available
     if not hasattr(request, 'user_data'):
-        logger.warning("No user_data found in refresh request")
+        log("No user_data found in refresh request", level="warning")
         return Response({
             "error": "No valid token found",
             "redirect_to_login": True
@@ -123,10 +123,12 @@ def refresh_token(request):
     # Extract user data from the token (already validated by middleware)
     user_data = {
         "public_id": request.user_data["public_id"],
-        "email": request.user_data["email"]
+        "email": request.user_data["email"],
+        "first_name": request.user_data.get("first_name"),
+        "last_name": request.user_data.get("last_name")
     }
     
-    logger.info(f"Refreshing token for user ID: {user_data.get('user_id', 'unknown')}")
+    log(f"Refreshing token for user ID: {user_data.get('user_id', 'unknown')}", level="info")
     
     # Generate new SLT
     slt = generate_slt(user_data)
@@ -155,7 +157,69 @@ def refresh_token(request):
         path='/'  # Ensure cookie is sent for all paths
     )
     
-    logger.info("Token refreshed successfully")
+    log("Token refreshed successfully", level="info")
+    return response
+
+
+@api_view(['GET'])
+def get_websocket_token(request):
+    """
+    WebSocket Token Endpoint with Enhanced Security (30-second expiration)
+    
+    This endpoint generates WebSocket-specific tokens with very short expiration times
+    to minimize security risks from token exposure in browser network tabs.
+    
+    Security Features:
+    - 30-second expiration (vs 15 minutes for regular SLT)
+    - Special token type 'websocket' for identification
+    - Scope limited to 'websocket_only' connections
+    - Cannot be used for regular API calls
+    
+    The token is validated by the middleware before this view is called.
+    """
+    log("WebSocket token request received", level="info")
+    
+    # The middleware has already validated the token and made user_data available
+    if not hasattr(request, 'user_data'):
+        log("No user_data found in WebSocket token request", level="warning")
+        return Response({
+            "error": "No valid token found",
+            "redirect_to_login": True
+        }, status=status.HTTP_401_UNAUTHORIZED)
+        
+    # Extract user data from the token (already validated by middleware)
+    user_data = {
+        "public_id": request.user_data["public_id"],
+        "email": request.user_data["email"],
+        "first_name": request.user_data.get("first_name"),
+        "last_name": request.user_data.get("last_name")
+    }
+    
+    log("Generating WebSocket-specific token with 30-second expiration", level="info")
+    
+    # Generate a WebSocket-specific token with 30-second expiration
+    websocket_token = generate_websocket_token(user_data)
+    
+    # Calculate token expiry times
+    websocket_expires_at = datetime.datetime.utcnow() + datetime.timedelta(seconds=WEBSOCKET_TOKEN_EXPIRY_SECONDS)
+    
+    # Return the WebSocket token in response body
+    response = Response({
+        "token": websocket_token,
+        "token_info": {
+            "expires_in_seconds": WEBSOCKET_TOKEN_EXPIRY_SECONDS,
+            "expires_at": websocket_expires_at.isoformat() + "Z",
+            "token_type": "websocket",
+            "scope": "websocket_only"
+        },
+        "user": {
+            "email": user_data["email"],
+            "first_name": user_data.get("first_name"),
+            "last_name": user_data.get("last_name")
+        }
+    }, status=status.HTTP_200_OK)
+    
+    log("WebSocket token provided successfully with 30-second expiration", level="info")
     return response
 
 
@@ -164,7 +228,7 @@ def logout(request):
     """
     Logout endpoint that clears authentication cookies
     """
-    logger.info("Logout request received")
+    log("Logout request received", level="info")
     
     response = Response({
         "message": "Logout successful"
@@ -174,5 +238,5 @@ def logout(request):
     response.delete_cookie('llt')
     response.delete_cookie('slt')
     
-    logger.info("Logout successful, cookies cleared")
+    log("Logout successful, cookies cleared", level="info")
     return response

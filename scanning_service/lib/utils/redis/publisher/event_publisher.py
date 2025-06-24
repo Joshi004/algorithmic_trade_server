@@ -46,9 +46,9 @@ class ScanningEventPublisher:
         self,
         trade_session_id: str,
         instrument_data: Dict[str, Any],
-        scanning_algorithm_id: int,
-        initiation_algorithm_id: int,
-        termination_algorithm_id: int
+        scanning_algorithm_name: str,
+        initiation_algorithm_name: str,
+        termination_algorithm_name: str
     ) -> Optional[str]:
         """
         Persist and publish an eligible instrument found by scanner using standardized format.
@@ -56,9 +56,9 @@ class ScanningEventPublisher:
         Args:
             trade_session_id: Trade session ID
             instrument_data: Dictionary containing standardized instrument details
-            scanning_algorithm_id: ID of the scanning algorithm
-            initiation_algorithm_id: ID of the initiation algorithm
-            termination_algorithm_id: ID of the termination algorithm
+            scanning_algorithm_name: Name of the scanning algorithm
+            initiation_algorithm_name: Name of the initiation algorithm
+            termination_algorithm_name: Name of the termination algorithm
             
         Returns:
             Message ID if successful, None otherwise
@@ -90,9 +90,9 @@ class ScanningEventPublisher:
                 'resistance_price': instrument_data.get('resistance_price'),
                 'required_action': instrument_data.get('required_action'),
                 'market_price': instrument_data.get('market_price'),
-                'scanning_algorithm_id': scanning_algorithm_id,
-                'initiation_algorithm_id': initiation_algorithm_id,
-                'termination_algorithm_id': termination_algorithm_id
+                'scanning_algorithm_name': scanning_algorithm_name,
+                'initiation_algorithm_name': initiation_algorithm_name,
+                'termination_algorithm_name': termination_algorithm_name
             }
             
             # Persist to database first using utility function (auto-adds created_at)
@@ -190,9 +190,9 @@ class ScanningEventPublisher:
         self,
         trade_session_id: str,
         instruments: List[Dict[str, Any]],
-        scanning_algorithm_id: int,
-        initiation_algorithm_id: int,
-        termination_algorithm_id: int
+        scanning_algorithm_name: str,
+        initiation_algorithm_name: str,
+        termination_algorithm_name: str
     ) -> int:
         """
         Persist and publish multiple eligible instruments in a batch operation.
@@ -200,9 +200,9 @@ class ScanningEventPublisher:
         Args:
             trade_session_id: Trade session ID
             instruments: List of instrument data dictionaries
-            scanning_algorithm_id: ID of the scanning algorithm
-            initiation_algorithm_id: ID of the initiation algorithm
-            termination_algorithm_id: ID of the termination algorithm
+            scanning_algorithm_name: Name of the scanning algorithm
+            initiation_algorithm_name: Name of the initiation algorithm
+            termination_algorithm_name: Name of the termination algorithm
             
         Returns:
             Number of successfully published instruments
@@ -229,9 +229,9 @@ class ScanningEventPublisher:
                     'resistance_price': instrument_data.get('resistance_price'),
                     'required_action': instrument_data.get('required_action'),
                     'market_price': instrument_data.get('market_price'),
-                    'scanning_algorithm_id': scanning_algorithm_id,
-                    'initiation_algorithm_id': initiation_algorithm_id,
-                    'termination_algorithm_id': termination_algorithm_id
+                    'scanning_algorithm_name': scanning_algorithm_name,
+                    'initiation_algorithm_name': initiation_algorithm_name,
+                    'termination_algorithm_name': termination_algorithm_name
                 }
                 events.append(event)
             
@@ -263,6 +263,61 @@ class ScanningEventPublisher:
             log(f"Failed to publish batch eligible instruments: {str(e)}", level="error")
             return 0
     
+    def publish_scanning_session_initiated(self,
+                                         trade_session_id: int,
+                                         user_id: str,
+                                         trading_frequency: str,
+                                         scanning_algorithm_name: str,
+                                         initiation_algorithm_name: str,
+                                         termination_algorithm_name: str,
+                                         is_dummy: bool = False) -> str:
+        """
+        Publish event when a new scanning session is initiated.
+        
+        Args:
+            trade_session_id: Unique identifier for the trade session
+            user_id: User ID who initiated the session
+            trading_frequency: Trading frequency (e.g., "5-minute", "10-minute")
+            scanning_algorithm_name: Name of the scanning algorithm
+            initiation_algorithm_name: Name of the initiation algorithm
+            termination_algorithm_name: Name of the termination algorithm
+            is_dummy: Whether this is a dummy/test session
+        """
+        try:
+            # Create event data
+            event_data = {
+                'event_id': self._generate_event_id(),
+                'event_type': 'scanning_session_initiated',
+                'trade_session_id': trade_session_id,
+                'user_id': user_id,
+                'trading_frequency': trading_frequency,
+                'scanning_algorithm_name': scanning_algorithm_name,
+                'initiation_algorithm_name': initiation_algorithm_name,
+                'termination_algorithm_name': termination_algorithm_name,
+                'is_dummy': is_dummy,
+                'timestamp': current_ist().isoformat()
+            }
+            
+            # Flatten the data for Redis stream
+            flat_data = prepare_for_redis_stream(event_data)
+            
+            # Publish to stream using optimized publisher client
+            message_id = self.publisher_client.publish_to_stream(
+                self.initiation_queue_stream,
+                flat_data
+            )
+            
+            if message_id:
+                log(f"Published scanning session initiated event: {message_id}")
+            else:
+                log(f"Failed to publish scanning session initiated event", level="warning")
+            
+            return message_id
+            
+        except Exception as e:
+            log(f"Failed to publish scanning session initiated event: {str(e)}", level="error")
+            return None
+
 
 
 

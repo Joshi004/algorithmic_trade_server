@@ -1,9 +1,11 @@
 from django.http import JsonResponse
 import json
+import traceback
 from integration_service.lib.broker.fetch_data import FetchData
 from integration_service.lib.broker.portfolio import Portfolio
 from integration_service.lib.broker.trade import Trade
 from integration_service.lib.broker.instruments import InstrumentsProvider
+from integration_service.lib.utils.logger import log
 
 # Historical Data endpoints (from DataView)
 def get_historical_data(request, *args, **kwargs):
@@ -33,19 +35,27 @@ def get_historical_data(request, *args, **kwargs):
         number_of_candles = request.GET.get('number_of_candles')
         trade_date = request.GET.get('trade_date')
         
+        # Log the incoming request parameters
+        log(f"[INTEGRATION_VIEW] Historical data request received: symbol={symbol}, token={token}, interval={interval}, candles={number_of_candles}, trade_date={trade_date}, user_id={user_id}")
+        
         # Validate required parameters
         if not all([symbol, token, interval, number_of_candles]):
+            missing_params = [param for param, value in [('symbol', symbol), ('token', token), ('interval', interval), ('number_of_candles', number_of_candles)] if not value]
+            error_msg = f"Missing required parameters: {', '.join(missing_params)}"
+            log(f"[INTEGRATION_VIEW] ❌ {error_msg}", level="error")
             return JsonResponse({
                 "status": "error",
-                "error": "Missing required parameters: symbol, token, interval, number_of_candles"
+                "error": error_msg
             }, status=400)
         
         try:
             number_of_candles = int(number_of_candles)
         except ValueError:
+            error_msg = "number_of_candles must be a valid integer"
+            log(f"[INTEGRATION_VIEW] ❌ {error_msg}: received '{number_of_candles}'", level="error")
             return JsonResponse({
                 "status": "error",
-                "error": "number_of_candles must be a valid integer"
+                "error": error_msg
             }, status=400)
         
         # Parse trade_date if provided
@@ -54,16 +64,21 @@ def get_historical_data(request, *args, **kwargs):
             try:
                 from datetime import datetime
                 parsed_trade_date = datetime.fromisoformat(trade_date)
+                log(f"[INTEGRATION_VIEW] Trade date parsed: {parsed_trade_date}")
             except ValueError:
+                error_msg = "trade_date must be in ISO format (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)"
+                log(f"[INTEGRATION_VIEW] ❌ {error_msg}: received '{trade_date}'", level="error")
                 return JsonResponse({
                     "status": "error",
-                    "error": "trade_date must be in ISO format (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)"
+                    "error": error_msg
                 }, status=400)
         
         # Initialize the fetch data service
+        log(f"[INTEGRATION_VIEW] Initializing FetchData service for user {user_id}")
         fetch_data = FetchData(user_id)
         
         # Get historical data
+        log(f"[INTEGRATION_VIEW] Calling fetch_historical_data_for_client for {symbol}")
         result = fetch_data.fetch_historical_data_for_client(
             symbol=symbol,
             token=token,
@@ -72,6 +87,26 @@ def get_historical_data(request, *args, **kwargs):
             trade_date=parsed_trade_date
         )
         
+        # Log the result being returned
+        data_size = len(result.get("data", []))
+        log(f"[INTEGRATION_VIEW] Returning response for {symbol}: {data_size} candles")
+        
+        # Check if this is API success with zero data vs API failure
+        api_success = result.get("meta", {}).get("api_success_status", True)
+        
+        if data_size == 0:
+            if api_success:
+                log(f"[INTEGRATION_VIEW] ⚠️ Returning ZERO data for {symbol} - API succeeded but no data available (likely expired instrument)", level="warning")
+            else:
+                log(f"[INTEGRATION_VIEW] ❌ Returning ZERO data for {symbol} - API failed: {result.get('meta', {}).get('api_error_message', 'Unknown error')}", level="error")
+            log(f"[INTEGRATION_VIEW] Request details: token={token}, interval={interval}, candles={number_of_candles}", level="warning")
+        else:
+            # Log first and last candle for verification
+            data = result.get("data", [])
+            first_candle = data[0] if data else None
+            last_candle = data[-1] if len(data) > 1 else data[0] if len(data) == 1 else None
+            log(f"[INTEGRATION_VIEW] Sample candles for {symbol}: first={first_candle}, last={last_candle}")
+        
         return JsonResponse({
             "status": "success",
             "data": result["data"],
@@ -79,9 +114,14 @@ def get_historical_data(request, *args, **kwargs):
         }, status=200)
         
     except Exception as e:
+        error_msg = str(e)
+        log(f"[INTEGRATION_VIEW] ❌ Exception in get_historical_data: {error_msg}", level="error")
+        log(f"[INTEGRATION_VIEW] Request details: symbol={symbol if 'symbol' in locals() else 'N/A'}, token={token if 'token' in locals() else 'N/A'}", level="error")
+        log(f"[INTEGRATION_VIEW] Full traceback: {traceback.format_exc()}", level="error")
+        
         return JsonResponse({
             "status": "error",
-            "error": str(e)
+            "error": error_msg
         }, status=500)
 
 # Portfolio endpoints (from PortfolioView)
@@ -395,10 +435,22 @@ def get_quotes(request, *args, **kwargs):
         
         # Check for errors in the result
         if 'error_message' in result:
+            log(f"[INTEGRATION_VIEW] Error from Trade.get_quotes: {result['error_message']}", level="error")
             return JsonResponse({
                 "status": "error",
                 "error": result['error_message']
             }, status=result.get('status_code', 500))
+        
+        # Log the successful response being sent
+        data_keys = list(result['data'].keys())[:3] if isinstance(result.get('data'), dict) else []
+        log(f"[INTEGRATION_VIEW] Sending successful response: data_keys_count={len(result.get('data', {}))}, sample_keys={data_keys}")
+        
+        # Log sample quote data being sent
+        if isinstance(result.get('data'), dict) and result['data']:
+            first_key = next(iter(result['data']), None)
+            if first_key:
+                sample_quote = result['data'][first_key]
+                log(f"[INTEGRATION_VIEW] SAMPLE QUOTE BEING SENT - {first_key}: last_price={sample_quote.get('last_price')}, volume={sample_quote.get('volume')}")
         
         return JsonResponse({
             "status": "success",
@@ -415,6 +467,9 @@ def get_quotes(request, *args, **kwargs):
 def get_instruments(request, *args, **kwargs):
     """
     API endpoint to get all instruments from Kite API
+    
+    Since instruments are system-level master data shared across all users,
+    this endpoint uses system credentials when no user_id is provided.
     """
     if request.method != 'GET':
         return JsonResponse({
@@ -423,16 +478,10 @@ def get_instruments(request, *args, **kwargs):
         }, status=405)
     
     try:
-        # Extract user_id from the request (assuming it's set by auth middleware)
+        # Extract user_id from the request (optional for instruments endpoint)
         user_id = request.user_data.get('public_id') if hasattr(request, 'user_data') else request.GET.get('user_id')
         
-        if not user_id:
-            return JsonResponse({
-                "status": "error",
-                "error": "User ID is required"
-            }, status=400)
-        
-        # Initialize the instruments provider
+        # Initialize the instruments provider - will use system user if user_id is None
         instruments_provider = InstrumentsProvider(user_id)
         
         # Get all instruments

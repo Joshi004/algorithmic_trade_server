@@ -1,50 +1,42 @@
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
+
 from django.http import JsonResponse
 from trade_management_unit.lib.TradeSession.TradeSession import TradeSession
 from trade_management_unit.models.TradeSession import TradeSession as TradeSessionModel
-from ats_gateway.models.User import User
-from trade_management_unit.Constants.TmuConstants import *
-import logging
+from trade_management_unit.views.helpers.trade_session_helper import TradeSessionViewHelper
+from ats_base.logging_utils import create_service_logger, log_api_call
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from django.views.decorators.csrf import csrf_exempt
+from ats_base.logging_utils import create_service_logger, log_api_call
+from trade_management_unit.lib.common.Utils.custome_logger import log
+
+# Logger utility imported from trade_management_unit.lib.common.Utils.custome_logger
 
 
 def initiate_trade_session(request, *args, **kwargs):
     """
     API endpoint to initiate a trade session.
-    Thin view layer - delegates business logic to TradeSession library.
+    Thin view layer - delegates parameter validation to helper and business logic to library.
     """
-    
-    # Extract query parameters
-    query_params = request.GET
-    trading_frequency = query_params.get("trading_frequency")
-    is_dummy = bool(query_params.get("dummy"))
-    scanning_algorithm_id = query_params.get("scanning_algorithm_id")
-    initiation_algorithm_id = query_params.get("initiation_algorithm_id")
-    termination_algorithm_id = query_params.get("termination_algorithm_id")
-
-    # Check authentication
-    if not hasattr(request, 'user_data') or not request.user_data.get('public_id'):
-        return JsonResponse({
-            'error': 'Authentication required',
-            'message': 'User must be authenticated to create a trade session'
-        }, status=401)
-    
-    user_id_str = request.user_data.get('public_id')
-
-    # Validate required parameters
-    if not all([scanning_algorithm_id, initiation_algorithm_id, termination_algorithm_id, trading_frequency]):
-        return JsonResponse({
-            'error': 'Missing required parameters',
-            'required_params': ['scanning_algorithm_id', 'initiation_algorithm_id', 'termination_algorithm_id', 'trading_frequency']
-        }, status=400)
-
     try:
+        # Validate authentication
+        user_id_str, auth_error = TradeSessionViewHelper.validate_authentication(request)
+        if auth_error:
+            return auth_error
+        
+        # Validate and extract parameters
+        params, param_error = TradeSessionViewHelper.validate_and_extract_initiate_session_params(request)
+        if param_error:
+            return param_error
+        
         # Delegate business logic to library
         result = TradeSession.initiate_trade_session(
             user_id_str=user_id_str,
-            scanning_algorithm_id=scanning_algorithm_id,
-            initiation_algorithm_id=initiation_algorithm_id,
-            termination_algorithm_id=termination_algorithm_id,
-            trading_frequency=trading_frequency,
-            is_dummy=is_dummy
+            **params
         )
         
         return JsonResponse(result, status=200)
@@ -80,70 +72,214 @@ def get_new_session_param_options(request, *args, **kwargs):
         }, status=500)
 
 
-def get_active_trade_sessions(request, *args, **kwargs):
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+@log_api_call('trade_management_unit')
+def get_active_trade_sessions(request):
     """
-    API endpoint to get active trade sessions with optional filtering.
-    """
-    logger = logging.getLogger(__name__)
+    Get active trade sessions with optional filtering by scanning algorithm and frequency.
     
+    Query Parameters:
+        scanning_algo_id (int, optional): Filter by scanning algorithm ID
+        trading_frequency (str, optional): Filter by trading frequency
+    
+    Returns:
+        JSON response with active trade sessions
+    """
     try:
-        logger.info(f"[TMU] get_active_trade_sessions called with method: {request.method}")
+        # Extract and validate query parameters
+        scanning_algo_id = request.GET.get('scanning_algo_id')
+        trading_frequency = request.GET.get('trading_frequency')
         
-        query_params = request.GET
-        scanning_algo_id = query_params.get("scanning_algo_id")
-        trading_frequency = query_params.get("trading_frequency")
+        log("Validating and extracting parameters for active sessions query", level="debug")
         
-        logger.info(f"[TMU] Query params - scanning_algo_id: {scanning_algo_id}, trading_frequency: {trading_frequency}")
-        
-        # Convert to int if provided
-        if scanning_algo_id:
+        # Validate scanning_algo_id if provided
+        if scanning_algo_id is not None:
             try:
                 scanning_algo_id = int(scanning_algo_id)
-                logger.info(f"[TMU] Converted scanning_algo_id to int: {scanning_algo_id}")
-            except ValueError:
-                logger.error(f"[TMU] Invalid scanning_algo_id conversion: {scanning_algo_id}")
+            except (ValueError, TypeError):
+                log("Parameter validation failed for active sessions query", level="warning")
                 return JsonResponse({
-                    'error': 'Invalid scanning_algo_id, must be an integer'
+                    'error': 'Invalid scanning_algo_id parameter',
+                    'message': 'scanning_algo_id must be a valid integer'
                 }, status=400)
         
-        logger.info(f"[TMU] Calling TradeSessionModel.fetch_active_trade_session with params")
+        log("Querying active trade sessions", level="debug", context={
+            'scanning_algo_id': scanning_algo_id,
+            'trading_frequency': trading_frequency
+        })
         
-        # Use the model method with optional parameters
-        sessions = TradeSessionModel.fetch_active_trade_session(
+        # Use the model method to fetch active sessions
+        active_sessions = TradeSession.get_active_sessions(
             scanning_algo_id=scanning_algo_id,
-            trading_freq=trading_frequency
+            trading_frequency=trading_frequency
         )
         
-        logger.info(f"[TMU] Retrieved {len(sessions)} sessions from model")
+        log("Active trade sessions query completed", level="info", context={
+            'session_count': len(active_sessions),
+            'scanning_algo_id': scanning_algo_id,
+            'trading_frequency': trading_frequency
+        })
         
-        # Format response data
-        sessions_data = []
-        for session in sessions:
-            sessions_data.append({
-                'id': session.id,
-                'user_id': session.user_id.public_id,
-                'trading_frequency': session.trading_frequency,
-                'is_dummy': session.dummy,
-                'status': session.status,
-                'started_at': session.started_at.isoformat() if session.started_at else None,
-                'scanning_algorithm_id': session.scanning_algorithm_id,
-                'initiation_algorithm_id': session.initiation_algorithm_id,
-                'termination_algorithm_id': session.termination_algorithm_id
-            })
-        
-        logger.info(f"[TMU] Formatted {len(sessions_data)} sessions data")
-        
-        response_data = {
-            'data': sessions_data,
-            'meta': {'count': len(sessions_data)}
-        }
-        
-        logger.info(f"[TMU] Returning successful response with {len(sessions_data)} sessions")
-        return JsonResponse(response_data, status=200)
+        return JsonResponse({
+            'status': 'success',
+            'data': active_sessions,
+            'meta': {
+                'count': len(active_sessions),
+                'filters': {
+                    'scanning_algo_id': scanning_algo_id,
+                    'trading_frequency': trading_frequency
+                }
+            }
+        }, status=200)
         
     except Exception as e:
-        logger.error(f"[TMU] Exception in get_active_trade_sessions: {str(e)}", exc_info=True)
+        log("Failed to fetch active trade sessions", level="error", context={'error': str(e)})
+        return JsonResponse({
+            'status': 'error',
+            'error': 'Failed to fetch active trade sessions',
+            'message': str(e)
+        }, status=500)
+
+
+def get_user_trade_sessions(request, *args, **kwargs):
+    """
+    API endpoint to get all trade sessions for a specific user with optional filtering.
+    Thin view layer - delegates parameter validation to helper and business logic to library.
+    """
+    try:
+        # Validate authentication
+        user_id_str, auth_error = TradeSessionViewHelper.validate_authentication(request)
+        if auth_error:
+            return auth_error
+        
+        # Validate and extract parameters
+        params, param_error = TradeSessionViewHelper.validate_and_extract_user_trade_sessions_params(request)
+        if param_error:
+            return param_error
+        
+        # Delegate business logic to library
+        result = TradeSession.get_user_trade_sessions(
+            user_id_str=user_id_str,
+            **params
+        )
+        
+        return JsonResponse(result, status=200)
+        
+    except ValueError as e:
         return JsonResponse({
             'error': str(e),
-            'message': 'Failed to fetch active trade sessions'
+            'message': 'Invalid input provided'
+        }, status=400)
+        
+    except Exception as e:
+        return JsonResponse({
+            'error': str(e),
+            'message': 'Failed to fetch user trade sessions'
+        }, status=500)
+
+
+def get_trade_session_details(request, *args, **kwargs):
+    """
+    API endpoint to get comprehensive details of a specific trade session.
+    Includes statistics like total trades, profit, success rate, etc.
+    Thin view layer - delegates parameter validation to helper and business logic to library.
+    """
+    try:
+        # Validate and extract parameters
+        params, param_error = TradeSessionViewHelper.validate_and_extract_trade_session_details_params(request)
+        if param_error:
+            return param_error
+        
+        # Delegate business logic to library
+        result = TradeSession.get_trade_session_details(
+            trade_session_id=params['trade_session_id']
+        )
+        
+        return JsonResponse(result, status=200)
+        
+    except ValueError as e:
+        return JsonResponse({
+            'error': str(e),
+            'message': 'Invalid input provided'
+        }, status=400)
+        
+    except Exception as e:
+        return JsonResponse({
+            'error': str(e),
+            'message': 'Failed to fetch trade session details'
+        }, status=500)
+
+
+def pause_trade_session(request, *args, **kwargs):
+    """
+    API endpoint to pause a trade session.
+    Thin view layer - delegates parameter validation to helper and business logic to library.
+    """
+    try:
+        # Validate authentication
+        user_id_str, auth_error = TradeSessionViewHelper.validate_authentication(request)
+        if auth_error:
+            return auth_error
+        
+        # Validate and extract parameters (including session ownership)
+        params, param_error = TradeSessionViewHelper.validate_and_extract_pause_resume_params(request, user_id_str)
+        if param_error:
+            return param_error
+        
+        # Delegate business logic to library
+        result = TradeSession.pause_trade_session(
+            trade_session_id=params['trade_session_id'],
+            user_id_str=user_id_str
+        )
+        
+        return JsonResponse(result, status=200)
+        
+    except ValueError as e:
+        return JsonResponse({
+            'error': str(e),
+            'message': 'Invalid input provided'
+        }, status=400)
+        
+    except Exception as e:
+        return JsonResponse({
+            'error': str(e),
+            'message': 'Failed to pause trade session'
+        }, status=500)
+
+
+def resume_trade_session(request, *args, **kwargs):
+    """
+    API endpoint to resume a trade session.
+    Thin view layer - delegates parameter validation to helper and business logic to library.
+    """
+    try:
+        # Validate authentication
+        user_id_str, auth_error = TradeSessionViewHelper.validate_authentication(request)
+        if auth_error:
+            return auth_error
+        
+        # Validate and extract parameters (including session ownership)
+        params, param_error = TradeSessionViewHelper.validate_and_extract_pause_resume_params(request, user_id_str)
+        if param_error:
+            return param_error
+        
+        # Delegate business logic to library
+        result = TradeSession.resume_trade_session(
+            trade_session_id=params['trade_session_id'],
+            user_id_str=user_id_str
+        )
+        
+        return JsonResponse(result, status=200)
+        
+    except ValueError as e:
+        return JsonResponse({
+            'error': str(e),
+            'message': 'Invalid input provided'
+        }, status=400)
+        
+    except Exception as e:
+        return JsonResponse({
+            'error': str(e),
+            'message': 'Failed to resume trade session'
         }, status=500)

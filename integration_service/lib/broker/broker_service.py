@@ -1,4 +1,7 @@
-import logging
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+
 from django.db import transaction
 from integration_service.models.UserBrokerCredential import UserBrokerCredential
 from django.utils.crypto import get_random_string
@@ -6,11 +9,13 @@ import base64
 import hashlib
 from cryptography.fernet import Fernet
 from integration_service.lib.common.env_utils import get_env_variable
+from integration_service.lib.utils.logger import log
+
+
 
 class BrokerService:
     def __init__(self):
-        logging.basicConfig(level=logging.DEBUG)
-        self.logger = logging.getLogger(__name__)
+        pass
     
     def _get_encryption_key(self):
         # Get encryption secret from environment and convert to Fernet-compatible key
@@ -62,7 +67,7 @@ class BrokerService:
                 api_secret=encrypted_api_secret
             )
             
-            self.logger.info(f"Broker credential stored with encrypted API key and secret")
+            log(f"Broker credential stored with encrypted API key and secret", level="info")
             
             return {
                 "status": "success",
@@ -74,7 +79,7 @@ class BrokerService:
                 }
             }
         except Exception as e:
-            self.logger.error(f"Error registering broker: {str(e)}")
+            log(f"Error registering broker: {str(e)}", level="error")
             return {
                 "status": "error",
                 "error": str(e)
@@ -93,7 +98,7 @@ class BrokerService:
                 }
             }
         except Exception as e:
-            self.logger.error(f"Error setting default broker: {str(e)}")
+            log(f"Error setting default broker: {str(e)}", level="error")
             return {
                 "status": "error",
                 "error": str(e)
@@ -121,7 +126,7 @@ class BrokerService:
                 }
             }
         except Exception as e:
-            self.logger.error(f"Error getting user brokers: {str(e)}")
+            log(f"Error getting user brokers: {str(e)}", level="error")
             return {
                 "status": "error",
                 "error": str(e)

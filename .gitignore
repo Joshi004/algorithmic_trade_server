@@ -8,6 +8,7 @@
 
 # Django #
 *.log
+*.log.*
 *.pot
 *.pyc
 __pycache__
@@ -15,6 +16,11 @@ db.sqlite3
 media
 ats_env
 .env
+
+# Log files and directories #
+logs/
+*.log
+*.log.*
 
 # Backup files # 
 

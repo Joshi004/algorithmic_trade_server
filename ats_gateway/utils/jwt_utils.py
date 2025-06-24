@@ -16,9 +16,16 @@ SLT_SECRET_KEY = os.environ.get(
     '9876ZYXW'  # Development fallback - change in production!
 )
 
+# Dedicated WebSocket Secret Key for enhanced security isolation
+WEBSOCKET_SECRET_KEY = os.environ.get(
+    'JWT_WEBSOCKET_TOKEN_SECRET',
+    'WS_SEC_2024_ATS'  # Development fallback - change in production!
+)
+
 # Expiration times - Declared constants
 LLT_EXPIRY_HOURS = 24  # 24 hours for LLT
 SLT_EXPIRY_MINUTES = 15  # 15 minutes for SLT
+WEBSOCKET_TOKEN_EXPIRY_SECONDS = 30  # 30 seconds for WebSocket tokens (security enhancement)
 
 def generate_token(payload: Dict[str, Any]) -> str:
     """
@@ -73,6 +80,36 @@ def generate_slt(payload: Dict[str, Any]) -> str:
     }
     
     token = jwt.encode(token_payload, SLT_SECRET_KEY, algorithm='HS256')
+    if isinstance(token, bytes):
+        return token.decode('utf-8')
+    return token
+
+def generate_websocket_token(payload: Dict[str, Any]) -> str:
+    """
+    Generate a WebSocket-specific token with 30-second expiration for enhanced security.
+    
+    This token is specifically designed for WebSocket authentication with:
+    - Very short expiration (30 seconds) to minimize security risk
+    - Dedicated secret key (separate from SLT/LLT keys) for security isolation
+    - Special token type to differentiate from regular API tokens
+    - Scope limitation to WebSocket connections only
+    
+    Args:
+        payload: Dictionary containing data to be encoded in the token
+        
+    Returns:
+        JWT token string with 30-second expiration and dedicated secret key
+    """
+    expiration = datetime.datetime.utcnow() + datetime.timedelta(seconds=WEBSOCKET_TOKEN_EXPIRY_SECONDS)
+    token_payload = {
+        **payload,
+        'exp': expiration,
+        'token_type': 'websocket',  # Special type for WebSocket tokens
+        'scope': 'websocket_only'   # Limit scope to WebSocket connections only
+    }
+    
+    # Use dedicated WebSocket secret key for enhanced security isolation
+    token = jwt.encode(token_payload, WEBSOCKET_SECRET_KEY, algorithm='HS256')
     if isinstance(token, bytes):
         return token.decode('utf-8')
     return token
@@ -133,6 +170,30 @@ def decode_slt(token: str) -> Optional[Dict[str, Any]]:
     except jwt.PyJWTError:
         return None
 
+def decode_websocket_token(token: str) -> Optional[Dict[str, Any]]:
+    """
+    Decode a WebSocket-specific JWT token and return the payload.
+    
+    This function specifically handles WebSocket tokens with:
+    - 30-second expiration for enhanced security
+    - Dedicated secret key (separate from SLT/LLT keys) for security isolation
+    - Special token type validation
+    
+    Args:
+        token: JWT token string
+        
+    Returns:
+        Dictionary containing the decoded payload or None if token is invalid
+    """
+    try:
+        # Use dedicated WebSocket secret key for enhanced security isolation
+        payload = jwt.decode(token, WEBSOCKET_SECRET_KEY, algorithms=['HS256'])
+        if payload.get('token_type') == 'websocket':
+            return payload
+        return None
+    except jwt.PyJWTError:
+        return None
+
 def verify_token(token: str) -> bool:
     """
     Verify if a token is valid.
@@ -170,3 +231,15 @@ def verify_slt(token: str) -> bool:
         True if token is valid, False otherwise
     """
     return decode_slt(token) is not None
+
+def verify_websocket_token(token: str) -> bool:
+    """
+    Verify if a WebSocket token is valid.
+    
+    Args:
+        token: JWT token string
+        
+    Returns:
+        True if token is valid, False otherwise
+    """
+    return decode_websocket_token(token) is not None

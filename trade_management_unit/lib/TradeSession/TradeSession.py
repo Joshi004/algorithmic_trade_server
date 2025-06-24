@@ -1,10 +1,28 @@
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+
 from trade_management_unit.Constants.TmuConstants import FREQUENCY
 from trade_management_unit.models.ScanningAlgorithm import ScanningAlgorithm
 from trade_management_unit.models.InitiationAlgorithm import InitiationAlgorithm
 from trade_management_unit.models.TerminationAlgorithm import TerminationAlgorithm
 from trade_management_unit.models.TradeSession import TradeSession as TradeSessionModel
+from trade_management_unit.models.Trade import Trade
+from trade_management_unit.models.ScannerEvent import ScannerEvent
 from trade_management_unit.lib.common.event_publisher import get_trade_session_event_publisher
 from ats_gateway.models.User import User
+from django.db.models import Count, Sum, Max, Q
+from decimal import Decimal
+from ats_base.logging_utils import (
+    create_service_logger, 
+    log_session_state_change, 
+    log_execution_time,
+    log_database_operation
+)
+from trade_management_unit.lib.common.Utils.custome_logger import log
+
+# Create standardized logger for TMU library
+logger = create_service_logger('trade_management_unit', 'trade_session_lib')
 
 
 class TradeSession:
@@ -139,5 +157,364 @@ class TradeSession:
             
         except Exception as e:
             raise Exception(f"Failed to fetch session parameter options: {str(e)}")
+
+    @staticmethod
+    def get_user_trade_sessions(user_id_str, scanning_algorithm_id=None, initiation_algorithm_id=None, 
+                              termination_algorithm_id=None, is_dummy=None, trading_frequency=None, 
+                              status=None, start_date=None, end_date=None):
+        """
+        Core business logic for fetching user trade sessions with optional filtering.
+        
+        Args:
+            user_id_str (str): User's public ID from JWT authentication
+            scanning_algorithm_id (int, optional): Filter by scanning algorithm ID
+            initiation_algorithm_id (int, optional): Filter by initiation algorithm ID
+            termination_algorithm_id (int, optional): Filter by termination algorithm ID
+            is_dummy (bool, optional): Filter by dummy/live sessions
+            trading_frequency (str, optional): Filter by trading frequency
+            status (str, optional): Filter by session status
+            start_date (datetime, optional): Start date for date range filtering
+            end_date (datetime, optional): End date for date range filtering
+            
+        Returns:
+            dict: Response with data array and metadata
+            
+        Raises:
+            ValueError: For validation errors
+            Exception: For other errors
+        """
+        try:
+            # Build context for logging
+            search_context = {
+                'user_id': user_id_str,
+                'scanning_algorithm_id': scanning_algorithm_id,
+                'initiation_algorithm_id': initiation_algorithm_id,
+                'termination_algorithm_id': termination_algorithm_id,
+                'is_dummy': is_dummy,
+                'trading_frequency': trading_frequency,
+                'status': status,
+                'start_date': start_date,
+                'end_date': end_date
+            }
+            
+            log("Building user trade sessions query", level="debug")
+            
+            # Build query starting with user filter
+            query = TradeSessionModel.objects.filter(user_id=user_id_str)
+            
+            # Apply optional filters
+            if scanning_algorithm_id:
+                query = query.filter(scanning_algorithm_id=scanning_algorithm_id)
+            
+            if initiation_algorithm_id:
+                query = query.filter(initiation_algorithm_id=initiation_algorithm_id)
+            
+            if termination_algorithm_id:
+                query = query.filter(termination_algorithm_id=termination_algorithm_id)
+            
+            if is_dummy is not None:
+                query = query.filter(dummy=is_dummy)
+            
+            if trading_frequency:
+                query = query.filter(trading_frequency=trading_frequency)
+            
+            if status:
+                query = query.filter(status=status)
+            
+            # Handle date range filtering
+            if start_date and end_date:
+                query = query.filter(started_at__gte=start_date, started_at__lte=end_date)
+            
+            # Execute query and get results
+            sessions = list(query.order_by('-started_at'))
+            log(f"User trade sessions query completed - found {len(sessions)} sessions for user {user_id_str}", level="info")
+            
+            # Format response data with specified fields
+            sessions_data = []
+            for session in sessions:
+                sessions_data.append({
+                    'id': session.id,
+                    'status': session.status,
+                    'started_at': session.started_at.isoformat() if session.started_at else None,
+                    'closed_at': session.closed_at.isoformat() if session.closed_at else None,
+                    'dummy': session.dummy,
+                    'is_active': session.is_active,
+                    'initiation_algorithm_id': session.initiation_algorithm_id,
+                    'termination_algorithm_id': session.termination_algorithm_id,
+                    'scanning_algorithm_id': session.scanning_algorithm_id,
+                    'trading_frequency': session.trading_frequency
+                })
+            
+            response_data = {
+                'data': sessions_data,
+                'meta': {
+                    'count': len(sessions_data),
+                    'user_id': user_id_str
+                }
+            }
+            
+            log(f"[TMU-Library] Returning successful response with {len(sessions_data)} sessions", level="info")
+            return response_data
+            
+        except Exception as e:
+            log(f"[TMU-Library] Exception in get_user_trade_sessions: {str(e)}", level="error")
+            raise Exception(f"Failed to fetch user trade sessions: {str(e)}")
+
+    @staticmethod
+    def get_trade_session_details(trade_session_id):
+        """
+        Core business logic for fetching comprehensive trade session details.
+        
+        Args:
+            trade_session_id (int): Trade session ID to get details for
+            
+        Returns:
+            dict: Response with comprehensive trade session details
+            
+        Raises:
+            ValueError: For validation errors
+            Exception: For other errors
+        """
+        try:
+            log(f"[TMU-Library] get_trade_session_details called for session: {trade_session_id}", level="info")
+            
+            # Validate and fetch trade session
+            try:
+                trade_session = TradeSessionModel.objects.get(id=trade_session_id)
+            except TradeSessionModel.DoesNotExist:
+                raise ValueError(f"Trade session with ID {trade_session_id} does not exist")
+            
+            # 1. Get last activity from scanner_events table
+            last_scanner_event = ScannerEvent.objects.filter(
+                trade_session_id=str(trade_session_id)
+            ).order_by('-timestamp').first()
+            
+            last_activity_at = None
+            if last_scanner_event:
+                last_activity_at = last_scanner_event.timestamp.isoformat()
+            
+            # 2. Get trade statistics from trades table
+            trades_queryset = Trade.objects.filter(trade_session_id=trade_session_id)
+            
+            # Total trades executed
+            total_trades = trades_queryset.count()
+            
+            # 3. Total number of long trades
+            total_long_trades = trades_queryset.filter(view='long').count()
+            
+            # 4. Total number of short trades  
+            total_short_trades = trades_queryset.filter(view='short').count()
+            
+            # 5. Total number of instruments scanned from scanner_events
+            total_instruments_scanned = ScannerEvent.objects.filter(
+                trade_session_id=str(trade_session_id)
+            ).values('instrument_id').distinct().count()
+            
+            # 6. Active trades
+            active_trades = trades_queryset.filter(is_active=True).count()
+            
+            # 7. Total profit - sum of net_profit for all trades
+            total_profit_result = trades_queryset.aggregate(
+                total_profit=Sum('net_profit')
+            )
+            total_profit = total_profit_result['total_profit'] or Decimal('0.00')
+            
+            # 8. Success percentage - trades with positive net_profit / total closed trades
+            closed_trades = trades_queryset.filter(is_active=False)
+            total_closed_trades = closed_trades.count()
+            
+            if total_closed_trades > 0:
+                profitable_trades = closed_trades.filter(net_profit__gt=0).count()
+                success_percentage = round((profitable_trades / total_closed_trades) * 100, 2)
+            else:
+                success_percentage = 0.0
+            
+            # Build comprehensive response
+            response_data = {
+                'data': {
+                    # Basic session information (for refreshing accordion header)
+                    'id': trade_session_id,
+                    'user_id': trade_session.user_id.public_id,
+                    'trading_frequency': trade_session.trading_frequency,
+                    'dummy': trade_session.dummy,
+                    'status': trade_session.status,
+                    'started_at': trade_session.started_at.isoformat() if trade_session.started_at else None,
+                    'closed_at': trade_session.closed_at.isoformat() if trade_session.closed_at else None,
+                    'scanning_algorithm_id': trade_session.scanning_algorithm_id,
+                    'initiation_algorithm_id': trade_session.initiation_algorithm_id,
+                    'termination_algorithm_id': trade_session.termination_algorithm_id,
+                    
+                    # Detailed statistics for expanded view
+                    'last_activity_at': last_activity_at,
+                    'total_trades_executed': total_trades,
+                    'total_long_trades': total_long_trades,
+                    'total_short_trades': total_short_trades,
+                    'total_instruments_scanned': total_instruments_scanned,
+                    'active_trades': active_trades,
+                    'total_profit': float(total_profit),
+                    'success_percentage': success_percentage
+                },
+                'meta': {
+                    'total_closed_trades': total_closed_trades,
+                    'profitable_trades': closed_trades.filter(net_profit__gt=0).count() if total_closed_trades > 0 else 0,
+                    'loss_making_trades': closed_trades.filter(net_profit__lt=0).count() if total_closed_trades > 0 else 0
+                }
+            }
+            
+            log(f"[TMU-Library] Successfully compiled trade session details for session: {trade_session_id}", level="info")
+            return response_data
+            
+        except ValueError as e:
+            log(f"[TMU-Library] Validation error in get_trade_session_details: {str(e)}", level="error")
+            raise e
+        except Exception as e:
+            log(f"[TMU-Library] Error in get_trade_session_details: {str(e)}", level="error")
+            raise Exception(f"Failed to fetch trade session details: {str(e)}")
+
+    @staticmethod
+    def pause_trade_session(trade_session_id: str, user_id_str: str) -> dict:
+        """
+        Core business logic for pausing a trade session.
+        Performs direct database operations to update session status.
+        
+        Args:
+            trade_session_id: Trade session ID to pause
+            user_id_str: User's public ID from JWT authentication
+            
+        Returns:
+            dict: Response with success status and updated session data
+            
+        Raises:
+            ValueError: For validation errors
+            Exception: For other errors
+        """
+        from trade_management_unit.lib.common.Utils.Utils import current_ist
+        
+        try:
+            log(f"Pause trade session initiated for session {trade_session_id} by user {user_id_str}", level="debug")
+            
+            # Get the trade session (validation already done in helper)
+            trade_session = TradeSessionModel.objects.get(id=trade_session_id, user_id=user_id_str)
+            
+            # Validate current status allows pausing
+            if trade_session.status != 'started':
+                raise ValueError(f"Cannot pause session with status '{trade_session.status}'. Only 'started' sessions can be paused.")
+            
+            # Update session status and is_active
+            old_status = trade_session.status
+            trade_session.status = 'paused'
+            trade_session.is_active = False
+            trade_session.save()
+            
+            # Log business decision for session state change
+            log_session_state_change(
+                logger=logger,
+                session_id=str(trade_session_id),
+                old_state=old_status,
+                new_state='paused',
+                reason='User initiated pause'
+            )
+            
+            log(f"Trade session {trade_session_id} paused successfully by user {user_id_str}", level="info")
+            
+            # Return success response
+            response_data = {
+                'success': True,
+                'message': f'Trade session {trade_session_id} paused successfully',
+                'data': {
+                    'trade_session_id': str(trade_session.id),
+                    'status': trade_session.status,
+                    'is_active': trade_session.is_active,
+                    'paused_at': current_ist().isoformat()
+                }
+            }
+            
+            return response_data
+            
+        except TradeSessionModel.DoesNotExist:
+            raise ValueError(f"Trade session {trade_session_id} not found or does not belong to user")
+        except Exception as e:
+            log(f"[TMU-Library] Error pausing trade session: {str(e)}", level="error")
+            raise Exception(f"Failed to pause trade session: {str(e)}")
+
+    @staticmethod  
+    def resume_trade_session(trade_session_id: str, user_id_str: str) -> dict:
+        """
+        Core business logic for resuming a trade session.
+        Performs direct database operations to update session status.
+        
+        Args:
+            trade_session_id: Trade session ID to resume
+            user_id_str: User's public ID from JWT authentication
+            
+        Returns:
+            dict: Response with success status and updated session data
+            
+        Raises:
+            ValueError: For validation errors
+            Exception: For other errors
+        """
+        from trade_management_unit.lib.common.Utils.Utils import current_ist
+        
+        try:
+            log(f"Resume trade session initiated for session {trade_session_id} by user {user_id_str}", level="debug")
+            
+            # Get the trade session (validation already done in helper)
+            trade_session = TradeSessionModel.objects.get(id=trade_session_id, user_id=user_id_str)
+            
+            # Validate current status allows resuming
+            if trade_session.status != 'paused':
+                raise ValueError(f"Cannot resume session with status '{trade_session.status}'. Only 'paused' sessions can be resumed.")
+            
+            # Update session status and is_active
+            old_status = trade_session.status
+            trade_session.status = 'started'
+            trade_session.is_active = True
+            trade_session.save()
+            
+            # Log business decision for session state change
+            log_session_state_change(
+                logger=logger,
+                session_id=str(trade_session_id),
+                old_state=old_status,
+                new_state='started',
+                reason='User initiated resume'
+            )
+            
+            log(f"Trade session {trade_session_id} resumed successfully by user {user_id_str}", level="info")
+            
+            # Publish resume scanner event to ensure scanner is running
+            try:
+                event_publisher = get_trade_session_event_publisher()
+                resume_event_success = event_publisher.publish_resume_scanner_event(trade_session)
+                
+                if resume_event_success:
+                    log(f"[TMU-Library] Successfully published resume scanner event for session: {trade_session_id}", level="info")
+                else:
+                    log(f"[TMU-Library] Failed to publish resume scanner event for session: {trade_session_id}", level="warning")
+                    
+            except Exception as e:
+                # Don't fail the resume operation if event publishing fails
+                log(f"[TMU-Library] Error publishing resume scanner event for session {trade_session_id}: {str(e)}", level="error")
+            
+            # Return success response
+            response_data = {
+                'success': True,
+                'message': f'Trade session {trade_session_id} resumed successfully',
+                'data': {
+                    'trade_session_id': str(trade_session.id),
+                    'status': trade_session.status,
+                    'is_active': trade_session.is_active,
+                    'resumed_at': current_ist().isoformat()
+                }
+            }
+            
+            return response_data
+            
+        except TradeSessionModel.DoesNotExist:
+            raise ValueError(f"Trade session {trade_session_id} not found or does not belong to user")
+        except Exception as e:
+            log(f"[TMU-Library] Error resuming trade session: {str(e)}", level="error")
+            raise Exception(f"Failed to resume trade session: {str(e)}")
 
 

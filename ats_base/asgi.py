@@ -12,11 +12,11 @@ import os
 from django.core.asgi import get_asgi_application
 from channels.routing import ProtocolTypeRouter, URLRouter
 from django.urls import path 
-from trade_management_unit.consumers.trade_session_consumer import TradeSessionConsumer
+from ats_gateway.consumers.ats_consumer import ATSConsumer
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ats_base.settings')
 
 ws_patterns = [
-path('ws/setup_trade_session_commnication/',TradeSessionConsumer.as_asgi()),
+path('ws/ats/', ATSConsumer.as_asgi()),
 ]
 
 application = ProtocolTypeRouter({

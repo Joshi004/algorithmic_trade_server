@@ -1,4 +1,8 @@
 from scanning_service.lib.utils.logger import log
+from ats_base.logging_utils import log_scanner_result, create_service_logger
+
+# Create business logger for scanner decisions  
+business_logger = create_service_logger('scanning_service', 'udts_scanner')
 from scanning_service.lib.Algorithms.ScannerAlgos.UDTS.CandleChart import CandleChart
 from scanning_service.lib.Algorithms.ScannerAlgos.ScannerSingletonMeta import ScannerSingletonMeta
 from scanning_service.lib.Algorithms.ScannerAlgos.BaseScannerInterface import BaseScannerInterface
@@ -18,7 +22,17 @@ import pandas as pd
 import threading
 from scanning_service.lib.utils.common import current_ist
 from scanning_service.lib.data_providers import IntegrationServiceProvider, TMUServiceProvider
+from scanning_service.lib.state_management import StateManagerFactory, StateManagementConfig
 
+from scanning_service.utils.websocket_publisher import (
+    can_publish_to_group,
+    get_group_name,
+    publish_scanner_update_sync
+)
+
+# UDTS Scanner specific constants
+# Lock TTL for distributed locking (5 minutes)
+UDTS_SCANNER_LOCK_TTL_SECONDS = 300
 
 class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
     def __init__(self, algorithm_type, frequency):
@@ -38,17 +52,69 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
         self.frequency = frequency
         
         # Initialize scanner-specific attributes
-        self.integration_provider = None
-        self.tmu_provider = None
+        self.system_integration_provider = None
+        self.system_tmu_provider = None
         self.data_provider = None
         self.event_publisher = None
+        
+        # WebSocket publishing setup - use algorithm_type for group names
+        # Ensure algorithm ID is uppercase to match frontend subscription
+        self.algorithm_id = algorithm_type.upper() if algorithm_type else algorithm_type  # Use uppercase for consistency
+        self.ws_group_name = get_group_name(self.algorithm_id, frequency)
+        log(f"DEBUG: Scanner initialized with WebSocket group name: {self.ws_group_name}")
         
         # Thread management
         self._scanner_thread = None
         self._stop_event = threading.Event()
         self._is_running = False
         
+        # State management
+        self.state_manager = None
+        self.progress_update_interval = 10  # Update state every 10 instruments (configurable)
+        
         log(f"Initialized UDTSScanner singleton for {algorithm_type} algorithm with {frequency} frequency")
+
+    def _publish_scanner_update(self, update_type, symbol, message, additional_data=None):
+        """
+        Publish scanner update to WebSocket subscribers if any exist
+        
+        Args:
+            update_type: Type of update (scanning_started, volume_check, etc.)
+            symbol: Trading symbol being analyzed
+            message: Human-readable message
+            additional_data: Optional additional data dictionary
+        """
+        log(f"DEBUG: Attempting to publish WebSocket update - Group: {self.ws_group_name}, Type: {update_type}, Symbol: {symbol}")
+        
+        # Only publish if there are active subscribers
+        if not can_publish_to_group(self.ws_group_name):
+            log(f"DEBUG: No active subscribers for group {self.ws_group_name}, skipping WebSocket publish")
+            return
+        
+        log(f"DEBUG: Found active subscribers for group {self.ws_group_name}, proceeding with WebSocket publish")
+        
+        # Prepare update data
+        update_data = {
+            'type': 'scanner_update',
+            'scanner_type': 'UDTS',
+            'algorithm_id': self.algorithm_id,  # Already uppercase from __init__
+            'frequency': self.frequency,
+            'update_type': update_type,
+            'symbol': symbol,
+            'message': message,
+            'timestamp': current_ist().isoformat()
+        }
+        
+        # Add additional data if provided
+        if additional_data:
+            update_data.update(additional_data)
+        
+        try:
+            log(f"DEBUG: Publishing WebSocket update for {symbol} with type {update_type}")
+            result = publish_scanner_update_sync(self.algorithm_id, self.frequency, update_data)
+            log(f"DEBUG: WebSocket publish result: {result}")
+        except Exception as e:
+            log(f"Error publishing WebSocket update: {str(e)}", level="error")
     
     def configure(self, trade_freq: str, **kwargs):
         """
@@ -64,89 +130,433 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
         # Call parent configure (handles event publisher setup)
         super().configure(trade_freq, **kwargs)
         
-        # Extract user_id from kwargs for provider initialization
-        user_id = kwargs.get('user_id')
+        # Use system user ID for scanner operations (market data, quotes, historical data)
+        # Scanner operations are shared across all users and don't require personal credentials
         
-        # Use provided providers or create default ones
-        self.integration_provider = kwargs.get('integration_provider') or IntegrationServiceProvider(user_id) if user_id else None
-        self.tmu_provider = kwargs.get('tmu_provider') or TMUServiceProvider(user_id) if user_id else None
+        # Use provided providers or create default ones with system credentials
+        self.system_integration_provider = kwargs.get('integration_provider') or IntegrationServiceProvider("system")
+        self.system_tmu_provider = kwargs.get('tmu_provider') or TMUServiceProvider("system")
         
-        # Keep data_provider for backward compatibility (points to integration provider)
-        self.data_provider = self.integration_provider
+        # Keep data_provider for backward compatibility (points to system integration provider)
+        self.data_provider = self.system_integration_provider
+        
+        # Initialize state manager for this scanner
+        self._initialize_state_manager(**kwargs)
         
         log(f"UDTS Scanner configured for frequency: {trade_freq}")
 
-    def fetch_instrument_tokens_and_start_tracking(self, user_id, trade_session_id, dummy):
-        self._ensure_configured()
+    def _initialize_state_manager(self, **kwargs):
+        """
+        Initialize state manager for this scanner.
         
-        instrument_list = self.fetch_instruments()
-        self.scan_instruments(instrument_list, user_id, trade_session_id, dummy)
+        Args:
+            **kwargs: Configuration parameters including ttl_hours, progress_update_interval
+        """
+        try:
+            # Extract configuration parameters
+            ttl_hours = kwargs.get('ttl_hours')  # Uses config default if None
+            self.progress_update_interval = StateManagementConfig.get_progress_update_interval(
+                kwargs.get('progress_update_interval')
+            )
+            
+            # Create state manager using factory
+            self.state_manager = StateManagerFactory.create_state_manager(
+                scanner_type=self.algorithm_type,
+                algorithm_type=self.algorithm_type,
+                frequency=self.frequency,
+                ttl_hours=ttl_hours
+            )
+            
+            if self.state_manager:
+                log(f"State manager initialized for {self.algorithm_type}_{self.frequency}")
+            else:
+                log(f"State management not available for {self.algorithm_type} scanner", level="warning")
+                
+        except Exception as e:
+            log(f"Error initializing state manager: {str(e)}", level="error")
+            self.state_manager = None
+
+    def resume_or_start_scanning(self, all_instruments):
+        """
+        Determine starting index for scanning based on saved state.
+        If valid state exists and instruments match, resume from last position.
+        Otherwise, start from beginning.
+        
+        Args:
+            all_instruments: List of instruments to scan
+            
+        Returns:
+            int: Starting index for scanning
+        """
+        if not self.state_manager:
+            log("No state manager available, starting from beginning")
+            return 0
+        
+        try:
+            # Get saved progress
+            progress = self.state_manager.get_progress()
+            
+            if not progress:
+                # log("No saved progress found, starting from beginning")
+                return 0
+            
+            # Validate progress is still relevant
+            saved_total = progress.get('total_instruments', 0)
+            current_total = len(all_instruments)
+            
+            if saved_total != current_total:
+                log(f"Instrument count changed: saved={saved_total}, current={current_total}. Starting fresh.")
+                return 0
+            
+            # Check if progress is recent enough
+            from datetime import timedelta
+            last_update = progress.get('last_update_time')
+            max_age = timedelta(hours=StateManagementConfig.MAX_STATE_AGE_HOURS)
+            if last_update and (current_ist() - last_update) > max_age:
+                log(f"Saved progress is too old (>{StateManagementConfig.MAX_STATE_AGE_HOURS}h), starting fresh")
+                return 0
+            
+            saved_index = progress.get('current_index', 0)
+            last_symbol = progress.get('last_processed_symbol', '')
+            
+            # Validate the symbol at saved index matches
+            if saved_index < len(all_instruments):
+                expected_symbol = all_instruments[saved_index].get('trading_symbol', '')
+                if last_symbol == expected_symbol:
+                    log(f"Resuming scanning from index {saved_index + 1} after symbol '{last_symbol}'")
+                    return saved_index + 1
+            
+            log("Saved progress validation failed, starting from beginning")
+            return 0
+            
+        except Exception as e:
+            log(f"Error checking saved progress: {str(e)}", level="error")
+            return 0
+    
+    def _get_current_cycle(self):
+        """
+        Get current scan cycle number from state or start at 1.
+        
+        Returns:
+            int: Current scan cycle number
+        """
+        if not self.state_manager:
+            return 1
+            
+        try:
+            progress = self.state_manager.get_progress()
+            if progress:
+                return progress.get('scan_cycle', 1)
+        except Exception as e:
+            log(f"Error getting current cycle: {str(e)}", level="error")
+        
+        return 1
+
+    def _save_scanning_progress(self, current_index, last_processed_symbol):
+        """
+        Save current scanning progress to Redis state and renew the scanner lock.
+        
+        Args:
+            current_index: Current index in the instrument list
+            last_processed_symbol: Symbol of the last processed instrument
+        """
+        if not self.state_manager:
+            return
+            
+        try:
+            # Save progress to state manager
+            self.state_manager.save_progress(
+                current_index=current_index,
+                total_instruments=len(self.all_instruments) if hasattr(self, 'all_instruments') else 0,
+                last_processed_symbol=last_processed_symbol,
+                scan_cycle=getattr(self, 'scan_cycle', 1),
+                cycle_start_time=getattr(self, 'cycle_start_time', current_ist())
+            )
+            
+            # Renew the Redis lock if lock manager is available
+            # Lock manager is injected by the consumer when starting the scanner
+            if hasattr(self, '_lock_manager') and hasattr(self, '_algorithm_id') and hasattr(self, '_frequency'):
+                # Get lock TTL from scanner configuration (default value from constant)
+                lock_ttl = getattr(self, 'lock_ttl_seconds', UDTS_SCANNER_LOCK_TTL_SECONDS)
+                
+                # Renew the lock
+                lock_renewed = self._lock_manager.renew_lock(
+                    self._algorithm_id,
+                    self._frequency,
+                    lock_ttl
+                )
+                
+                if lock_renewed:
+                    log(f"Successfully renewed scanner lock for {self.algorithm_type}:{self.frequency}")
+                else:
+                    # Lock renewal failed - check WHY it failed using hybrid approach
+                    log(f"Failed to renew scanner lock for {self.algorithm_type}:{self.frequency}", level="warning")
+                    
+                    # Check if another container has acquired the lock
+                    lock_exists, current_owner = self._lock_manager.check_lock(
+                        self._algorithm_id,
+                        self._frequency
+                    )
+                    
+                    if lock_exists and current_owner and current_owner != self._lock_manager.container_id:
+                        # Another container has acquired this scanner - stop gracefully
+                        log(f"Lock now owned by container {current_owner}. Stopping scanner to avoid conflicts.", level="warning")
+                        self.stop_scanning()
+                        return  # Exit the save progress method immediately
+                    else:
+                        # Lock doesn't exist or we can't determine ownership (likely temporary issue)
+                        # Continue scanning - we'll try to renew/reacquire on next cycle
+                        if not lock_exists:
+                            log(f"Lock doesn't exist - likely expired. Continuing scanning, will attempt to reacquire on next cycle.", level="warning")
+                        else:
+                            log(f"Unable to determine lock ownership (likely temporary Redis issue). Continuing scanning.", level="warning")
+                    
+        except Exception as e:
+            log(f"Error saving scanning progress: {str(e)}", level="error")
+
+
+
+    def fetch_instrument_tokens_and_start_tracking(self, user_id, trade_session_id, dummy):
+        """Entry point for starting scanner tracking"""
+        log(f"📍 SCANNER ENTRY POINT: fetch_instrument_tokens_and_start_tracking called", level="info")
+        log(f"📍 Parameters: user_id={user_id}, trade_session_id={trade_session_id}, dummy={dummy}", level="info")
+        
+        try:
+            self._ensure_configured()
+            log(f"📍 Scanner configuration validated successfully", level="info")
+            
+            # Fetch all instruments for scanning
+            log(f"📍 Fetching instruments...", level="info")
+            all_instruments = self.fetch_instruments()
+            log(f"📍 Fetched {len(all_instruments)} instruments for scanning", level="info")
+            
+            if not all_instruments:
+                log(f"❌ ERROR: No instruments fetched, cannot start scanner", level="error")
+                return
+            
+            # Start scanning with the instruments
+            log(f"📍 Starting scanner with {len(all_instruments)} instruments", level="info")
+            self.scan_instruments(all_instruments, user_id, trade_session_id, dummy)
+            log(f"📍 Scanner startup completed successfully", level="info")
+            
+        except Exception as e:
+            log(f"❌ CRITICAL ERROR in fetch_instrument_tokens_and_start_tracking: {str(e)}", level="error")
+            import traceback
+            log(f"❌ Full traceback: {traceback.format_exc()}", level="error")
 
     def scan_in_separate_thread(self, all_instruments):
-        self._ensure_configured()
-        
-        counter = 0
-        self._is_running = True
-        
-
-        log(f'Scanning started for total {len(all_instruments)} instruments')
-        
-        while not self._stop_event.is_set():
-            counter += 1
-            instrument_counter = 0
-            eligible_instrument_counter = 0
-            scan_start_time = current_ist()
+        """
+        Main scanner thread entry point.
+        Uses the template method pattern for lifecycle management.
+        """
+        try:
+            log(f"🚀 SCANNER THREAD STARTED: Processing {len(all_instruments)} instruments", level="info")
+            self._ensure_configured()
+            log(f"📍 Scanner thread configuration validated", level="info")
             
-            for instrument in all_instruments:
-                # Check for stop event during scanning
+            # Initialize scanning state
+            self._is_running = True
+            self.cycle_start_time = current_ist()
+            log(f"📍 Scanner state initialized, is_running={self._is_running}", level="info")
+            
+            # Use template method for lifecycle management
+            log(f"📍 Starting lifecycle management for scanning", level="info")
+            self.scan_with_lifecycle_management(all_instruments)
+            log(f"📍 Lifecycle management completed", level="info")
+            
+        except Exception as e:
+            log(f"❌ CRITICAL ERROR in scan_in_separate_thread: {str(e)}", level="error")
+            import traceback
+            log(f"❌ Full traceback: {traceback.format_exc()}", level="error")
+        finally:
+            # Scanner stopped
+            self._is_running = False
+            log(f"🛑 Scanner thread for {self.trade_frequency} stopped after {getattr(self, 'scan_cycle', 1)} cycles", level="info")
+    
+    def perform_scan_cycle(self, all_instruments, start_index: int = 0) -> dict:
+        """
+        Implementation of the abstract method from BaseScannerInterface.
+        Performs a single scan cycle through the instruments.
+        
+        Args:
+            all_instruments: List of instruments to scan
+            start_index: Index to start scanning from (for resume functionality)
+            
+        Returns:
+            dict: Scan cycle results
+        """
+        try:
+            log(f"🔄 SCAN CYCLE STARTED: Processing {len(all_instruments)} instruments from index {start_index}", level="info")
+            scan_start_time = current_ist()
+            eligible_instrument_counter = 0
+            total_scanned = 0
+            
+            # Process instruments from resume point
+            for idx in range(start_index, len(all_instruments)):
                 if self._stop_event.is_set():
+                    log(f"🛑 Stop event detected, breaking scan loop at index {idx}", level="info")
                     break
                     
-                instrument_counter += 1
-                symbol = instrument["trading_symbol"]
-                token = instrument["instrument_token"]
-                log(f'Scanning {instrument["trading_symbol"]} now')
-                
-                is_eligible, eligibility_obj = self.is_eligible(symbol)
-                
-                if is_eligible:
-                    instrument_id = token
-                    eligible_instrument_counter += 1
-                    log(f"found next eligible instrument -- {eligible_instrument_counter} {symbol}")
-                    symbol_data_points = eligibility_obj[self.trade_frequency]["chart"]
+                try:
+                    instrument = all_instruments[idx]
+                    symbol = instrument["trading_symbol"]
+                    token = instrument["instrument_token"]
+                    total_scanned = idx + 1
                     
-                    # Prepare raw instrument data
-                    raw_instrument_data = {
-                        "instrument_id": instrument_id,
-                        "trading_symbol": symbol,
-                        "support_price": float(symbol_data_points.trading_pair["support"]),
-                        "resistance_price": float(symbol_data_points.trading_pair["resistance"]),
-                        "required_action": self.__get_required_actions__(eligibility_obj["effective_trend"]),
-                        "market_price": float(symbol_data_points.market_price)
-                    }
+                    log(f'📊 Scanning {symbol} now (index {idx + 1}/{len(all_instruments)})', level="info")
                     
-                    # Format using base class method to ensure standardization
-                    instrument_data = self.format_eligible_instrument(raw_instrument_data)
+                    # Test WebSocket publishing every 50 instruments
+                    if (idx + 1) % 50 == 0:
+                        log(f"📡 Publishing progress update for instrument {idx + 1}", level="debug")
+                        self._publish_scanner_update(
+                            'test_progress',
+                            f'Test Progress',
+                            f'Test: Scanned {idx + 1} of {len(all_instruments)} instruments',
+                            {
+                                'total_scanned': idx + 1,
+                                'total_instruments': len(all_instruments),
+                                'test_message': True
+                            }
+                        )
                     
-                    # This will now publish to ALL active trade sessions using this scanner using parent
-                    self.publish_eligible_instruments([instrument_data])
-                else:
-                    log(f'Not Eligible {eligibility_obj["message"]}')
+                    # Check eligibility with error handling
+                    try:
+                        log(f"🔍 Checking eligibility for {symbol}", level="debug")
+                        is_eligible, eligibility_obj = self.is_eligible(symbol)
+                        log(f"✅ Eligibility check completed for {symbol}: {is_eligible}", level="debug")
+                        
+                    except Exception as e:
+                        log(f"❌ ERROR checking eligibility for {symbol}: {str(e)}", level="error")
+                        log(f"Not Eligible {symbol} : Error during eligibility check")
+                        continue
                     
+                    if is_eligible:
+                        try:
+                            instrument_id = token
+                            eligible_instrument_counter += 1
+                            log(f"🎯 Found eligible instrument #{eligible_instrument_counter}: {symbol}", level="info")
+                            
+                            symbol_data_points = eligibility_obj[self.trade_frequency]["chart"]
+                            
+                            # Prepare raw instrument data
+                            raw_instrument_data = {
+                                "instrument_id": instrument_id,
+                                "trading_symbol": symbol,
+                                "support_price": float(symbol_data_points.trading_pair["support"]),
+                                "resistance_price": float(symbol_data_points.trading_pair["resistance"]),
+                                "required_action": self.__get_required_actions__(eligibility_obj["effective_trend"]),
+                                "market_price": float(symbol_data_points.market_price)
+                            }
+                            
+                            # Format using base class method to ensure standardization
+                            instrument_data = self.format_eligible_instrument(raw_instrument_data)
+                            
+                            # Publish comprehensive eligible instrument information
+                            trading_pair_data = symbol_data_points.trading_pair
+                            self._publish_scanner_update(
+                                'instrument_eligible',
+                                symbol,
+                                f'Eligible instrument found: {symbol}',
+                                {
+                                    'eligible_count': eligible_instrument_counter,
+                                    'effective_trend': eligibility_obj["effective_trend"].value,
+                                    'reward_risk_ratio': trading_pair_data.get("reward_risk_ratio", 0),
+                                    'support_price': float(symbol_data_points.trading_pair["support"]),
+                                    'resistance_price': float(symbol_data_points.trading_pair["resistance"]),
+                                    'market_price': float(symbol_data_points.market_price),
+                                    'required_action': raw_instrument_data["required_action"],
+                                    'volume': getattr(self, 'volume', 0),
+                                    'last_price': symbol_data_points.market_price
+                                }
+                            )
+                            
+                            # This will now publish to ALL active trade sessions using this scanner using parent
+                            self.publish_eligible_instruments([instrument_data])
+                            
+                        except Exception as e:
+                            log(f"❌ ERROR processing eligible instrument {symbol}: {str(e)}", level="error")
+                            import traceback
+                            log(f"❌ Full traceback: {traceback.format_exc()}", level="error")
+                            
+                    else:
+                        log(f'❌ Not Eligible {eligibility_obj["message"]}', level="debug")
+                    
+                    # Send progress update every progress_update_interval instruments
+                    if (idx + 1) % self.progress_update_interval == 0:
+                        remaining_count = len(all_instruments) - (idx + 1)
+                        log(f"📊 Progress update: {idx + 1}/{len(all_instruments)} scanned, {eligible_instrument_counter} eligible", level="info")
+                        self._publish_scanner_update(
+                            'progress_update',
+                            f'Progress Update',
+                            f'Scanned {idx + 1} of {len(all_instruments)} instruments',
+                            {
+                                'total_scanned': idx + 1,
+                                'total_instruments': len(all_instruments),
+                                'remaining_count': remaining_count,
+                                'eligible_found': eligible_instrument_counter,
+                                'progress_percentage': round(((idx + 1) / len(all_instruments)) * 100, 1)
+                            }
+                        )
+                        
+                        # Update state periodically
+                        if self.state_manager:
+                            self._save_scanning_progress(idx, symbol)
+                            
+                except Exception as e:
+                    log(f"❌ ERROR processing instrument at index {idx}: {str(e)}", level="error")
+                    import traceback
+                    log(f"❌ Full traceback: {traceback.format_exc()}", level="error")
+                    continue
+            
+            # Calculate scan duration
             scan_end_time = current_ist()
             scan_duration = (scan_end_time - scan_start_time).total_seconds()
             
-
+            log(f"🏁 SCAN CYCLE COMPLETED: Duration={scan_duration}s, Scanned={total_scanned}, Eligible={eligible_instrument_counter}", level="info")
             
-            log(f"Scan cycle {counter} completed - Duration: {scan_duration}s, Found: {eligible_instrument_counter}/{instrument_counter}")
-            log(f'Last scan total time taken {scan_duration} seconds')
+            # Send final progress update for completed cycle
+            if not self._stop_event.is_set():
+                self._publish_scanner_update(
+                    'cycle_completed',
+                    f'Scan Cycle {getattr(self, "scan_cycle", 1)} Completed',
+                    f'Cycle {getattr(self, "scan_cycle", 1)} completed - {eligible_instrument_counter} eligible instruments found',
+                    {
+                        'cycle_number': getattr(self, 'scan_cycle', 1),
+                        'total_scanned': total_scanned,
+                        'total_instruments': len(all_instruments),
+                        'remaining_count': 0,
+                        'eligible_found': eligible_instrument_counter,
+                        'cycle_duration': scan_duration,
+                        'progress_percentage': 100
+                    }
+                )
+                
+                # Save final state for this cycle
+                if self.state_manager and total_scanned > 0:
+                    final_index = total_scanned - 1
+                    final_symbol = all_instruments[final_index]["trading_symbol"] if all_instruments else ""
+                    self._save_scanning_progress(final_index, final_symbol)
             
-            # Use wait instead of sleep to be interruptible
-            self._stop_event.wait(timeout=30)
-        
-        # Scanner stopped
-        self._is_running = False
-        log(f"Scanner thread for {self.trade_frequency} stopped after {counter} cycles")
+            log(f"✅ Scan cycle completed successfully - Duration: {scan_duration}s, Found: {eligible_instrument_counter}")
+            
+            # Return cycle results for template method
+            return {
+                'eligible_count': eligible_instrument_counter,
+                'total_scanned': total_scanned,
+                'scan_duration': scan_duration,
+                'should_reset_start_index': True  # Always reset to 0 for next cycle
+            }
+            
+        except Exception as e:
+            log(f"❌ CRITICAL ERROR in perform_scan_cycle: {str(e)}", level="error")
+            import traceback
+            log(f"❌ Full traceback: {traceback.format_exc()}", level="error")
+            return {
+                'eligible_count': 0,
+                'total_scanned': 0,
+                'scan_duration': 0,
+                'should_reset_start_index': True
+            }
 
 
     def is_eligible(self, symbol):
@@ -159,99 +569,231 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
         Returns:
             tuple: (is_eligible: bool, eligibility_data: dict)
         """
-        self._ensure_configured()
-        
-        # Initialize eligibility tracking object with default message
-        eligibility_data = {"message": str(symbol) + " : Eligible"}
-        
-        # Fetch real-time quote data for the symbol
-        quote_response = self.data_provider.get_quotes(symbol, DEFAULT_EXCHANGE)
-        quotes_data = quote_response.get("data", {})
-        
-        # Create quote key in expected format (EXCHANGE:SYMBOL)
-        quote_key = DEFAULT_EXCHANGE + ":" + symbol.upper()
-        
-        # Validate that quote data exists for this symbol
-        if quote_key not in quotes_data:
-            eligibility_data["message"] = symbol + " : No Data Fetched from quotes"
-            return False, eligibility_data
+        try:
+            log(f"🔍 Starting eligibility check for {symbol}", level="debug")
+            self._ensure_configured()
             
-        # Extract instrument token and quote details
-        instrument_token = quotes_data[quote_key]["instrument_token"]
-        current_quote_data = quotes_data[quote_key]
-        
-        # Get trading frequency configuration
-        current_trade_frequency = self.trade_frequency
-        frequency_steps = FREQUENCY_STEPS[current_trade_frequency]
-        required_candles_count = NUM_CANDLES_FOR_TREND_ANALYSIS
-        
-        # Check if volume meets minimum trading threshold
-        is_volume_sufficient = self.get_volume_eligibility(current_quote_data)
-        if not is_volume_sufficient:
-            eligibility_data["message"] = symbol + " : Volume not eligible"
-            return False, eligibility_data
-        
-        # Analyze trends across multiple timeframes
-        for frequency_index in range(0, len(frequency_steps)):
-            current_frequency = frequency_steps[frequency_index]
-            eligibility_data[current_frequency] = {}
+            # Initialize eligibility tracking object with default message
+            eligibility_data = {"message": str(symbol) + " : Eligible"}
             
-            # Fetch historical candle data for this timeframe
-            eligibility_data[current_frequency]["data"] = self.data_provider.fetch_historical_candle_data_from_kite(
-                symbol, instrument_token, frequency_steps[frequency_index], required_candles_count
-            )
+            # Fetch real-time quote data for the symbol
+            log(f"📊 Fetching quote data for {symbol}", level="debug")
+            try:
+                quote_response = self.data_provider.get_quotes(symbol, DEFAULT_EXCHANGE)
+                log(f"✅ Quote response received for {symbol}: {type(quote_response)}", level="debug")
+            except Exception as e:
+                log(f"❌ ERROR fetching quotes for {symbol}: {str(e)}", level="error")
+                eligibility_data["message"] = symbol + " : Error fetching quote data"
+                return False, eligibility_data
             
-            # Validate sufficient historical data exists
-            historical_candles = eligibility_data[current_frequency]["data"]
-            if len(historical_candles) < NUM_CANDLES_FOR_TREND_ANALYSIS:
-                eligibility_data["message"] = symbol + " : Not Enough Candles For " + str(current_frequency)
+            quotes_data = quote_response.get("data", {})
+            log(f"📊 Quote data keys for {symbol}: {list(quotes_data.keys())[:5]}", level="debug")  # Log first 5 keys
+            
+            # Create quote key in expected format (EXCHANGE:SYMBOL)
+            quote_key = DEFAULT_EXCHANGE + ":" + symbol.upper()
+            log(f"📊 Looking for quote key: {quote_key}", level="debug")
+            
+            # Validate that quote data exists for this symbol
+            if quote_key not in quotes_data:
+                log(f"❌ No quote data found for key {quote_key}", level="warning")
+                eligibility_data["message"] = symbol + " : No Data Fetched from quotes"
                 return False, eligibility_data
                 
-            # Create candle chart for trend analysis
-            eligibility_data[current_frequency]["chart"] = CandleChart(
-                symbol, 
-                instrument_token, 
-                current_quote_data["last_price"], 
-                current_quote_data["volume"], 
-                current_quote_data["last_quantity"], 
-                frequency_steps[frequency_index], 
-                eligibility_data[current_frequency]["data"]
-            )
+            # Extract instrument token and quote details
+            try:
+                instrument_token = quotes_data[quote_key]["instrument_token"]
+                current_quote_data = quotes_data[quote_key]
+                log(f"✅ Quote data extracted for {symbol}: token={instrument_token}", level="debug")
+            except KeyError as e:
+                log(f"❌ Missing quote data field for {symbol}: {str(e)}", level="error")
+                eligibility_data["message"] = symbol + " : Incomplete quote data"
+                return False, eligibility_data
             
-            # Calculate trend direction and key price levels
-            eligibility_data[current_frequency]["chart"].set_trend_and_deflection_points()
-        
-        # Use center timeframe element to establish price scope for normalization
-        scope_reference_chart = eligibility_data[frequency_steps[SCOPE_COLLECTION_FREQ_INDEX]]["chart"]
-        price_deflection_scope = self.__get_deflection_points_scope(scope_reference_chart)
-        
-        # Normalize deflection points and calculate trading levels for primary timeframe
-        primary_timeframe_chart = eligibility_data[current_trade_frequency]["chart"]
-        primary_timeframe_chart.normalise_deflection_points(price_deflection_scope)
-        primary_timeframe_chart.set_trading_levels_and_ratios()
-        
-        # Determine overall trend consensus across timeframes
-        consensus_trend = self.__get_effective_trend(eligibility_data)
-        eligibility_data["effective_trend"] = consensus_trend
+            # Get trading frequency configuration
+            current_trade_frequency = self.trade_frequency
+            frequency_steps = FREQUENCY_STEPS[current_trade_frequency]
+            required_candles_count = NUM_CANDLES_FOR_TREND_ANALYSIS
+            
+            log(f"📊 Trading config for {symbol}: freq={current_trade_frequency}, steps={frequency_steps}, candles={required_candles_count}", level="debug")
+            
+            # Check if volume meets minimum trading threshold
+            try:
+                log(f"📊 Checking volume eligibility for {symbol}", level="debug")
+                is_volume_sufficient = self.get_volume_eligibility(current_quote_data) or  1
+                log(f"✅ Volume check completed for {symbol}: {is_volume_sufficient}", level="debug")
+            except Exception as e:
+                log(f"❌ ERROR checking volume eligibility for {symbol}: {str(e)}", level="error")
+                eligibility_data["message"] = symbol + " : Error checking volume eligibility"
+                return False, eligibility_data
+            
+            if not is_volume_sufficient:
+                eligibility_data["message"] = symbol + " : Volume not sufficient for trading"
+                log(f"❌ Volume not sufficient for {symbol}", level="debug")
+                return False, eligibility_data
+            
+            # Multi-timeframe analysis for trend consistency
+            log(f"📊 Starting multi-timeframe analysis for {symbol}", level="debug")
+            try:
+                # Get historical data for multiple timeframes
+                required_historical_data = {}
+                
+                # Process required timeframes for analysis
+                for frequency_index in range(len(frequency_steps)):
+                    timeframe_frequency = frequency_steps[frequency_index]
+                    log(f"📊 Fetching {timeframe_frequency} data for {symbol}", level="debug")
+                    
+                    try:
+                        # Fetch chart data using data provider
+                        chart_data = self.data_provider.fetch_historical_candle_data_from_kite(
+                            symbol=symbol,
+                            token=instrument_token,
+                            interval=timeframe_frequency,
+                            number_of_candles=required_candles_count
+                        )
+                        
+                        # Check if we got an error or empty data
+                        if not chart_data:
+                            log(f"❌ No data returned for {symbol} {timeframe_frequency}", level="error")
+                            eligibility_data["message"] = f"{symbol} : No {timeframe_frequency} historical data returned"
+                            return False, eligibility_data
+                        
+                        if len(chart_data) < required_candles_count:
+                            log(f"❌ Insufficient {timeframe_frequency} data for {symbol}: got {len(chart_data)}, need {required_candles_count}", level="warning")
+                            eligibility_data["message"] = f"{symbol} : Insufficient {timeframe_frequency} candle data"
+                            return False, eligibility_data
+                        
+                        log(f"✅ Got {len(chart_data)} candles for {symbol} {timeframe_frequency}", level="debug")
+                        
+                        # Create candle chart for analysis
+                        candle_chart = CandleChart(
+                            token=instrument_token,
+                            symbol=symbol,
+                            market_price=current_quote_data["last_price"],
+                            trade_volume=current_quote_data["volume"],
+                            last_quantity=current_quote_data.get("last_quantity", 0),
+                            trade_freq=timeframe_frequency,
+                            price_list=chart_data
+                        )
+                        
+                        # Perform trend analysis
+                        candle_chart.set_trend_and_deflection_points()
+                        required_historical_data[timeframe_frequency] = {"chart": candle_chart}
+                        
+                    except Exception as e:
+                        log(f"❌ ERROR processing {timeframe_frequency} data for {symbol}: {str(e)}", level="error")
+                        import traceback
+                        log(f"❌ Full traceback: {traceback.format_exc()}", level="error")
+                        eligibility_data["message"] = f"{symbol} : Error processing {timeframe_frequency} data"
+                        return False, eligibility_data
+                
+                eligibility_data.update(required_historical_data)
+                log(f"✅ Multi-timeframe analysis completed for {symbol}", level="debug")
+                
+            except Exception as e:
+                log(f"❌ ERROR in multi-timeframe analysis for {symbol}: {str(e)}", level="error")
+                import traceback
+                log(f"❌ Full traceback: {traceback.format_exc()}", level="error")
+                eligibility_data["message"] = symbol + " : Error in multi-timeframe analysis"
+                return False, eligibility_data
+            
+            # Calculate price deflection scope for entry/exit points
+            try:
+                log(f"📊 Calculating deflection scope for {symbol}", level="debug")
+                base_chart = required_historical_data[current_trade_frequency]["chart"]
+                price_deflection_scope = self.__get_deflection_points_scope(base_chart)
+                log(f"✅ Deflection scope calculated for {symbol}: {price_deflection_scope}", level="debug")
+            except Exception as e:
+                log(f"❌ ERROR calculating deflection scope for {symbol}: {str(e)}", level="error")
+                eligibility_data["message"] = symbol + " : Error calculating deflection scope"
+                return False, eligibility_data
+            
+            # Normalize deflection points and calculate trading levels for primary timeframe
+            try:
+                log(f"📊 Processing trading levels for {symbol}", level="debug")
+                primary_timeframe_chart = eligibility_data[current_trade_frequency]["chart"]
+                primary_timeframe_chart.normalise_deflection_points(price_deflection_scope)
+                primary_timeframe_chart.set_trading_levels_and_ratios()
+                log(f"✅ Trading levels processed for {symbol}", level="debug")
+            except Exception as e:
+                log(f"❌ ERROR processing trading levels for {symbol}: {str(e)}", level="error")
+                eligibility_data["message"] = symbol + " : Error processing trading levels"
+                return False, eligibility_data
+            
+            # Determine overall trend consensus across timeframes
+            try:
+                log(f"📊 Determining consensus trend for {symbol}", level="debug")
+                consensus_trend = self.__get_effective_trend(eligibility_data)
+                eligibility_data["effective_trend"] = consensus_trend
+                log(f"✅ Consensus trend for {symbol}: {consensus_trend.value}", level="debug")
+            except Exception as e:
+                log(f"❌ ERROR determining consensus trend for {symbol}: {str(e)}", level="error")
+                eligibility_data["message"] = symbol + " : Error determining consensus trend"
+                return False, eligibility_data
 
-        # Validate that valid trading pairs exist
-        valid_trading_pairs = primary_timeframe_chart.valid_pairs
-        if not valid_trading_pairs or len(valid_trading_pairs) < 1:
-            eligibility_data["message"] = symbol + " : No Valid Trading pairs Present"
+            # Validate that valid trading pairs exist
+            try:
+                valid_trading_pairs = primary_timeframe_chart.valid_pairs
+                
+                if not valid_trading_pairs or len(valid_trading_pairs) < 1:
+                    eligibility_data["message"] = symbol + " : No Valid Trading pairs Present"
+                    log(f"❌ No valid trading pairs for {symbol}", level="debug")
+                    return False, eligibility_data
+
+                # Extract reward-to-risk ratio for final eligibility check
+                trading_pair_data = primary_timeframe_chart.trading_pair
+                current_reward_risk_ratio = trading_pair_data.get("reward_risk_ratio", 0)
+                
+                # Update eligibility message with trend and ratio information
+                eligibility_data["message"] = f"{symbol} : {consensus_trend.value} , Reward:Risk - {current_reward_risk_ratio}"
+                
+                log(f"📊 Trading pair analysis for {symbol}: pairs={len(valid_trading_pairs)}, ratio={current_reward_risk_ratio}", level="debug")
+                
+                # Final eligibility decision based on minimum reward-risk threshold
+                if current_reward_risk_ratio > MINIMUM_REWARD_RISK_RATIO:
+                    log(f"✅ {symbol} IS ELIGIBLE: ratio={current_reward_risk_ratio} > threshold={MINIMUM_REWARD_RISK_RATIO}", level="info")
+                    log_scanner_result(
+                        logger=business_logger,
+                        symbol=symbol,
+                        eligible=True,
+                        algorithm="UDTS",
+                        metrics={
+                            'reward_risk_ratio': current_reward_risk_ratio,
+                            'consensus_trend': consensus_trend.value,
+                            'trading_pairs_count': len(valid_trading_pairs),
+                            'minimum_threshold': MINIMUM_REWARD_RISK_RATIO
+                        }
+                    )
+                    return True, eligibility_data
+
+                log(f"❌ {symbol} NOT ELIGIBLE: ratio={current_reward_risk_ratio} <= threshold={MINIMUM_REWARD_RISK_RATIO}", level="debug")
+                log_scanner_result(
+                    logger=business_logger,
+                    symbol=symbol,
+                    eligible=False,
+                    algorithm="UDTS",
+                    metrics={
+                        'reward_risk_ratio': current_reward_risk_ratio,
+                        'consensus_trend': consensus_trend.value,
+                        'trading_pairs_count': len(valid_trading_pairs) if valid_trading_pairs else 0,
+                        'minimum_threshold': MINIMUM_REWARD_RISK_RATIO,
+                        'rejection_reason': 'Below minimum reward-risk ratio'
+                    }
+                )
+                return False, eligibility_data
+                
+            except Exception as e:
+                log(f"❌ ERROR processing trading pairs for {symbol}: {str(e)}", level="error")
+                import traceback
+                log(f"❌ Full traceback: {traceback.format_exc()}", level="error")
+                eligibility_data["message"] = symbol + " : Error processing trading pairs"
+                return False, eligibility_data
+                
+        except Exception as e:
+            log(f"❌ CRITICAL ERROR in is_eligible for {symbol}: {str(e)}", level="error")
+            import traceback
+            log(f"❌ Full traceback: {traceback.format_exc()}", level="error")
+            eligibility_data = {"message": symbol + " : Critical error during eligibility check"}
             return False, eligibility_data
-
-        # Extract reward-to-risk ratio for final eligibility check
-        trading_pair_data = primary_timeframe_chart.trading_pair
-        current_reward_risk_ratio = trading_pair_data.get("reward_risk_ratio", 0)
-        
-        # Update eligibility message with trend and ratio information
-        eligibility_data["message"] = f"{symbol} : {consensus_trend.value} , Reward:Risk - {current_reward_risk_ratio}"
-        
-        # Final eligibility decision based on minimum reward-risk threshold
-        if current_reward_risk_ratio > MINIMUM_REWARD_RISK_RATIO:
-            return True, eligibility_data
-
-        return False, eligibility_data
 
     def get_volume_eligibility(self, quote):
         self.volume = quote["volume"]
@@ -289,7 +831,7 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
     def get_udts_eligibility(self,symbol,trade_freq):
         self._ensure_configured()
         
-        print("get token and send hereh !!! nOt Working !!!!")
+        log("UDTS eligibility check starting", level="debug")
         is_tradable,eligibility_obj =  self.is_eligible(symbol)
         result = eligibility_obj[trade_freq]["chart"]
         response_obj = {
@@ -334,35 +876,70 @@ class UDTSScanner(BaseScannerInterface, metaclass=ScannerSingletonMeta):
         return self._is_running and self._scanner_thread and self._scanner_thread.is_alive()
 
     def fetch_instruments(self):
-        self._ensure_configured()
-        
-        search_params = {"exchange": "NSE", "segment": "NSE", "instrument_type": "EQ", "page_length": 5000}
-        
-        # Fetch Instruments using TMU service provider
-        log("Fetching instruments from TMU service")
-        result = self.tmu_provider.fetch_instruments(search_params)
-        
-        if "error" in result.get("meta", {}):
-            log(f"Error fetching instruments: {result['meta']['error']}", level="error")
+        """Fetch instruments for scanning with error handling"""
+        try:
+            log(f"📍 fetch_instruments: Starting instrument fetch", level="info")
+            self._ensure_configured()
+            
+            search_params = {"exchange": "NSE", "segment": "NSE", "instrument_type": "EQ", "page_length": 5000}
+            log(f"📍 Search parameters: {search_params}", level="debug")
+            
+            # Fetch Instruments using TMU service provider
+            log(f"📍 Calling TMU service provider to fetch instruments", level="info")
+            
+            # Add error handling for TMU provider access
+            if not hasattr(self, 'system_tmu_provider') or self.system_tmu_provider is None:
+                log(f"❌ ERROR: system_tmu_provider not available", level="error")
+                return []
+            
+            result = self.system_tmu_provider.fetch_instruments(search_params)
+            log(f"📍 TMU service response received: {type(result)}", level="debug")
+            
+            if "error" in result.get("meta", {}):
+                log(f"❌ ERROR fetching instruments: {result['meta']['error']}", level="error")
+                return []
+            
+            instruments = result.get("data", [])
+            log(f"✅ Successfully fetched {len(instruments)} instruments from TMU", level="info")
+            
+            # Log sample of instruments for debugging
+            if instruments and len(instruments) > 0:
+                sample_instruments = instruments[:3]  # Log first 3 instruments
+                log(f"📍 Sample instruments: {sample_instruments}", level="debug")
+            
+            return instruments
+            
+        except Exception as e:
+            log(f"❌ ERROR in fetch_instruments: {str(e)}", level="error")
+            import traceback
+            log(f"❌ Full traceback: {traceback.format_exc()}", level="error")
             return []
-        
-        instruments = result.get("data", [])
-        log(f"Successfully fetched {len(instruments)} instruments from TMU")
-        return instruments
 
     def scan_instruments(self, all_instruments, user_id, trade_session_id, dummy):
-        self._ensure_configured()
-        
-        # Store the thread reference
-        thread_name = f"scanner_thread_udts_{self.trade_frequency}"
-        self._scanner_thread = threading.Thread(
-            target=self.scan_in_separate_thread,
-            args=(all_instruments,),
-            name=thread_name
-        )
-        self._scanner_thread.daemon = True
-        self._scanner_thread.start()
-        log(f"Started scanner thread: {thread_name}")
+        """Start scanner in a separate thread"""
+        try:
+            log(f"📍 scan_instruments called with {len(all_instruments)} instruments", level="info")
+            self._ensure_configured()
+            
+            # Store the thread reference
+            thread_name = f"scanner_thread_udts_{self.trade_frequency}"
+            log(f"📍 Creating scanner thread: {thread_name}", level="info")
+            
+            self._scanner_thread = threading.Thread(
+                target=self.scan_in_separate_thread,
+                args=(all_instruments,),
+                name=thread_name
+            )
+            self._scanner_thread.daemon = True
+            
+            log(f"📍 Starting scanner thread: {thread_name}", level="info")
+            self._scanner_thread.start()
+            log(f"✅ Successfully started scanner thread: {thread_name}", level="info")
+            
+        except Exception as e:
+            log(f"❌ ERROR in scan_instruments: {str(e)}", level="error")
+            import traceback
+            log(f"❌ Full traceback: {traceback.format_exc()}", level="error")
 
     def __str__(self):
         identifier = f"{self.algorithm_type}__{self.frequency}"

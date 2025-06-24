@@ -33,9 +33,11 @@ class ScannerSingletonMeta(ABCMeta):
         if unique_class_identifier not in cls._instances:
             # If not, create a new instance and store it in the dictionary
             cls._instances[unique_class_identifier] = super(ScannerSingletonMeta, cls).__call__(algorithm_type, frequency, *args, **kwargs)
-            print(f"Created new singleton scanner instance: {unique_class_identifier}")
+            # New singleton scanner instance created
+            pass
         else:
-            print(f"Returning existing singleton scanner instance: {unique_class_identifier}")
+            # Returning existing singleton scanner instance
+            pass
 
         # Return the instance for the algorithm+frequency combination
         return cls._instances[unique_class_identifier]
@@ -49,4 +51,4 @@ class ScannerSingletonMeta(ABCMeta):
     def clear_instances(cls):
         """Clear all instances - useful for testing"""
         cls._instances.clear()
-        print("Cleared all singleton scanner instances")
+        # All singleton scanner instances cleared

@@ -8,6 +8,7 @@ from .publisher.publisher_client import get_publisher_client, PublisherRedisClie
 from .publisher.event_publisher import get_scanning_event_publisher, ScanningEventPublisher
 from .consumer.consumer_client import create_consumer_client, ConsumerRedisClient
 from .utils import prepare_for_redis_stream, restore_from_redis_stream
+from .scanner_lock_manager import ScannerLockManager
 
 __all__ = [
     'get_redis_config',
@@ -18,5 +19,6 @@ __all__ = [
     'create_consumer_client', 
     'ConsumerRedisClient',
     'prepare_for_redis_stream',
-    'restore_from_redis_stream'
+    'restore_from_redis_stream',
+    'ScannerLockManager'
 ] 

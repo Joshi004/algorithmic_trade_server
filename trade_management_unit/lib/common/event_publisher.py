@@ -55,6 +55,42 @@ class TradeSessionEventPublisher:
             log(f"Error publishing trade session initiation event for session {trade_session_obj.id}: {str(e)}", level="error")
             return False
     
+    def publish_resume_scanner_event(self, trade_session_obj):
+        """
+        Publish resume scanner event to Redis stream.
+        This ensures a scanner instance is running for the trade session's algorithm and frequency.
+        Uses the same event structure as trade_session_initiated for consistency.
+        
+        Args:
+            trade_session_obj: TradeSession model instance
+            
+        Returns:
+            bool: True if published successfully, False otherwise
+        """
+        try:
+            # Use the same event formatting as trade_session_initiated but with different event_type
+            event_data = self._format_trade_session_event(trade_session_obj)
+            
+            # Override the event_type to indicate this is a resume operation
+            event_data["event_type"] = "resume_scanner"
+            
+            # Publish to Redis stream
+            success = self.redis_client.publish_to_stream(
+                self.scanning_queue, 
+                event_data
+            )
+            
+            if success:
+                log(f"Published resume scanner event for {trade_session_obj.scanning_algorithm.name}:{trade_session_obj.trading_frequency} (session: {trade_session_obj.id})")
+            else:
+                log(f"Failed to publish resume scanner event for session {trade_session_obj.id}", level="error")
+            
+            return success
+            
+        except Exception as e:
+            log(f"Error publishing resume scanner event for session {trade_session_obj.id}: {str(e)}", level="error")
+            return False
+    
     def _format_trade_session_event(self, trade_session_obj):
         """
         Format trade session data into flat event structure.
@@ -76,9 +112,9 @@ class TradeSessionEventPublisher:
                 "timestamp": current_time.isoformat(),
                 "trade_session_id": trade_session_obj.id,
                 "user_id": str(trade_session_obj.user_id.public_id),
-                "scanning_algorithm_id": trade_session_obj.scanning_algorithm.id,
-                "initiation_algorithm_id": trade_session_obj.initiation_algorithm.id,
-                "termination_algorithm_id": trade_session_obj.termination_algorithm.id,
+                "scanning_algorithm_name": trade_session_obj.scanning_algorithm.name,
+                "initiation_algorithm_name": trade_session_obj.initiation_algorithm.name,
+                "termination_algorithm_name": trade_session_obj.termination_algorithm.name,
                 "trading_frequency": trade_session_obj.trading_frequency,
                 "is_dummy": trade_session_obj.dummy,
                 "session_status": trade_session_obj.status,

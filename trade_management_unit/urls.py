@@ -2,7 +2,6 @@ from django.urls import path, re_path
 # from django.urls import re_path
 
 from .views import instrument_view, trade_session_view
-from .consumers import trade_session_consumer
 
 urlpatterns = [
     # Instrument endpoints - handle both with and without trailing slash
@@ -14,6 +13,10 @@ urlpatterns = [
     re_path(r'^initiate_trade_session/?$', trade_session_view.initiate_trade_session, name='initiate_trade_session'),
     re_path(r'^get_new_session_param_options/?$', trade_session_view.get_new_session_param_options, name='get_new_session_param_options'),
     re_path(r'^get_active_trade_sessions/?$', trade_session_view.get_active_trade_sessions, name='get_active_trade_sessions'),
+    re_path(r'^get_user_trade_sessions/?$', trade_session_view.get_user_trade_sessions, name='get_user_trade_sessions'),
+    re_path(r'^pause_trade_session/?$', trade_session_view.pause_trade_session, name='pause_trade_session'),
+    re_path(r'^resume_trade_session/?$', trade_session_view.resume_trade_session, name='resume_trade_session'),
+    re_path(r'^get_trade_session_details/?$', trade_session_view.get_trade_session_details, name='get_trade_session_details'),
     # re_path(r'^get_trade_sessions/?$', trade_session_view.get_trade_sessions, name='get_trade_sessions'),
     # re_path(r'^resume_trade_session/?$', trade_session_view.resume_trade_session, name='resume_trade_session'),
     # re_path(r'^session_active/?$', trade_session_view.session_active, name='session_active'),

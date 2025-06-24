@@ -1,6 +1,4 @@
 import logging
-import requests
-from django.conf import settings
 import pandas as pd
 from trade_management_unit.models.Instrument import Instrument
 from django.utils.dateparse import parse_date
@@ -10,15 +8,12 @@ from django.core import serializers
 from django.db import transaction
 from django.db import connection
 import json
+from trade_management_unit.lib.common.integration_service_provider import IntegrationServiceProvider
 
 
 class Instruments:
     def __init__(self):
         logging.basicConfig(level=logging.DEBUG)
-        self.integration_service_url = getattr(settings, 'INTEGRATION_SERVICE_URL', 'http://localhost:8000/integration')
-        self.headers = {
-            'X-Internal-Service-Token': getattr(settings, 'INTERNAL_SERVICE_TOKEN', 'internal-service-secret-token-change-in-production')
-        }
 
     def fetch_instruments(self, req_params):
         query = Q()
@@ -66,25 +61,22 @@ class Instruments:
             }
         }
 
-    def update_instruments(self, user_id):
+    def update_instruments(self, user_id="system"):
         """
         Fetch instruments from integration service and update the database.
         
+        This is typically a system-level operation that fetches master instrument data.
+        
         Args:
-            user_id: User ID to use for the integration service call
+            user_id: User ID to use for the integration service call. 
+                    Use "system" for system-level operations (default).
         """
         try:
-            # Call integration service to get instruments
-            api_url = f"{self.integration_service_url}/get_instruments/"
-            api_params = {'user_id': user_id}
+            # Initialize integration service provider with the specified user
+            integration_provider = IntegrationServiceProvider(user_id)
             
-            response = requests.get(api_url, params=api_params, headers=self.headers)
-            
-            if response.status_code != 200:
-                logging.error(f"Failed to fetch instruments from integration service: {response.status_code}")
-                raise Exception(f"Integration service returned status {response.status_code}")
-                
-            response_data = response.json()
+            # Fetch instruments using the provider
+            response_data = integration_provider.get_instruments()
             
             if response_data.get('status') != 'success':
                 error_msg = response_data.get('error', 'Unknown error from integration service')
@@ -131,9 +123,6 @@ class Instruments:
                 
             logging.info(f"Successfully updated {len(instrument_instances)} instruments")
             
-        except requests.exceptions.RequestException as e:
-            logging.error(f"Error calling integration service: {str(e)}")
-            raise Exception(f"Failed to connect to integration service: {str(e)}")
         except Exception as e:
             logging.error(f"Error updating instruments: {str(e)}")
             raise

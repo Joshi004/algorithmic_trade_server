@@ -44,5 +44,5 @@ class BalanceHelper:
             return None
             
         except Exception as e:
-            print(f"Error getting available margin: {str(e)}")
+            # TODO: Add proper logging for margin calculation errors
             return None 

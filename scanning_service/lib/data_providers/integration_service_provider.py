@@ -1,9 +1,12 @@
 """
 Data provider for the scanning service that calls integration service APIs.
 """
+import time
 import requests
 from django.conf import settings
 from scanning_service.lib.utils.logger import log
+from integration_service.lib.common.error_classifier import is_temporary_error
+from integration_service.lib.common.system_user_utils import get_system_admin_user_id
 
 
 class IntegrationServiceProvider:
@@ -16,9 +19,15 @@ class IntegrationServiceProvider:
         Initialize the data provider.
         
         Args:
-            user_id: User ID for authentication (if needed)
+            user_id: User ID for authentication. Use "system" for system-level operations.
         """
-        self.user_id = user_id
+        # Handle system user ID resolution
+        if user_id == "system":
+            self.user_id = get_system_admin_user_id()
+            log(f"Using system user ID: {self.user_id}")
+        else:
+            self.user_id = user_id
+            
         self.base_url = getattr(settings, 'INTEGRATION_SERVICE_URL', 'http://localhost:8000/integration')
         self.headers = {
             'X-Internal-Service-Token': getattr(settings, 'INTERNAL_SERVICE_TOKEN', 'internal-service-secret-token-change-in-production')
@@ -35,33 +44,84 @@ class IntegrationServiceProvider:
         Returns:
             dict: Quote data with structure {"data": {...}, "meta": {...}}
         """
-        try:
-            url = f"{self.base_url}/get_quotes/"
-            params = {
-                "symbol": symbol,
-                "exchange": exchange
-            }
-            
-            if self.user_id:
-                params["user_id"] = self.user_id
+        max_attempts = 3
+        base_delay = 1.0
+        multiplier = 2
+        
+        for attempt in range(max_attempts):
+            try:
+                url = f"{self.base_url}/get_quotes/"
+                params = {
+                    "symbol": symbol,
+                    "exchange": exchange
+                }
                 
-            log(f"Fetching quotes for {symbol} from {exchange}")
-            response = requests.get(url, params=params, headers=self.headers)
-            
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("status") == "success":
-                    return {"data": data.get("data", {}), "meta": data.get("meta", {})}
+                if self.user_id:
+                    params["user_id"] = self.user_id
+                    
+                log(f"Fetching quotes for {symbol} from {exchange} (attempt {attempt + 1}/{max_attempts})")
+                
+                # Debug log the full request details
+                log(f"[DEBUG] Request URL: {url}", level="debug")
+                log(f"[DEBUG] Request params: {params}", level="debug")
+                log(f"[DEBUG] Request headers: {self.headers}", level="debug")
+                
+                response = requests.get(url, params=params, headers=self.headers)
+                
+                # Debug log the response details
+                log(f"[DEBUG] Response status: {response.status_code}", level="debug")
+                log(f"[DEBUG] Response headers: {dict(response.headers)}", level="debug")
+                
+                if response.status_code == 200:
+                    try:
+                        data = response.json()
+                        log(f"[DEBUG] Response JSON status: {data.get('status', 'N/A')}", level="debug")
+                        log(f"[DEBUG] Response JSON keys: {list(data.keys())}", level="debug")
+                        
+                        if data.get("status") == "success":
+                            quotes_data = data.get("data", {})
+                            log(f"[DEBUG] Quotes data keys count: {len(quotes_data)}", level="debug")
+                            if quotes_data:
+                                # Log first quote key as sample
+                                first_key = next(iter(quotes_data), None)
+                                if first_key:
+                                    log(f"[DEBUG] Sample quote key: {first_key}", level="debug")
+                                    sample_quote = quotes_data[first_key]
+                                    log(f"[DEBUG] Sample quote fields: {list(sample_quote.keys())[:10]}", level="debug")
+                                    # Log actual quote values
+                                    log(f"[DEBUG] RECEIVED QUOTE DATA for {first_key}: last_price={sample_quote.get('last_price')}, volume={sample_quote.get('volume')}, timestamp={sample_quote.get('timestamp')}", level="debug")
+                                    log(f"[DEBUG] RECEIVED QUOTE DETAILS for {first_key}: buy_qty={sample_quote.get('buy_quantity')}, sell_qty={sample_quote.get('sell_quantity')}, avg_price={sample_quote.get('average_price')}", level="debug")
+                            else:
+                                log(f"[WARNING] Integration service returned success but empty quotes data for {symbol}", level="warning")
+                            return {"data": data.get("data", {}), "meta": data.get("meta", {})}
+                        else:
+                            error_msg = data.get('error', 'Unknown error')
+                            log(f"[ERROR] API returned error status: {error_msg}", level="error")
+                            log(f"[DEBUG] Full error response: {data}", level="debug")
+                            if not is_temporary_error(error_msg) or attempt == max_attempts - 1:
+                                return {"data": {}, "meta": {"error": error_msg}}
+                    except ValueError as json_error:
+                        log(f"[ERROR] Failed to parse JSON response: {str(json_error)}", level="error")
+                        log(f"[DEBUG] Raw response text: {response.text[:500]}", level="debug")
+                        if attempt == max_attempts - 1:
+                            return {"data": {}, "meta": {"error": "Invalid JSON response"}}
                 else:
-                    log(f"Error getting quotes: {data.get('error')}", level="error")
-                    return {"data": {}, "meta": {"error": data.get("error")}}
-            else:
-                log(f"Failed to get quotes, status code: {response.status_code}", level="error")
-                return {"data": {}, "meta": {"error": f"HTTP {response.status_code}"}}
-                
-        except Exception as e:
-            log(f"Exception getting quotes: {str(e)}", level="error")
-            return {"data": {}, "meta": {"error": str(e)}}
+                    log(f"[ERROR] Failed to get quotes, status code: {response.status_code}", level="error")
+                    log(f"[DEBUG] Error response text: {response.text[:500]}", level="debug")
+                    if not is_temporary_error(response.status_code) or attempt == max_attempts - 1:
+                        return {"data": {}, "meta": {"error": f"HTTP {response.status_code}"}}
+                        
+            except Exception as e:
+                log(f"Exception getting quotes (attempt {attempt + 1}/{max_attempts}): {str(e)}", level="error")
+                if not is_temporary_error(str(e)) or attempt == max_attempts - 1:
+                    return {"data": {}, "meta": {"error": str(e)}}
+            
+            # Wait before retry if not the last attempt
+            if attempt < max_attempts - 1:
+                delay = base_delay * (multiplier ** attempt)
+                time.sleep(delay)
+        
+        return {"data": {}, "meta": {"error": "Max retries exceeded"}}
     
     def fetch_historical_candle_data_from_kite(self, symbol, token, interval, number_of_candles, trade_date=None):
         """
@@ -77,38 +137,106 @@ class IntegrationServiceProvider:
         Returns:
             list: Historical candle data
         """
-        try:
-            url = f"{self.base_url}/get_historical_data/"
-            params = {
-                "symbol": symbol,
-                "token": token,
-                "interval": interval,
-                "number_of_candles": number_of_candles
-            }
-            
-            if self.user_id:
-                params["user_id"] = self.user_id
+        max_attempts = 3
+        base_delay = 1.0
+        multiplier = 2
+        
+        for attempt in range(max_attempts):
+            try:
+                url = f"{self.base_url}/get_historical_data/"
+                params = {
+                    "symbol": symbol,
+                    "token": token,
+                    "interval": interval,
+                    "number_of_candles": number_of_candles
+                }
                 
-            if trade_date:
-                params["trade_date"] = trade_date.isoformat() if hasattr(trade_date, 'isoformat') else str(trade_date)
+                if self.user_id:
+                    params["user_id"] = self.user_id
+                    
+                if trade_date:
+                    params["trade_date"] = trade_date.isoformat() if hasattr(trade_date, 'isoformat') else str(trade_date)
+                    
+                log(f"[SCAN] 📊 Fetching historical data for {symbol}, interval: {interval}, candles: {number_of_candles} (attempt {attempt + 1}/{max_attempts})")
                 
-            log(f"Fetching historical data for {symbol}, interval: {interval}, candles: {number_of_candles}")
-            response = requests.get(url, params=params, headers=self.headers)
-            
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("status") == "success":
-                    return data.get("data", [])
+                # Enhanced debugging - log instrument details
+                log(f"[SCAN_DEBUG] Instrument details: symbol={symbol}, token={token}, type={'Option' if 'HP' in symbol else 'Equity' if symbol.isalpha() else 'Unknown'}")
+                
+                # Debug log the full request details
+                log(f"[DEBUG] Historical data request URL: {url}", level="debug")
+                log(f"[DEBUG] Historical data request params: {params}", level="debug")
+                
+                response = requests.get(url, params=params, headers=self.headers)
+                
+                # Debug log the response details
+                log(f"[DEBUG] Historical data response status: {response.status_code}", level="debug")
+                
+                if response.status_code == 200:
+                    try:
+                        data = response.json()
+                        log(f"[DEBUG] Historical data response JSON status: {data.get('status', 'N/A')}", level="debug")
+                        
+                        if data.get("status") == "success":
+                            candle_data = data.get("data", [])
+                            meta_data = data.get("meta", {})
+                            api_success = meta_data.get("api_success_status", True)
+                            api_error_message = meta_data.get("api_error_message")
+                            
+                            if candle_data and len(candle_data) > 0:
+                                log(f"[SCAN] ✅ Successfully fetched {len(candle_data)} candles for {symbol} {interval}")
+                                return candle_data
+                            else:
+                                # Check if this is API success with zero data (legitimate) or API failure
+                                if api_success:
+                                    # This is a legitimate case - API succeeded but no data available (e.g., expired instrument)
+                                    log(f"[SCAN] ⚠️ No data returned for {symbol} {interval} - API succeeded but instrument has no data (likely expired)", level="warning")
+                                    log(f"[DEBUG] Full API response: {data}", level="debug")
+                                    # Return empty data immediately, don't retry for legitimate zero-data cases
+                                    return []
+                                else:
+                                    # This is an API failure - should log error and potentially retry
+                                    log(f"[SCAN] ❌ API failure for {symbol} {interval}: {api_error_message or 'Unknown API error'}", level="error")
+                                    log(f"[DEBUG] Full API response: {data}", level="debug")
+                                    if attempt == max_attempts - 1:
+                                        return []
+                        else:
+                            error_msg = data.get('error', 'Unknown error')
+                            log(f"[SCAN] ❌ API error for {symbol} {interval}: {error_msg}", level="error")
+                            log(f"[DEBUG] Full error response: {data}", level="debug")
+                            if not is_temporary_error(error_msg) or attempt == max_attempts - 1:
+                                return []
+                    except ValueError as json_error:
+                        log(f"[SCAN] ❌ JSON parse error for {symbol} {interval}: {str(json_error)}", level="error")
+                        log(f"[DEBUG] Raw response text: {response.text[:500]}", level="debug")
+                        if attempt == max_attempts - 1:
+                            return []
                 else:
-                    log(f"Error getting historical data: {data.get('error')}", level="error")
+                    log(f"[SCAN] ❌ HTTP error for {symbol} {interval}, status code: {response.status_code}", level="error")
+                    log(f"[DEBUG] Error response text: {response.text[:500]}", level="debug")
+                    if not is_temporary_error(response.status_code) or attempt == max_attempts - 1:
+                        return []
+                        
+            except requests.exceptions.ConnectionError as e:
+                log(f"[SCAN] ❌ Connection error for {symbol} {interval} (attempt {attempt + 1}/{max_attempts}): {str(e)}", level="error")
+                if attempt == max_attempts - 1:
                     return []
-            else:
-                log(f"Failed to get historical data, status code: {response.status_code}", level="error")
-                return []
-                
-        except Exception as e:
-            log(f"Exception getting historical data: {str(e)}", level="error")
-            return []
+            except requests.exceptions.Timeout as e:
+                log(f"[SCAN] ❌ Timeout error for {symbol} {interval} (attempt {attempt + 1}/{max_attempts}): {str(e)}", level="error")
+                if attempt == max_attempts - 1:
+                    return []
+            except Exception as e:
+                log(f"[SCAN] ❌ Unexpected error for {symbol} {interval} (attempt {attempt + 1}/{max_attempts}): {str(e)}", level="error")
+                if not is_temporary_error(str(e)) or attempt == max_attempts - 1:
+                    return []
+            
+            # Wait before retry if not the last attempt
+            if attempt < max_attempts - 1:
+                delay = base_delay * (multiplier ** attempt)
+                log(f"[SCAN] ⏳ Retrying {symbol} {interval} in {delay}s...", level="warning")
+                time.sleep(delay)
+        
+        log(f"[SCAN] ❌ Max retries exceeded for {symbol} {interval} - returning empty data", level="error")
+        return []
     
     def fetch_instruments(self, search_params):
         """

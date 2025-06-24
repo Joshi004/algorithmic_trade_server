@@ -89,6 +89,12 @@ class BaseRedisClient(ABC):
         """Close Redis connection"""
         if self._client:
             try:
+                # Close connection pool properly
+                if hasattr(self._client, 'connection_pool') and self._client.connection_pool:
+                    self._client.connection_pool.disconnect()
+                    log(f"{self.client_type.title()} Redis connection pool disconnected")
+                
+                # Close the client
                 self._client.close()
                 log(f"{self.client_type.title()} Redis client connection closed")
             except Exception as e:
@@ -96,6 +102,23 @@ class BaseRedisClient(ABC):
             finally:
                 self._client = None
                 self._is_connected = False
+    
+    def __del__(self):
+        """Destructor to ensure connections are closed"""
+        try:
+            if self._client is not None:
+                self.close()
+        except Exception:
+            # Ignore errors during destruction
+            pass
+    
+    def __enter__(self):
+        """Context manager entry"""
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - ensure cleanup"""
+        self.close()
     
 
     

@@ -204,21 +204,258 @@ CORS_PREFLIGHT_MAX_AGE = 86400  # 24 hours
 # Revert to simpler cookie configuration that works with HTTP
 SECURE_COOKIES = False  # Must be False for HTTP in development
 
+# ===================================================================================================
+# COMPREHENSIVE LOGGING CONFIGURATION
+# ===================================================================================================
+# This section configures how your application logs information for debugging, monitoring, and business analysis.
+# Logging helps you track what's happening in your trading system, troubleshoot issues, and analyze performance.
+
 LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'handlers': {
-        'file': {
-            'level': 'INFO',
-            'class': 'logging.FileHandler',
-            'filename': os.path.join(BASE_DIR, 'logfile.log'),
+    'version': 1,  # Configuration format version (always 1 for current Django)
+    'disable_existing_loggers': False,  # Keep existing loggers from other packages/modules
+    
+    # ===================================================================================================
+    # FORMATTERS: Define how log messages look when they're written
+    # ===================================================================================================
+    'formatters': {
+        # VERBOSE FORMATTER - Used for detailed debugging and error analysis
+        # Shows: timestamp, log level, logger name, process/thread IDs, function name, line number, message
+        # Example: "2024-01-15 10:30:45 | ERROR    | trade_management_unit | 12345:67890 | execute_trade:245 | Order failed"
+        'verbose': {
+            'format': '{asctime} | {levelname:8} | {name:20} | {process:5d}:{thread:5d} | {funcName}:{lineno} | {message}',
+            'style': '{',  # Use {variable} style instead of %(variable)s
+            'datefmt': '%Y-%m-%d %H:%M:%S'  # Date format: YYYY-MM-DD HH:MM:SS
+        },
+        
+        # STANDARD FORMATTER - Used for general application logs
+        # Shows: timestamp, log level, logger name, message
+        # Example: "2024-01-15 10:30:45 | INFO     | ats_gateway    | User logged in successfully"
+        'standard': {
+            'format': '{asctime} | {levelname:8} | {name:15} | {message}',
+            'style': '{',
+            'datefmt': '%Y-%m-%d %H:%M:%S'
+        },
+        
+        # BUSINESS FORMATTER - Used specifically for trading/business operations
+        # Shows: timestamp, log level, [BUSINESS] tag, logger name, message
+        # Example: "2024-01-15 10:30:45 | INFO     | [BUSINESS] | trade_session  | Trade executed: AAPL 100 shares"
+        'business': {
+            'format': '{asctime} | {levelname:8} | [BUSINESS] | {name:15} | {message}',
+            'style': '{',
+            'datefmt': '%Y-%m-%d %H:%M:%S'
+        },
+        
+        # SIMPLE FORMATTER - Minimal formatting for console output during development
+        # Shows: log level, logger name, message
+        # Example: "INFO | ats_gateway | User logged in"
+        'simple': {
+            'format': '{levelname} | {name} | {message}',
+            'style': '{',
         },
     },
+    
+    # ===================================================================================================
+    # HANDLERS: Define WHERE and HOW log messages are output
+    # ===================================================================================================
+    'handlers': {
+        # CONSOLE HANDLER - Outputs logs to your terminal/command prompt in real-time
+        # PURPOSE: See what's happening immediately when developing/running the application
+        # LEVEL: INFO+ (shows INFO, WARNING, ERROR, CRITICAL - hides DEBUG messages to reduce noise)
+        # CLASS: StreamHandler writes to stdout (your terminal screen)
+        # FORMATTER: Uses 'standard' format for clean, readable console output
+        'console': {
+            'level': 'INFO',
+            'class': 'logging.StreamHandler',  # StreamHandler = output to console/terminal
+            'formatter': 'standard',  # Use the 'standard' formatter defined above
+        },
+        
+        # DEBUG FILE HANDLER - Saves ALL log messages to a debug file
+        # PURPOSE: Capture every detail for troubleshooting complex issues
+        # LEVEL: DEBUG (captures EVERYTHING - DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        # CLASS: RotatingFileHandler automatically manages file size and creates backups
+        # FILENAME: Saves to logs/debug.log
+        # MAXBYTES: When file reaches 10MB (10485760 bytes), it rotates
+        # BACKUPCOUNT: Keeps 5 backup files (debug.log.1, debug.log.2, etc.) then deletes oldest
+        # FORMATTER: Uses 'verbose' format with maximum detail for debugging
+        # ROTATION: Only rotates on size limit - no rotation on restart/process changes
+        'file_debug': {
+            'level': 'DEBUG',
+            'class': 'logging.handlers.RotatingFileHandler',  # RotatingFileHandler = auto file rotation
+            'filename': os.path.join(BASE_DIR, 'logs', 'debug.log'),
+            'maxBytes': 10485760,  # 10MB - when file gets this big, rotate it
+            'backupCount': 5,  # Keep 5 old files: debug.log.1, debug.log.2, etc.
+            'formatter': 'verbose',  # Use detailed verbose format for debugging
+            'mode': 'a',  # Append mode - don't truncate existing log file
+            'delay': True,  # Don't create file until first log message is written
+            'encoding': 'utf-8',  # Consistent encoding for all log files
+        },
+        
+        # APPLICATION INFO HANDLER - Saves general application logs
+        # PURPOSE: Track normal application operations, user actions, system events
+        # LEVEL: INFO+ (INFO, WARNING, ERROR, CRITICAL - no DEBUG to keep file focused)
+        # BACKUPCOUNT: 5 files (application.log, application.log.1, etc.)
+        # FORMATTER: Uses 'standard' format - clean but informative
+        # ROTATION: Only rotates on size limit - no rotation on restart/process changes
+        'file_info': {
+            'level': 'INFO',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': os.path.join(BASE_DIR, 'logs', 'application.log'),
+            'maxBytes': 10485760,  # 10MB rotation
+            'backupCount': 5,  # Keep 5 backup files
+            'formatter': 'standard',  # Clean, standard formatting
+            'mode': 'a',  # Append mode - don't truncate existing log file
+            'delay': True,  # Don't create file until first log message is written
+            'encoding': 'utf-8',  # Consistent encoding for all log files
+        },
+        
+        # BUSINESS LOGIC HANDLER - Saves trading/financial operation logs
+        # PURPOSE: Track trading activities, scanner results, risk management decisions
+        # LEVEL: INFO+ (business decisions and results, not debug details)
+        # BACKUPCOUNT: 5 files (business.log, business.log.1, etc.)
+        # FORMATTER: Uses 'business' format with [BUSINESS] tag for easy identification
+        # ROTATION: Only rotates on size limit - no rotation on restart/process changes
+        'file_business': {
+            'level': 'INFO',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': os.path.join(BASE_DIR, 'logs', 'business.log'),
+            'maxBytes': 10485760,  # 10MB rotation
+            'backupCount': 5,  # Keep 5 backup files
+            'formatter': 'business',  # Special business format with [BUSINESS] tag
+            'mode': 'a',  # Append mode - don't truncate existing log file
+            'delay': True,  # Don't create file until first log message is written
+            'encoding': 'utf-8',  # Consistent encoding for all log files
+        },
+        
+        # ERROR HANDLER - Saves only errors and critical issues
+        # PURPOSE: Quick access to problems without wading through info/debug messages
+        # LEVEL: ERROR+ (only ERROR and CRITICAL messages)
+        # BACKUPCOUNT: 10 files (more backups since errors are critical for troubleshooting)
+        # FORMATTER: Uses 'verbose' format with full detail for error analysis
+        # ROTATION: Only rotates on size limit - no rotation on restart/process changes
+        'file_error': {
+            'level': 'ERROR',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': os.path.join(BASE_DIR, 'logs', 'error.log'),
+            'maxBytes': 10485760,  # 10MB rotation
+            'backupCount': 10,  # Keep 10 backup files (errors are important!)
+            'formatter': 'verbose',  # Detailed formatting for error analysis
+            'mode': 'a',  # Append mode - don't truncate existing log file
+            'delay': True,  # Don't create file until first log message is written
+            'encoding': 'utf-8',  # Consistent encoding for all log files
+        },
+    },
+    
+    # ===================================================================================================
+    # LOGGERS: Define which handlers each part of your application uses
+    # ===================================================================================================
+    'loggers': {
+        # SERVICE-SPECIFIC LOGGERS
+        # These loggers handle messages from your main application services
+        
+        # ATS GATEWAY LOGGER - Handles authentication, user management, API gateway
+        # HANDLERS: 4 handlers (console, debug file, info file, error file)
+        # WHY NO BUSINESS HANDLER? Gateway handles user auth/API routing, not trading operations
+        # LEVEL: DEBUG (captures all log levels from this service)
+        # PROPAGATE: False (don't send messages to parent loggers - prevents duplication)
+        'ats_gateway': {
+            'handlers': ['console', 'file_debug', 'file_info', 'file_error'],  # 4 handlers - NO business handler
+            'level': 'DEBUG',
+            'propagate': False,  # Don't pass messages to parent loggers
+        },
+        
+        # TRADE MANAGEMENT UNIT LOGGER - Handles actual trading operations
+        # HANDLERS: 5 handlers (console, debug file, info file, BUSINESS file, error file)
+        # WHY BUSINESS HANDLER? This service executes trades, manages positions - core business logic
+        # LEVEL: DEBUG (captures everything for this critical service)
+        'trade_management_unit': {
+            'handlers': ['console', 'file_debug', 'file_info', 'file_business', 'file_error'],  # 5 handlers - INCLUDES business
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+        
+        # SCANNING SERVICE LOGGER - Handles market scanning and signal detection
+        # HANDLERS: 5 handlers (includes business handler)
+        # WHY BUSINESS HANDLER? Scanning generates trading signals - core business logic
+        'scanning_service': {
+            'handlers': ['console', 'file_debug', 'file_info', 'file_business', 'file_error'],  # 5 handlers - INCLUDES business
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+        
+        # INTEGRATION SERVICE LOGGER - Handles broker connections, data feeds
+        # HANDLERS: 4 handlers (console, debug file, info file, error file)
+        # WHY NO BUSINESS HANDLER? This service handles technical integration, not business decisions
+        'integration_service': {
+            'handlers': ['console', 'file_debug', 'file_info', 'file_error'],  # 4 handlers - NO business handler
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+        
+        # INITIATION SERVICE LOGGER - Handles trade initiation logic
+        # HANDLERS: 5 handlers (includes business handler)
+        # WHY BUSINESS HANDLER? This service makes decisions about when to start trades - business logic
+        'initiation_service': {
+            'handlers': ['console', 'file_debug', 'file_info', 'file_business', 'file_error'],  # 5 handlers - INCLUDES business
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+        
+        # ===================================================================================================
+        # BUSINESS LOGIC SPECIFIC LOGGERS
+        # These are SPECIALIZED loggers for specific business operations within your services
+        # ===================================================================================================
+        
+        # TRADE SESSION LOGGER - Logs specific to individual trading sessions
+        # HANDLERS: ONLY 2 handlers (business file + console)
+        # WHY ONLY 2? This is a SPECIALIZED logger for business operations only
+        # - business file: Permanent record of trading session activities
+        # - console: Immediate feedback during development/monitoring
+        # NO DEBUG/INFO/ERROR files: Those are handled by the parent service loggers above
+        'business.trade_session': {
+            'handlers': ['file_business', 'console'],  # ONLY business + console
+            'level': 'INFO',
+            'propagate': False,
+        },
+        
+        # SCANNER BUSINESS LOGGER - Logs specific to scanning business logic
+        # HANDLERS: ONLY 2 handlers (business file + console)
+        # PURPOSE: Track scanner signals, pattern detection, market analysis results
+        'business.scanner': {
+            'handlers': ['file_business', 'console'],  # ONLY business + console
+            'level': 'INFO',
+            'propagate': False,
+        },
+        
+        # TRADE EXECUTION LOGGER - Logs specific to trade execution business logic
+        # HANDLERS: ONLY 2 handlers (business file + console)
+        # PURPOSE: Track actual buy/sell executions, order management, fills
+        'business.trade_execution': {
+            'handlers': ['file_business', 'console'],  # ONLY business + console
+            'level': 'INFO',
+            'propagate': False,
+        },
+        
+        # RISK MANAGEMENT LOGGER - Logs specific to risk management decisions
+        # HANDLERS: ONLY 2 handlers (business file + console)
+        # PURPOSE: Track stop-loss triggers, position sizing, risk limit violations
+        'business.risk_management': {
+            'handlers': ['file_business', 'console'],  # ONLY business + console
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+    
+    # ROOT LOGGER - Catches any logs not handled by specific loggers above
+    # Used for Django framework logs, third-party package logs, etc.
     'root': {
-        'handlers': ['file'],
-        'level': 'DEBUG',
+        'handlers': ['console', 'file_info', 'file_error'],  # Basic logging for everything else
+        'level': 'INFO',
     },
 }
+
+# Ensure logs directory exists
+LOGS_DIR = os.path.join(BASE_DIR, 'logs')
+os.makedirs(LOGS_DIR, exist_ok=True)
 
 # Service URLs Configuration
 # These URLs are used for inter-service communication in the microservices architecture
