@@ -66,6 +66,11 @@ class Migration(migrations.Migration):
                     db_index=True,
                     help_text='User identifier'
                 )),
+                ('dummy', models.BooleanField(
+                    default=False,
+                    db_index=True,
+                    help_text='Flag to distinguish test/dummy trades from real trades'
+                )),
             ],
             options={
                 'verbose_name': 'Trade',
@@ -84,6 +89,7 @@ class Migration(migrations.Migration):
             CREATE INDEX idx_trades_closed_at ON trades(closed_at);
             CREATE INDEX idx_trades_user_id ON trades(user_id);
             CREATE INDEX idx_trades_view ON trades(view);
+            CREATE INDEX idx_trades_dummy ON trades(dummy);
             
             -- Relationship indexes
             CREATE INDEX idx_trades_instrument ON trades(instrument_id);
@@ -102,6 +108,7 @@ class Migration(migrations.Migration):
             DROP INDEX IF EXISTS idx_trades_closed_at;
             DROP INDEX IF EXISTS idx_trades_user_id;
             DROP INDEX IF EXISTS idx_trades_view;
+            DROP INDEX IF EXISTS idx_trades_dummy;
             
             -- Drop relationship indexes
             DROP INDEX IF EXISTS idx_trades_instrument;

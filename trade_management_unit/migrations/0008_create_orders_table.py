@@ -152,6 +152,11 @@ class Migration(migrations.Migration):
                     default='system',
                     help_text='Source of the order: system, manual, etc.'
                 )),
+                ('dummy', models.BooleanField(
+                    default=False,
+                    db_index=True,
+                    help_text='Flag to distinguish test/dummy orders from real orders'
+                )),
                 
                 # Timestamps
                 ('created_at', models.DateTimeField(default=django.utils.timezone.now)),
@@ -176,6 +181,7 @@ class Migration(migrations.Migration):
             CREATE INDEX idx_orders_closed_at ON orders(closed_at);
             CREATE INDEX idx_orders_broker_order_id ON orders(broker_order_id);
             CREATE INDEX idx_orders_created_at ON orders(created_at);
+            CREATE INDEX idx_orders_dummy ON orders(dummy);
             
             -- Relationship indexes
             CREATE INDEX idx_orders_instrument ON orders(instrument_id);
@@ -201,6 +207,7 @@ class Migration(migrations.Migration):
             DROP INDEX IF EXISTS idx_orders_closed_at;
             DROP INDEX IF EXISTS idx_orders_broker_order_id;
             DROP INDEX IF EXISTS idx_orders_created_at;
+            DROP INDEX IF EXISTS idx_orders_dummy;
             
             -- Drop relationship indexes
             DROP INDEX IF EXISTS idx_orders_instrument;

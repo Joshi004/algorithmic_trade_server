@@ -19,6 +19,7 @@ class Trade(models.Model):
     VIEW_CHOICES=[("long","long"),("short","short")]
     view = EnumField(choices=VIEW_CHOICES,default = "long")
     user_id = models.CharField(max_length=64,default="1")
+    dummy = models.BooleanField(default=False)
 
     @classmethod
     def fetch_active_trade(cls, instrument_id, trade_session_id, user_id):
