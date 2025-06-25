@@ -114,6 +114,90 @@ class TableDataManager:
         
         return results
     
+    def bulk_insert_tables(self, table_definitions: List[Dict[str, str]]) -> Dict[str, int]:
+        """
+        Bulk insert data for multiple tables in a single transaction.
+        More efficient than insert_multiple_tables for large datasets.
+        
+        Args:
+            table_definitions: List of dictionaries with 'table_name' and 'ascii_data' keys
+            
+        Returns:
+            Dictionary mapping table names to number of rows inserted
+            
+        Example:
+            table_defs = [
+                {'table_name': 'users', 'ascii_data': users_ascii},
+                {'table_name': 'scanning_algorithms', 'ascii_data': algorithms_ascii},
+                {'table_name': 'trade_sessions', 'ascii_data': sessions_ascii}
+            ]
+            results = manager.bulk_insert_tables(table_defs)
+        """
+        results = {}
+        
+        # Use database transaction for better performance
+        with transaction.atomic():
+            for table_def in table_definitions:
+                table_name = table_def['table_name']
+                ascii_data = table_def['ascii_data']
+                
+                # Parse the ASCII table
+                parsed_data = self._parse_ascii_table(ascii_data)
+                
+                if not parsed_data['rows']:
+                    results[table_name] = 0
+                    continue
+                
+                # Insert data into database
+                inserted_count = self._insert_parsed_data(table_name, parsed_data)
+                
+                # Track inserted data for cleanup
+                if table_name not in self.inserted_data:
+                    self.inserted_data[table_name] = []
+                    self.insertion_order.append(table_name)
+                
+                self.inserted_data[table_name].extend(parsed_data['rows'])
+                results[table_name] = inserted_count
+        
+        return results
+    
+    def bulk_setup_algorithm_tables(self, 
+                                   scanning_algorithms: str = None,
+                                   initiation_algorithms: str = None, 
+                                   termination_algorithms: str = None) -> Dict[str, int]:
+        """
+        Convenience method to set up all algorithm tables at once.
+        
+        Args:
+            scanning_algorithms: ASCII table data for scanning algorithms
+            initiation_algorithms: ASCII table data for initiation algorithms
+            termination_algorithms: ASCII table data for termination algorithms
+            
+        Returns:
+            Dictionary mapping table names to number of rows inserted
+        """
+        table_defs = []
+        
+        if scanning_algorithms:
+            table_defs.append({
+                'table_name': 'scanning_algorithms',
+                'ascii_data': scanning_algorithms
+            })
+        
+        if initiation_algorithms:
+            table_defs.append({
+                'table_name': 'initiation_algorithms', 
+                'ascii_data': initiation_algorithms
+            })
+        
+        if termination_algorithms:
+            table_defs.append({
+                'table_name': 'termination_algorithms',
+                'ascii_data': termination_algorithms
+            })
+        
+        return self.bulk_insert_tables(table_defs)
+    
     def cleanup(self, specific_tables: Optional[List[str]] = None) -> Dict[str, int]:
         """
         Clean up data inserted by this instance.
@@ -132,6 +216,42 @@ class TableDataManager:
         # Clean in reverse insertion order to handle foreign keys
         for table_name in reversed(self.insertion_order):
             if table_name in tables_to_clean and table_name in self.inserted_data:
+                deleted_count = self._cleanup_table_data(table_name)
+                results[table_name] = deleted_count
+        
+        # Remove cleaned tables from tracking
+        for table_name in tables_to_clean:
+            if table_name in self.inserted_data:
+                del self.inserted_data[table_name]
+            if table_name in self.insertion_order:
+                self.insertion_order.remove(table_name)
+        
+        return results
+    
+    def bulk_cleanup_tables(self, table_names: List[str]) -> Dict[str, int]:
+        """
+        Efficiently clean up multiple tables in a single transaction.
+        
+        Args:
+            table_names: List of table names to clean up
+            
+        Returns:
+            Dictionary mapping table names to number of rows deleted
+        """
+        results = {}
+        
+        # Filter to only tables that have inserted data
+        tables_to_clean = [name for name in table_names if name in self.inserted_data]
+        
+        if not tables_to_clean:
+            return results
+        
+        # Clean in reverse insertion order to handle foreign keys
+        tables_in_order = [name for name in reversed(self.insertion_order) if name in tables_to_clean]
+        
+        # Use transaction for better performance
+        with transaction.atomic():
+            for table_name in tables_in_order:
                 deleted_count = self._cleanup_table_data(table_name)
                 results[table_name] = deleted_count
         
