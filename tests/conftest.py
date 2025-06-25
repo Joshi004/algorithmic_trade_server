@@ -15,6 +15,7 @@ from django.test import override_settings
 from django.core.management import call_command
 from integration_service.models.UserBrokerCredential import UserBrokerCredential
 from tests.utils.table_data_manager import TableDataManager
+from tests.utils.redis_data_manager import RedisDataManager
 
 import json
 import os
@@ -121,6 +122,17 @@ def table_data_manager():
     Provides the table data manager for handling ASCII table format test data.
     """
     return TableDataManager()
+
+
+@pytest.fixture
+def redis_data_manager():
+    """
+    Provides the Redis data manager for handling Redis test data.
+    """
+    manager = RedisDataManager()
+    yield manager
+    # Cleanup after test
+    manager.cleanup()
 
 
 @pytest.fixture
