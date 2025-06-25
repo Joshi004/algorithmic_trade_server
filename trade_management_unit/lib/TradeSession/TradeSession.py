@@ -261,6 +261,55 @@ class TradeSession:
             raise Exception(f"Failed to fetch user trade sessions: {str(e)}")
 
     @staticmethod
+    def get_active_sessions(scanning_algo_id=None, trading_frequency=None):
+        """
+        Core business logic for fetching active trade sessions with optional filtering.
+        Delegates to model method and formats response for view layer.
+        
+        Args:
+            scanning_algo_id (int, optional): Filter by scanning algorithm ID
+            trading_frequency (str, optional): Filter by trading frequency
+            
+        Returns:
+            list: List of active trade session data dictionaries
+            
+        Raises:
+            Exception: For database or processing errors
+        """
+        try:
+            log(f"[TMU-Library] get_active_sessions called with scanning_algo_id={scanning_algo_id}, trading_frequency={trading_frequency}", level="info")
+            
+            # Delegate to model method for database query
+            active_sessions = TradeSessionModel.fetch_active_trade_session(
+                scanning_algo_id=scanning_algo_id,
+                trading_freq=trading_frequency
+            )
+            
+            # Format response data with consistent field structure
+            sessions_data = []
+            for session in active_sessions:
+                sessions_data.append({
+                    'id': session.id,
+                    'user_id': session.user_id.public_id,
+                    'status': session.status,
+                    'started_at': session.started_at.isoformat() if session.started_at else None,
+                    'closed_at': session.closed_at.isoformat() if session.closed_at else None,
+                    'dummy': session.dummy,
+                    'is_active': session.is_active,
+                    'initiation_algorithm_id': session.initiation_algorithm_id,
+                    'termination_algorithm_id': session.termination_algorithm_id,
+                    'scanning_algorithm_id': session.scanning_algorithm_id,
+                    'trading_frequency': session.trading_frequency
+                })
+            
+            log(f"[TMU-Library] Returning {len(sessions_data)} active sessions", level="info")
+            return sessions_data
+            
+        except Exception as e:
+            log(f"[TMU-Library] Exception in get_active_sessions: {str(e)}", level="error")
+            raise Exception(f"Failed to fetch active trade sessions: {str(e)}")
+
+    @staticmethod
     def get_trade_session_details(trade_session_id):
         """
         Core business logic for fetching comprehensive trade session details.
