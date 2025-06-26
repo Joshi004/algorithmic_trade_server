@@ -111,7 +111,7 @@ class TradeSession(models.Model):
             'is_dummy': is_dummy
         }
         
-        log("Building active trade sessions query", level="debug", context=search_context)
+        log("Building active trade sessions query", level="debug")
         
         query = cls.objects.filter(status='started', is_active=True)
         
@@ -136,16 +136,10 @@ class TradeSession(models.Model):
         
         try:
             results = list(query)
-            log("Active trade sessions query completed", level="info", context={
-                'sessions_found': len(results),
-                **search_context
-            })
+            log("Active trade sessions query completed", level="info")
             return results
         except Exception as e:
-            log("Active trade sessions query failed", level="error", context={
-                'error': str(e),
-                **search_context
-            })
+            log("Active trade sessions query failed", level="error")
             raise
 
     @classmethod

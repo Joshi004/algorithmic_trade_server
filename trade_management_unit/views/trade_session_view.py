@@ -6,12 +6,10 @@ from django.http import JsonResponse
 from trade_management_unit.lib.TradeSession.TradeSession import TradeSession
 from trade_management_unit.models.TradeSession import TradeSession as TradeSessionModel
 from trade_management_unit.views.helpers.trade_session_helper import TradeSessionViewHelper
-from ats_base.logging_utils import create_service_logger, log_api_call
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from django.views.decorators.csrf import csrf_exempt
-from ats_base.logging_utils import create_service_logger, log_api_call
+from ats_base.logging_utils import create_service_logger
 from trade_management_unit.lib.common.Utils.custome_logger import log
 
 # Logger utility imported from trade_management_unit.lib.common.Utils.custome_logger
@@ -73,8 +71,6 @@ def get_new_session_param_options(request, *args, **kwargs):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
-@log_api_call('trade_management_unit')
 def get_active_trade_sessions(request):
     """
     Get active trade sessions with optional filtering by scanning algorithm and frequency.
@@ -104,10 +100,7 @@ def get_active_trade_sessions(request):
                     'message': 'scanning_algo_id must be a valid integer'
                 }, status=400)
         
-        log("Querying active trade sessions", level="debug", context={
-            'scanning_algo_id': scanning_algo_id,
-            'trading_frequency': trading_frequency
-        })
+        log("Querying active trade sessions", level="debug")
         
         # Use the model method to fetch active sessions
         active_sessions = TradeSession.get_active_sessions(
@@ -115,11 +108,7 @@ def get_active_trade_sessions(request):
             trading_frequency=trading_frequency
         )
         
-        log("Active trade sessions query completed", level="info", context={
-            'session_count': len(active_sessions),
-            'scanning_algo_id': scanning_algo_id,
-            'trading_frequency': trading_frequency
-        })
+        log("Active trade sessions query completed", level="info")
         
         return JsonResponse({
             'status': 'success',
@@ -134,7 +123,7 @@ def get_active_trade_sessions(request):
         }, status=200)
         
     except Exception as e:
-        log("Failed to fetch active trade sessions", level="error", context={'error': str(e)})
+        log("Failed to fetch active trade sessions", level="error")
         return JsonResponse({
             'status': 'error',
             'error': 'Failed to fetch active trade sessions',
