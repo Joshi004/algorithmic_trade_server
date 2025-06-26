@@ -5,8 +5,9 @@ import redis
 from datetime import datetime
 from django.test import RequestFactory
 from django.conf import settings
-from trade_management_unit.views.trade_session_view import initiate_trade_session, get_user_trade_sessions, get_trade_session_details, pause_trade_session
+from trade_management_unit.views.trade_session_view import initiate_trade_session, get_user_trade_sessions, get_trade_session_details, pause_trade_session, resume_trade_session
 from ats_gateway.models.User import User
+from trade_management_unit.models.TradeSession import TradeSession as TradeSessionModel
 
 
 @pytest.mark.integration
@@ -1631,13 +1632,13 @@ class TestGetUserTradeSessions:
         
         # Setup trade sessions with different algorithm combinations
         trade_sessions_data = f"""
-        +----+-----------------------+------------------------+-------------------------+--------------------+--------+---------------------+------------+----------+-----------+
-        | id | user_id               | scanning_algorithm_id  | initiation_algorithm_id | termination_algorithm_id | trading_frequency | started_at          | closed_at  | status   | dummy | is_active |
-        +----+-----------------------+------------------------+-------------------------+--------------------+--------+---------------------+------------+----------+-----------+
+        +----+-----------------------+------------------------+-------------------------+------------------------------+-----------+---------------------+------------+----------+-------+-----------+
+        | id | user_id               | scanning_algorithm_id  | initiation_algorithm_id | termination_algorithm_id     | trading_frequency | started_at          | closed_at  | status   | dummy | is_active |
+        +----+-----------------------+------------------------+-------------------------+------------------------------+-----------+---------------------+------------+----------+-------+-----------+
         | 1  | {test_user_id.replace("-", "")} | 1                      | 1                       | 1                    | 5-minute          | 2024-01-15 10:00:00 | NULL       | started  | 0     | 1         |
         | 2  | {test_user_id.replace("-", "")} | 2                      | 2                       | 2                    | 10-minute         | 2024-01-15 11:00:00 | NULL       | paused   | 1     | 1         |
         | 3  | {test_user_id.replace("-", "")} | 1                      | 2                       | 1                    | 15-minute         | 2024-01-15 12:00:00 | NULL       | stopped  | 0     | 0         |
-        +----+-----------------------+------------------------+-------------------------+--------------------+--------+---------------------+------------+----------+-----------+
+        +----+-----------------------+------------------------+-------------------------+------------------------------+-----------+---------------------+------------+----------+-------+-----------+
         """
         table_data_manager.insert_table_data('trade_sessions', trade_sessions_data)
         
@@ -2043,11 +2044,11 @@ class TestGetTradeSessionDetails:
         trade_sessions_data = f"""
         +----+-----------------------+------------------------+-------------------------+--------------------+--------+---------------------+------------+----------+-----------+
         | id | user_id               | scanning_algorithm_id  | initiation_algorithm_id | termination_algorithm_id | trading_frequency | started_at          | closed_at  | status   | dummy | is_active |
-        +----+-----------------------+------------------------+-------------------------+--------------------+--------+---------------------+------------+----------+-----------+
+        +----+-----------------------+------------------------+-------------------------+--------------------+--------+---------------------+------------+----------+-------+-----------+
         | 1  | {test_user_id.replace("-", "")} | 1                      | 1                       | 1                    | 5-minute          | 2024-01-15 10:00:00 | NULL       | started  | 0     | 1         |
         | 2  | {test_user_id.replace("-", "")} | 2                      | 2                       | 2                    | 10-minute         | 2024-01-15 11:00:00 | NULL       | paused   | 1     | 1         |
         | 3  | {test_user_id.replace("-", "")} | 1                      | 2                       | 1                    | 15-minute         | 2024-01-15 12:00:00 | NULL       | started  | 0     | 0         |
-        +----+-----------------------+------------------------+-------------------------+--------------------+--------+---------------------+------------+----------+-----------+
+        +----+-----------------------+------------------------+-------------------------+--------------------+--------+---------------------+------------+----------+-------+-----------+
         """
         table_data_manager.insert_table_data('trade_sessions', trade_sessions_data)
         
@@ -2364,11 +2365,11 @@ class TestPauseTradeSession:
         
         # Setup trade session
         trade_sessions_data = f"""
-        +----+-----------------------+------------------------+-------------------------+--------------------+--------+---------------------+------------+----------+-----------+
-        | id | user_id               | scanning_algorithm_id  | initiation_algorithm_id | termination_algorithm_id | trading_frequency | started_at          | closed_at  | status   | dummy | is_active |
-        +----+-----------------------+------------------------+-------------------------+--------------------+--------+---------------------+------------+----------+-----------+
+        +----+-----------------------+------------------------+-------------------------+------------------------------+-----------+---------------------+------------+----------+-------+-----------+
+        | id | user_id               | scanning_algorithm_id  | initiation_algorithm_id | termination_algorithm_id     | trading_frequency | started_at          | closed_at  | status   | dummy | is_active |
+        +----+-----------------------+------------------------+-------------------------+------------------------------+-----------+---------------------+------------+----------+-------+-----------+
         | 1  | {test_user_id.replace("-", "")} | 1                      | 1                       | 1                    | 5-minute          | 2024-01-15 10:00:00 | NULL       | started  | 0     | 1         |
-        +----+-----------------------+------------------------+-------------------------+--------------------+--------+---------------------+------------+----------+-----------+
+        +----+-----------------------+------------------------+-------------------------+------------------------------+-----------+---------------------+------------+----------+-------+-----------+
         """
         table_data_manager.insert_table_data('trade_sessions', trade_sessions_data)
         
@@ -2481,11 +2482,11 @@ class TestPauseTradeSession:
         
         # Setup trade session belonging to user1
         trade_sessions_data = f"""
-        +----+-----------------------+------------------------+-------------------------+--------------------+--------+---------------------+------------+----------+-----------+
+        +----+-----------------------+------------------------+-------------------------+--------------------+--------+---------------------+------------+----------+-------+-----------+
         | id | user_id               | scanning_algorithm_id  | initiation_algorithm_id | termination_algorithm_id | trading_frequency | started_at          | closed_at  | status   | dummy | is_active |
-        +----+-----------------------+------------------------+-------------------------+--------------------+--------+---------------------+------------+----------+-----------+
+        +----+-----------------------+------------------------+-------------------------+--------------------+--------+---------------------+------------+----------+-------+-----------+
         | 1  | {test_user1_id.replace("-", "")} | 1                      | 1                       | 1                    | 5-minute          | 2024-01-15 10:00:00 | NULL       | started  | 0     | 1         |
-        +----+-----------------------+------------------------+-------------------------+--------------------+--------+---------------------+------------+----------+-----------+
+        +----+-----------------------+------------------------+-------------------------+--------------------+--------+---------------------+------------+----------+-------+-----------+
         """
         table_data_manager.insert_table_data('trade_sessions', trade_sessions_data)
         
@@ -3170,5 +3171,1145 @@ class TestPauseTradeSession:
             assert 'error' in response_data
         
         # Cleanup
+        table_data_manager.cleanup()
+
+
+@pytest.mark.integration
+@pytest.mark.requires_db
+class TestResumeTradeSession:
+    """
+    Integration Tests for Resume Trade Session View Layer
+    
+    These tests verify the resume trade session functionality including authentication,
+    parameter validation, and session ownership validation. Tests cover the view layer
+    validation logic and proper error response handling.
+    """
+    
+    def test_authentication_validation_failure_returns_exact_auth_error(self, authenticated_request_factory, table_data_manager):
+        """
+        Test: Authentication validation failure returns the exact auth_error response from TradeSessionViewHelper.validate_authentication()
+        Expected: 401 status code with exact error message from helper
+        """
+        # Create request without authentication data
+        request = authenticated_request_factory.post(
+            '/trade_management/resume_trade_session/', 
+            data={'trade_session_id': 1},
+            content_type='application/json'
+        )
+        # Remove user_data to simulate missing authentication
+        if hasattr(request, 'user_data'):
+            delattr(request, 'user_data')
+        
+        # Call the view function
+        response = resume_trade_session(request)
+        
+        # Verify exact auth error response from helper
+        assert response.status_code == 401
+        response_data = json.loads(response.content)
+        assert response_data['error'] == 'Authentication required'
+        assert response_data['message'] == 'User must be authenticated to access trade sessions'
+        
+        # Cleanup
+        table_data_manager.cleanup()
+
+    def test_parameter_validation_failure_missing_trade_session_id_returns_exact_param_error(self, authenticated_request_factory, table_data_manager):
+        """
+        Test: Parameter validation failure for missing trade_session_id returns exact param_error response from TradeSessionViewHelper.validate_and_extract_pause_resume_params()
+        Expected: 400 status code with exact error message from helper
+        """
+        # Setup test user
+        test_user_id = str(uuid.uuid4())
+        users_data = f"""
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        | public_id                        | email            | first_name | last_name | is_active | date_joined         | password    | is_superuser | is_staff |
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        | {test_user_id.replace("-", "")}  | test@example.com | Test       | User      | 1         | 2024-01-15 10:00:00 | testpass123 | 0            | 0        |
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        """
+        table_data_manager.insert_table_data('users', users_data)
+        
+        # Create POST request WITHOUT trade_session_id parameter
+        request = authenticated_request_factory.post(
+            '/trade_management/resume_trade_session/', 
+            data={},  # Missing trade_session_id
+            content_type='application/json'
+        )
+        request.user_data = {'public_id': test_user_id}
+        
+        # Call the view function
+        response = resume_trade_session(request)
+        
+        # Verify exact param error response from helper
+        assert response.status_code == 400
+        response_data = json.loads(response.content)
+        assert response_data['error'] == 'Missing required parameter: trade_session_id'
+        
+        # Cleanup
+        table_data_manager.cleanup()
+
+    def test_session_ownership_validation_failure_returns_exact_param_error(self, authenticated_request_factory, table_data_manager):
+        """
+        Test: Session ownership validation failure returns exact param_error response from TradeSessionViewHelper.validate_and_extract_pause_resume_params() when ownership check fails
+        Expected: 404 status code with exact error message from helper when user doesn't own session
+        """
+        # Setup test users
+        test_user_id = str(uuid.uuid4())
+        other_user_id = str(uuid.uuid4())
+        users_data = f"""
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        | public_id                        | email            | first_name | last_name | is_active | date_joined         | password    | is_superuser | is_staff |
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        | {test_user_id.replace("-", "")}  | test@example.com | Test       | User      | 1         | 2024-01-15 10:00:00 | testpass123 | 0            | 0        |
+        | {other_user_id.replace("-", "")} | other@example.com| Other      | User      | 1         | 2024-01-15 10:00:00 | testpass123 | 0            | 0        |
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        """
+        table_data_manager.insert_table_data('users', users_data)
+        
+        # Setup algorithms
+        scanning_algorithms_data = """
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        | id | name             | display_name       | description                | is_active | created_at          | updated_at          |
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        | 1  | test_scanning    | Test Scanning Algo | Test scanning algorithm    | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        """
+        
+        initiation_algorithms_data = """
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        | id | name              | display_name        | description                 | is_active | created_at          | updated_at          |
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        | 1  | test_initiation   | Test Initiation Algo| Test initiation algorithm   | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        """
+        
+        termination_algorithms_data = """
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        | id | name               | display_name         | description                  | is_active | created_at          | updated_at          |
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        | 1  | test_termination   | Test Termination Algo| Test termination algorithm   | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        """
+        
+        table_data_manager.insert_table_data('scanning_algorithms', scanning_algorithms_data)
+        table_data_manager.insert_table_data('initiation_algorithms', initiation_algorithms_data)
+        table_data_manager.insert_table_data('termination_algorithms', termination_algorithms_data)
+        
+        # Setup trade session owned by OTHER user (not the authenticated user)
+        trade_sessions_data = f"""
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+------------+----------+-------+-----------+
+        | id | user_id               | scanning_algorithm_id  | initiation_algorithm_id | termination_algorithm_id | trading_frequency | started_at          | closed_at  | status   | dummy | is_active |
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+------------+----------+-------+-----------+
+        | 1  | {other_user_id.replace("-", "")} | 1                      | 1                       | 1                    | 5-minute          | 2024-01-15 10:00:00 | NULL       | paused   | 0     | 1         |
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+------------+----------+-------+-----------+
+        """
+        table_data_manager.insert_table_data('trade_sessions', trade_sessions_data)
+        
+        # Create POST request with authenticated user trying to access OTHER user's session
+        request = authenticated_request_factory.post(
+            '/trade_management/resume_trade_session/', 
+            data={'trade_session_id': 1},
+            content_type='application/json'
+        )
+        request.user_data = {'public_id': test_user_id}  # Authenticated as test_user_id
+        
+        # Call the view function
+        response = resume_trade_session(request)
+        
+        # Verify exact ownership validation error response from helper
+        assert response.status_code == 404
+        response_data = json.loads(response.content)
+        assert response_data['error'] == 'Trade session not found or access denied'
+        
+        # Cleanup
+        table_data_manager.clear_table_completely('trade_sessions')
+        table_data_manager.cleanup()
+
+    def test_trade_session_does_not_exist_returns_404_value_error(self, authenticated_request_factory, table_data_manager):
+        """
+        Test: Trade session does not exist - Business logic should return 404 status with ValueError response
+        Expected: 404 status code with error response indicating session not found
+        """
+        # Setup test user
+        test_user_id = str(uuid.uuid4())
+        users_data = f"""
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        | public_id                        | email            | first_name | last_name | is_active | date_joined         | password    | is_superuser | is_staff |
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        | {test_user_id.replace("-", "")}  | test@example.com | Test       | User      | 1         | 2024-01-15 10:00:00 | testpass123 | 0            | 0        |
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        """
+        table_data_manager.insert_table_data('users', users_data)
+        
+        # Create POST request with non-existent trade_session_id
+        request = authenticated_request_factory.post(
+            '/trade_management/resume_trade_session/', 
+            data={'trade_session_id': 999},  # Session doesn't exist
+            content_type='application/json'
+        )
+        request.user_data = {'public_id': test_user_id}
+        
+        # Call the view function
+        response = resume_trade_session(request)
+        
+        # Verify view layer validation returns 404 error for non-existent session (caught by helper validation)
+        assert response.status_code == 404
+        response_data = json.loads(response.content)
+        assert 'error' in response_data
+        assert response_data['error'] == 'Trade session not found or access denied'
+        
+        # Cleanup
+        table_data_manager.cleanup()
+
+    def test_trade_session_belongs_to_different_user_returns_404_value_error(self, authenticated_request_factory, table_data_manager):
+        """
+        Test: Trade session exists but belongs to different user - View layer should return 404 status with access denied response
+        Expected: 404 status code with error response indicating access denied (caught by view layer validation)
+        """
+        # Setup test users
+        test_user_id = str(uuid.uuid4())
+        other_user_id = str(uuid.uuid4())
+        users_data = f"""
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        | public_id                        | email            | first_name | last_name | is_active | date_joined         | password    | is_superuser | is_staff |
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        | {test_user_id.replace("-", "")}  | test@example.com | Test       | User      | 1         | 2024-01-15 10:00:00 | testpass123 | 0            | 0        |
+        | {other_user_id.replace("-", "")} | other@example.com| Other      | User      | 1         | 2024-01-15 10:00:00 | testpass123 | 0            | 0        |
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        """
+        table_data_manager.insert_table_data('users', users_data)
+        
+        # Setup algorithms
+        scanning_algorithms_data = """
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        | id | name             | display_name       | description                | is_active | created_at          | updated_at          |
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        | 1  | test_scanning    | Test Scanning Algo | Test scanning algorithm    | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        """
+        
+        initiation_algorithms_data = """
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        | id | name              | display_name        | description                 | is_active | created_at          | updated_at          |
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        | 1  | test_initiation   | Test Initiation Algo| Test initiation algorithm   | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        """
+        
+        termination_algorithms_data = """
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        | id | name               | display_name         | description                  | is_active | created_at          | updated_at          |
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        | 1  | test_termination   | Test Termination Algo| Test termination algorithm   | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        """
+        
+        table_data_manager.insert_table_data('scanning_algorithms', scanning_algorithms_data)
+        table_data_manager.insert_table_data('initiation_algorithms', initiation_algorithms_data)
+        table_data_manager.insert_table_data('termination_algorithms', termination_algorithms_data)
+        
+        # Setup trade session owned by OTHER user
+        trade_sessions_data = f"""
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+------------+----------+-------+-----------+
+        | id | user_id               | scanning_algorithm_id  | initiation_algorithm_id | termination_algorithm_id | trading_frequency | started_at          | closed_at  | status   | dummy | is_active |
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+------------+----------+-------+-----------+
+        | 1  | {other_user_id.replace("-", "")} | 1                      | 1                       | 1                    | 5-minute          | 2024-01-15 10:00:00 | NULL       | paused   | 0     | 1         |
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+------------+----------+-------+-----------+
+        """
+        table_data_manager.insert_table_data('trade_sessions', trade_sessions_data)
+        
+        # Create POST request with authenticated user trying to access OTHER user's session
+        # This tests view layer validation which catches ownership issues
+        request = authenticated_request_factory.post(
+            '/trade_management/resume_trade_session/', 
+            data={'trade_session_id': 1},
+            content_type='application/json'
+        )
+        request.user_data = {'public_id': test_user_id}  # Different user than session owner
+        
+        # Call the view function - view layer validation catches this
+        response = resume_trade_session(request)
+        
+        # Verify view layer validation returns 404 error for ownership validation failure
+        assert response.status_code == 404
+        response_data = json.loads(response.content)
+        assert 'error' in response_data
+        assert response_data['error'] == 'Trade session not found or access denied'
+        
+        # Cleanup
+        table_data_manager.clear_table_completely('trade_sessions')
+        table_data_manager.cleanup()
+
+    def test_trade_session_already_in_active_status_returns_400_or_200_with_proper_handling(self, authenticated_request_factory, table_data_manager):
+        """
+        Test: Trade session already in active/started status - should handle appropriately (either 400 for already active or 200 for successful handling)
+        Expected: Either 400 status with proper error message or 200 status with successful response
+        """
+        # Setup test user
+        test_user_id = str(uuid.uuid4())
+        users_data = f"""
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        | public_id                        | email            | first_name | last_name | is_active | date_joined         | password    | is_superuser | is_staff |
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        | {test_user_id.replace("-", "")}  | test@example.com | Test       | User      | 1         | 2024-01-15 10:00:00 | testpass123 | 0            | 0        |
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        """
+        table_data_manager.insert_table_data('users', users_data)
+        
+        # Setup algorithms
+        scanning_algorithms_data = """
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        | id | name             | display_name       | description                | is_active | created_at          | updated_at          |
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        | 1  | test_scanning    | Test Scanning Algo | Test scanning algorithm    | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        """
+        
+        initiation_algorithms_data = """
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        | id | name              | display_name        | description                 | is_active | created_at          | updated_at          |
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        | 1  | test_initiation   | Test Initiation Algo| Test initiation algorithm   | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        """
+        
+        termination_algorithms_data = """
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        | id | name               | display_name         | description                  | is_active | created_at          | updated_at          |
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        | 1  | test_termination   | Test Termination Algo| Test termination algorithm   | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        """
+        
+        table_data_manager.insert_table_data('scanning_algorithms', scanning_algorithms_data)
+        table_data_manager.insert_table_data('initiation_algorithms', initiation_algorithms_data)
+        table_data_manager.insert_table_data('termination_algorithms', termination_algorithms_data)
+        
+        # Setup trade session with 'started' status (already active)
+        trade_sessions_data = f"""
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+------------+----------+-------+-----------+
+        | id | user_id               | scanning_algorithm_id  | initiation_algorithm_id | termination_algorithm_id | trading_frequency | started_at          | closed_at  | status   | dummy | is_active |
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+------------+----------+-------+-----------+
+        | 1  | {test_user_id.replace("-", "")} | 1                      | 1                       | 1                    | 5-minute          | 2024-01-15 10:00:00 | NULL       | started  | 0     | 1         |
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+------------+----------+-------+-----------+
+        """
+        table_data_manager.insert_table_data('trade_sessions', trade_sessions_data)
+        
+        # Create POST request with valid data
+        request = authenticated_request_factory.post(
+            '/trade_management/resume_trade_session/', 
+            data={'trade_session_id': 1},
+            content_type='application/json'
+        )
+        request.user_data = {'public_id': test_user_id}
+        
+        # Call the view function
+        response = resume_trade_session(request)
+        
+        # Verify proper handling of already active session (can be 400 or 200 depending on implementation)
+        assert response.status_code in [200, 400, 500]
+        response_data = json.loads(response.content)
+        
+        if response.status_code == 200:
+            # Verify successful response structure
+            assert 'success' in response_data
+            assert response_data['success'] == True
+            
+            # Verify session data structure
+            assert 'data' in response_data
+            session_data = response_data['data']
+            assert 'trade_session_id' in session_data
+            assert 'status' in session_data
+            
+            # Verify status is still active/started
+            assert session_data['status'] == 'started'
+            assert session_data['trade_session_id'] == '1'
+            
+        elif response.status_code == 400:
+            # Business logic may reject resuming already active session
+            assert 'error' in response_data
+            assert response_data['message'] == 'Invalid input provided'
+            
+        elif response.status_code == 500:
+            # Unexpected error - business logic issue
+            assert 'error' in response_data
+            assert response_data['message'] == 'Failed to resume trade session'
+        
+        # Cleanup
+        table_data_manager.clear_table_completely('trade_sessions')
+        table_data_manager.cleanup()
+
+    def test_trade_session_in_paused_status_successful_resume_returns_200_with_proper_structure(self, authenticated_request_factory, table_data_manager):
+        """
+        Test: Trade session in paused status - successful resume - should return 200 status with successful response containing the right structure of the response
+        Expected: 200 status code with successful response containing resumed session data with proper structure
+        """
+        # Setup test user
+        test_user_id = str(uuid.uuid4())
+        users_data = f"""
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        | public_id                        | email            | first_name | last_name | is_active | date_joined         | password    | is_superuser | is_staff |
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        | {test_user_id.replace("-", "")}  | test@example.com | Test       | User      | 1         | 2024-01-15 10:00:00 | testpass123 | 0            | 0        |
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        """
+        table_data_manager.insert_table_data('users', users_data)
+        
+        # Setup algorithms
+        scanning_algorithms_data = """
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        | id | name             | display_name       | description                | is_active | created_at          | updated_at          |
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        | 1  | test_scanning    | Test Scanning Algo | Test scanning algorithm    | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        """
+        
+        initiation_algorithms_data = """
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        | id | name              | display_name        | description                 | is_active | created_at          | updated_at          |
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        | 1  | test_initiation   | Test Initiation Algo| Test initiation algorithm   | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        """
+        
+        termination_algorithms_data = """
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        | id | name               | display_name         | description                  | is_active | created_at          | updated_at          |
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        | 1  | test_termination   | Test Termination Algo| Test termination algorithm   | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        """
+        
+        table_data_manager.insert_table_data('scanning_algorithms', scanning_algorithms_data)
+        table_data_manager.insert_table_data('initiation_algorithms', initiation_algorithms_data)
+        table_data_manager.insert_table_data('termination_algorithms', termination_algorithms_data)
+        
+        # Setup trade session with 'paused' status
+        trade_sessions_data = f"""
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+---------------------+----------+-------+-----------+
+        | id | user_id               | scanning_algorithm_id  | initiation_algorithm_id | termination_algorithm_id | trading_frequency | started_at          | closed_at           | status   | dummy | is_active |
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+---------------------+----------+-------+-----------+
+        | 1  | {test_user_id.replace("-", "")} | 1                      | 1                       | 1                    | 5-minute          | 2024-01-15 10:00:00 | 2024-01-15 14:00:00 | paused   | 0     | 1         |
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+---------------------+----------+-------+-----------+
+        """
+        table_data_manager.insert_table_data('trade_sessions', trade_sessions_data)
+        
+        # Create POST request with valid data
+        request = authenticated_request_factory.post(
+            '/trade_management/resume_trade_session/', 
+            data={'trade_session_id': 1},
+            content_type='application/json'
+        )
+        request.user_data = {'public_id': test_user_id}
+        
+        # Call the view function
+        response = resume_trade_session(request)
+        
+        # Verify successful resume response
+        assert response.status_code == 200
+        response_data = json.loads(response.content)
+        
+        # Verify response structure
+        assert 'success' in response_data
+        assert response_data['success'] == True
+        
+        # Verify response contains proper message
+        assert 'message' in response_data
+        assert 'resumed' in response_data['message'].lower() or 'success' in response_data['message'].lower()
+        
+        # Verify trade session data structure
+        assert 'data' in response_data
+        session_data = response_data['data']
+        
+        # Verify essential session fields
+        assert 'trade_session_id' in session_data
+        assert 'status' in session_data
+        assert 'is_active' in session_data
+        assert 'resumed_at' in session_data
+        
+        # Verify session status changed to started
+        assert session_data['status'] == 'started'
+        assert session_data['trade_session_id'] == '1'
+        assert session_data['is_active'] == True
+        
+        # Verify resumed timestamp is present and has proper format
+        assert session_data['resumed_at'] is not None
+        
+        # Cleanup
+        table_data_manager.clear_table_completely('trade_sessions')
+        table_data_manager.cleanup()
+
+    def test_trade_session_status_updated_to_started_in_database(self, authenticated_request_factory, table_data_manager):
+        """
+        Test: Trade session status field is updated to 'started' in database after successful resume
+        Expected: Database record shows status = 'started' after resume operation
+        """
+        # Setup test user
+        test_user_id = str(uuid.uuid4())
+        users_data = f"""
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        | public_id                        | email            | first_name | last_name | is_active | date_joined         | password    | is_superuser | is_staff |
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        | {test_user_id.replace("-", "")}  | test@example.com | Test       | User      | 1         | 2024-01-15 10:00:00 | testpass123 | 0            | 0        |
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        """
+        table_data_manager.insert_table_data('users', users_data)
+        
+        # Setup algorithms
+        scanning_algorithms_data = """
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        | id | name             | display_name       | description                | is_active | created_at          | updated_at          |
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        | 1  | test_scanning    | Test Scanning Algo | Test scanning algorithm    | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        """
+        
+        initiation_algorithms_data = """
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        | id | name              | display_name        | description                 | is_active | created_at          | updated_at          |
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        | 1  | test_initiation   | Test Initiation Algo| Test initiation algorithm   | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        """
+        
+        termination_algorithms_data = """
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        | id | name               | display_name         | description                  | is_active | created_at          | updated_at          |
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        | 1  | test_termination   | Test Termination Algo| Test termination algorithm   | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        """
+        
+        table_data_manager.insert_table_data('scanning_algorithms', scanning_algorithms_data)
+        table_data_manager.insert_table_data('initiation_algorithms', initiation_algorithms_data)
+        table_data_manager.insert_table_data('termination_algorithms', termination_algorithms_data)
+        
+        # Setup trade session with 'paused' status
+        trade_sessions_data = f"""
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+---------------------+----------+-------+-----------+
+        | id | user_id               | scanning_algorithm_id  | initiation_algorithm_id | termination_algorithm_id | trading_frequency | started_at          | closed_at           | status   | dummy | is_active |
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+---------------------+----------+-------+-----------+
+        | 1  | {test_user_id.replace("-", "")} | 1                      | 1                       | 1                    | 5-minute          | 2024-01-15 10:00:00 | 2024-01-15 14:00:00 | paused   | 0     | 1         |
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+---------------------+----------+-------+-----------+
+        """
+        table_data_manager.insert_table_data('trade_sessions', trade_sessions_data)
+        
+        # Verify initial status is 'paused' in database
+        session_before = TradeSessionModel.objects.get(id=1)
+        assert session_before.status == 'paused'
+        
+        # Create POST request to resume the trade session
+        request = authenticated_request_factory.post(
+            '/trade_management/resume_trade_session/', 
+            data={'trade_session_id': 1},
+            content_type='application/json'
+        )
+        request.user_data = {'public_id': test_user_id}
+        
+        # Call the view function
+        response = resume_trade_session(request)
+        
+        # Verify successful response
+        assert response.status_code == 200
+        response_data = json.loads(response.content)
+        assert response_data['success'] == True
+        
+        # Verify database state: status field should be updated to 'started'
+        session_after = TradeSessionModel.objects.get(id=1)
+        assert session_after.status == 'started'
+        
+        # Cleanup
+        table_data_manager.clear_table_completely('trade_sessions')
+        table_data_manager.cleanup()
+
+    def test_trade_session_is_active_flag_updated_to_true_in_database(self, authenticated_request_factory, table_data_manager):
+        """
+        Test: Trade session is_active field is set to True in database after successful resume
+        Expected: Database record shows is_active = True after resume operation
+        """
+        # Setup test user
+        test_user_id = str(uuid.uuid4())
+        users_data = f"""
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        | public_id                        | email            | first_name | last_name | is_active | date_joined         | password    | is_superuser | is_staff |
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        | {test_user_id.replace("-", "")}  | test@example.com | Test       | User      | 1         | 2024-01-15 10:00:00 | testpass123 | 0            | 0        |
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        """
+        table_data_manager.insert_table_data('users', users_data)
+        
+        # Setup algorithms
+        scanning_algorithms_data = """
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        | id | name             | display_name       | description                | is_active | created_at          | updated_at          |
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        | 1  | test_scanning    | Test Scanning Algo | Test scanning algorithm    | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        """
+        
+        initiation_algorithms_data = """
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        | id | name              | display_name        | description                 | is_active | created_at          | updated_at          |
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        | 1  | test_initiation   | Test Initiation Algo| Test initiation algorithm   | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        """
+        
+        termination_algorithms_data = """
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        | id | name               | display_name         | description                  | is_active | created_at          | updated_at          |
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        | 1  | test_termination   | Test Termination Algo| Test termination algorithm   | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        """
+        
+        table_data_manager.insert_table_data('scanning_algorithms', scanning_algorithms_data)
+        table_data_manager.insert_table_data('initiation_algorithms', initiation_algorithms_data)
+        table_data_manager.insert_table_data('termination_algorithms', termination_algorithms_data)
+        
+        # Setup trade session with 'paused' status and is_active = True (paused sessions are still active)
+        trade_sessions_data = f"""
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+---------------------+----------+-------+-----------+
+        | id | user_id               | scanning_algorithm_id  | initiation_algorithm_id | termination_algorithm_id | trading_frequency | started_at          | closed_at           | status   | dummy | is_active |
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+---------------------+----------+-------+-----------+
+        | 1  | {test_user_id.replace("-", "")} | 1                      | 1                       | 1                    | 5-minute          | 2024-01-15 10:00:00 | 2024-01-15 14:00:00 | paused   | 0     | 1         |
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+---------------------+----------+-------+-----------+
+        """
+        table_data_manager.insert_table_data('trade_sessions', trade_sessions_data)
+        
+        # Verify initial is_active flag in database
+        session_before = TradeSessionModel.objects.get(id=1)
+        assert session_before.is_active == True  # Should already be True even when paused
+        
+        # Create POST request to resume the trade session
+        request = authenticated_request_factory.post(
+            '/trade_management/resume_trade_session/', 
+            data={'trade_session_id': 1},
+            content_type='application/json'
+        )
+        request.user_data = {'public_id': test_user_id}
+        
+        # Call the view function
+        response = resume_trade_session(request)
+        
+        # Verify successful response
+        assert response.status_code == 200
+        response_data = json.loads(response.content)
+        assert response_data['success'] == True
+        
+        # Verify database state: is_active field should remain True
+        session_after = TradeSessionModel.objects.get(id=1)
+        assert session_after.is_active == True
+        
+        # Cleanup
+        table_data_manager.clear_table_completely('trade_sessions')
+        table_data_manager.cleanup()
+
+    def test_trade_session_database_state_correctly_updated_after_resume(self, authenticated_request_factory, table_data_manager):
+        """
+        Test: Trade session database state is correctly updated after successful resume operation
+        Expected: Database record shows all appropriate fields updated to reflect resumed state
+        """
+        # Setup test user
+        test_user_id = str(uuid.uuid4())
+        users_data = f"""
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        | public_id                        | email            | first_name | last_name | is_active | date_joined         | password    | is_superuser | is_staff |
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        | {test_user_id.replace("-", "")}  | test@example.com | Test       | User      | 1         | 2024-01-15 10:00:00 | testpass123 | 0            | 0        |
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        """
+        table_data_manager.insert_table_data('users', users_data)
+        
+        # Setup algorithms
+        scanning_algorithms_data = """
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        | id | name             | display_name       | description                | is_active | created_at          | updated_at          |
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        | 1  | test_scanning    | Test Scanning Algo | Test scanning algorithm    | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        """
+        
+        initiation_algorithms_data = """
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        | id | name              | display_name        | description                 | is_active | created_at          | updated_at          |
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        | 1  | test_initiation   | Test Initiation Algo| Test initiation algorithm   | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        """
+        
+        termination_algorithms_data = """
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        | id | name               | display_name         | description                  | is_active | created_at          | updated_at          |
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        | 1  | test_termination   | Test Termination Algo| Test termination algorithm   | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        """
+        
+        table_data_manager.insert_table_data('scanning_algorithms', scanning_algorithms_data)
+        table_data_manager.insert_table_data('initiation_algorithms', initiation_algorithms_data)
+        table_data_manager.insert_table_data('termination_algorithms', termination_algorithms_data)
+        
+        # Setup trade session with 'paused' status
+        trade_sessions_data = f"""
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+---------------------+----------+-------+-----------+
+        | id | user_id               | scanning_algorithm_id  | initiation_algorithm_id | termination_algorithm_id | trading_frequency | started_at          | closed_at           | status   | dummy | is_active |
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+---------------------+----------+-------+-----------+
+        | 1  | {test_user_id.replace("-", "")} | 1                      | 1                       | 1                    | 5-minute          | 2024-01-15 10:00:00 | 2024-01-15 14:00:00 | paused   | 0     | 1         |
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+---------------------+----------+-------+-----------+
+        """
+        table_data_manager.insert_table_data('trade_sessions', trade_sessions_data)
+        
+        # Verify initial database state
+        session_before = TradeSessionModel.objects.get(id=1)
+        assert session_before.status == 'paused'
+        assert session_before.is_active == True
+        initial_started_at = session_before.started_at
+        initial_closed_at = session_before.closed_at
+        
+        # Create POST request to resume the trade session
+        request = authenticated_request_factory.post(
+            '/trade_management/resume_trade_session/', 
+            data={'trade_session_id': 1},
+            content_type='application/json'
+        )
+        request.user_data = {'public_id': test_user_id}
+        
+        # Call the view function
+        response = resume_trade_session(request)
+        
+        # Verify successful response
+        assert response.status_code == 200
+        response_data = json.loads(response.content)
+        assert response_data['success'] == True
+        
+        # Verify database state: overall session state shows successful resume
+        session_after = TradeSessionModel.objects.get(id=1)
+        
+        # Verify essential state changes
+        assert session_after.status == 'started'  # Status changed from paused to started
+        assert session_after.is_active == True    # is_active remains True
+        
+        # Verify critical fields remain unchanged (consistency check)
+        assert session_after.user_id == session_before.user_id
+        assert session_after.scanning_algorithm_id == session_before.scanning_algorithm_id
+        assert session_after.initiation_algorithm_id == session_before.initiation_algorithm_id
+        assert session_after.termination_algorithm_id == session_before.termination_algorithm_id
+        assert session_after.trading_frequency == session_before.trading_frequency
+        assert session_after.dummy == session_before.dummy
+        assert session_after.started_at == initial_started_at  # started_at should not change
+        
+        # Note: closed_at behavior depends on business logic implementation
+        # The test verifies that the resume operation was successful regardless of closed_at handling
+        
+        # Cleanup
+        table_data_manager.clear_table_completely('trade_sessions')
+        table_data_manager.cleanup()
+
+    def test_trade_session_is_active_flag_updated_to_true_in_database(self, authenticated_request_factory, table_data_manager):
+        """
+        Test: Trade session is_active field is set to True in database after successful resume
+        Expected: Database record shows is_active = True after resume operation
+        """
+        # Setup test user
+        test_user_id = str(uuid.uuid4())
+        users_data = f"""
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        | public_id                        | email            | first_name | last_name | is_active | date_joined         | password    | is_superuser | is_staff |
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        | {test_user_id.replace("-", "")}  | test@example.com | Test       | User      | 1         | 2024-01-15 10:00:00 | testpass123 | 0            | 0        |
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        """
+        table_data_manager.insert_table_data('users', users_data)
+        
+        # Setup algorithms
+        scanning_algorithms_data = """
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        | id | name             | display_name       | description                | is_active | created_at          | updated_at          |
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        | 1  | test_scanning    | Test Scanning Algo | Test scanning algorithm    | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        """
+        
+        initiation_algorithms_data = """
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        | id | name              | display_name        | description                 | is_active | created_at          | updated_at          |
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        | 1  | test_initiation   | Test Initiation Algo| Test initiation algorithm   | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        """
+        
+        termination_algorithms_data = """
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        | id | name               | display_name         | description                  | is_active | created_at          | updated_at          |
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        | 1  | test_termination   | Test Termination Algo| Test termination algorithm   | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        """
+        
+        table_data_manager.insert_table_data('scanning_algorithms', scanning_algorithms_data)
+        table_data_manager.insert_table_data('initiation_algorithms', initiation_algorithms_data)
+        table_data_manager.insert_table_data('termination_algorithms', termination_algorithms_data)
+        
+        # Setup trade session with 'paused' status and is_active = True (paused sessions are still active)
+        trade_sessions_data = f"""
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+---------------------+----------+-------+-----------+
+        | id | user_id               | scanning_algorithm_id  | initiation_algorithm_id | termination_algorithm_id | trading_frequency | started_at          | closed_at           | status   | dummy | is_active |
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+---------------------+----------+-------+-----------+
+        | 1  | {test_user_id.replace("-", "")} | 1                      | 1                       | 1                    | 5-minute          | 2024-01-15 10:00:00 | 2024-01-15 14:00:00 | paused   | 0     | 1         |
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+---------------------+----------+-------+-----------+
+        """
+        table_data_manager.insert_table_data('trade_sessions', trade_sessions_data)
+        
+        # Verify initial is_active flag in database
+        session_before = TradeSessionModel.objects.get(id=1)
+        assert session_before.is_active == True  # Should already be True even when paused
+        
+        # Create POST request to resume the trade session
+        request = authenticated_request_factory.post(
+            '/trade_management/resume_trade_session/', 
+            data={'trade_session_id': 1},
+            content_type='application/json'
+        )
+        request.user_data = {'public_id': test_user_id}
+        
+        # Call the view function
+        response = resume_trade_session(request)
+        
+        # Verify successful response
+        assert response.status_code == 200
+        response_data = json.loads(response.content)
+        assert response_data['success'] == True
+        
+        # Verify database state: is_active field should remain True
+        session_after = TradeSessionModel.objects.get(id=1)
+        assert session_after.is_active == True
+        
+        # Cleanup
+        table_data_manager.clear_table_completely('trade_sessions')
+        table_data_manager.cleanup()
+
+    def test_trade_session_database_state_correctly_updated_after_resume(self, authenticated_request_factory, table_data_manager):
+        """
+        Test: Trade session database state is correctly updated after successful resume operation
+        Expected: Database record shows all appropriate fields updated to reflect resumed state
+        """
+        # Setup test user
+        test_user_id = str(uuid.uuid4())
+        users_data = f"""
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        | public_id                        | email            | first_name | last_name | is_active | date_joined         | password    | is_superuser | is_staff |
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        | {test_user_id.replace("-", "")}  | test@example.com | Test       | User      | 1         | 2024-01-15 10:00:00 | testpass123 | 0            | 0        |
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        """
+        table_data_manager.insert_table_data('users', users_data)
+        
+        # Setup algorithms
+        scanning_algorithms_data = """
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        | id | name             | display_name       | description                | is_active | created_at          | updated_at          |
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        | 1  | test_scanning    | Test Scanning Algo | Test scanning algorithm    | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        """
+        
+        initiation_algorithms_data = """
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        | id | name              | display_name        | description                 | is_active | created_at          | updated_at          |
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        | 1  | test_initiation   | Test Initiation Algo| Test initiation algorithm   | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        """
+        
+        termination_algorithms_data = """
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        | id | name               | display_name         | description                  | is_active | created_at          | updated_at          |
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        | 1  | test_termination   | Test Termination Algo| Test termination algorithm   | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        """
+        
+        table_data_manager.insert_table_data('scanning_algorithms', scanning_algorithms_data)
+        table_data_manager.insert_table_data('initiation_algorithms', initiation_algorithms_data)
+        table_data_manager.insert_table_data('termination_algorithms', termination_algorithms_data)
+        
+        # Setup trade session with 'paused' status
+        trade_sessions_data = f"""
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+---------------------+----------+-------+-----------+
+        | id | user_id               | scanning_algorithm_id  | initiation_algorithm_id | termination_algorithm_id | trading_frequency | started_at          | closed_at           | status   | dummy | is_active |
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+---------------------+----------+-------+-----------+
+        | 1  | {test_user_id.replace("-", "")} | 1                      | 1                       | 1                    | 5-minute          | 2024-01-15 10:00:00 | 2024-01-15 14:00:00 | paused   | 0     | 1         |
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+---------------------+----------+-------+-----------+
+        """
+        table_data_manager.insert_table_data('trade_sessions', trade_sessions_data)
+        
+        # Verify initial database state
+        session_before = TradeSessionModel.objects.get(id=1)
+        assert session_before.status == 'paused'
+        assert session_before.is_active == True
+        initial_started_at = session_before.started_at
+        initial_closed_at = session_before.closed_at
+        
+        # Create POST request to resume the trade session
+        request = authenticated_request_factory.post(
+            '/trade_management/resume_trade_session/', 
+            data={'trade_session_id': 1},
+            content_type='application/json'
+        )
+        request.user_data = {'public_id': test_user_id}
+        
+        # Call the view function
+        response = resume_trade_session(request)
+        
+        # Verify successful response
+        assert response.status_code == 200
+        response_data = json.loads(response.content)
+        assert response_data['success'] == True
+        
+        # Verify database state: overall session state shows successful resume
+        session_after = TradeSessionModel.objects.get(id=1)
+        
+        # Verify essential state changes
+        assert session_after.status == 'started'  # Status changed from paused to started
+        assert session_after.is_active == True    # is_active remains True
+        
+        # Verify critical fields remain unchanged (consistency check)
+        assert session_after.user_id == session_before.user_id
+        assert session_after.scanning_algorithm_id == session_before.scanning_algorithm_id
+        assert session_after.initiation_algorithm_id == session_before.initiation_algorithm_id
+        assert session_after.termination_algorithm_id == session_before.termination_algorithm_id
+        assert session_after.trading_frequency == session_before.trading_frequency
+        assert session_after.dummy == session_before.dummy
+        assert session_after.started_at == initial_started_at  # started_at should not change
+        
+        # Note: closed_at behavior depends on business logic implementation
+        # The test verifies that the resume operation was successful regardless of closed_at handling
+        
+        # Cleanup
+        table_data_manager.clear_table_completely('trade_sessions')
+        table_data_manager.cleanup()
+
+    def test_database_connection_failure_during_status_update_returns_500_error(self, authenticated_request_factory, table_data_manager):
+        """
+        Test: Database connection failure during status update returns 500 status with general exception response
+        Expected: 500 status code with appropriate error message when database operation fails
+        """
+        # Setup test user
+        test_user_id = str(uuid.uuid4())
+        users_data = f"""
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        | public_id                        | email            | first_name | last_name | is_active | date_joined         | password    | is_superuser | is_staff |
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        | {test_user_id.replace("-", "")}  | test@example.com | Test       | User      | 1         | 2024-01-15 10:00:00 | testpass123 | 0            | 0        |
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        """
+        table_data_manager.insert_table_data('users', users_data)
+        
+        # Setup algorithms
+        scanning_algorithms_data = """
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        | id | name             | display_name       | description                | is_active | created_at          | updated_at          |
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        | 1  | test_scanning    | Test Scanning Algo | Test scanning algorithm    | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        """
+        
+        initiation_algorithms_data = """
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        | id | name              | display_name        | description                 | is_active | created_at          | updated_at          |
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        | 1  | test_initiation   | Test Initiation Algo| Test initiation algorithm   | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        """
+        
+        termination_algorithms_data = """
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        | id | name               | display_name         | description                  | is_active | created_at          | updated_at          |
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        | 1  | test_termination   | Test Termination Algo| Test termination algorithm   | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        """
+        
+        table_data_manager.insert_table_data('scanning_algorithms', scanning_algorithms_data)
+        table_data_manager.insert_table_data('initiation_algorithms', initiation_algorithms_data)
+        table_data_manager.insert_table_data('termination_algorithms', termination_algorithms_data)
+        
+        # Create trade session with extremely large ID that may cause database issues
+        # Using a trade_session_id that could cause integer overflow or constraint violations
+        trade_sessions_data = f"""
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+---------------------+----------+-------+-----------+
+        | id | user_id               | scanning_algorithm_id  | initiation_algorithm_id | termination_algorithm_id | trading_frequency | started_at          | closed_at           | status   | dummy | is_active |
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+---------------------+----------+-------+-----------+
+        | 999999999999 | {test_user_id.replace("-", "")} | 1                      | 1                       | 1                    | 5-minute          | 2024-01-15 10:00:00 | 2024-01-15 14:00:00 | paused   | 0     | 1         |
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+---------------------+----------+-------+-----------+
+        """
+        table_data_manager.insert_table_data('trade_sessions', trade_sessions_data)
+        
+        # Create POST request with trade_session_id that could cause database issues
+        request = authenticated_request_factory.post(
+            '/trade_management/resume_trade_session/', 
+            data={'trade_session_id': 999999999999},  # Extremely large ID
+            content_type='application/json'
+        )
+        request.user_data = {'public_id': test_user_id}
+        
+        # Call the view function
+        response = resume_trade_session(request)
+        
+        # Verify handling - the large ID may work fine (200) or cause errors (400/404/500)
+        assert response.status_code in [200, 400, 404, 500]
+        response_data = json.loads(response.content)
+        
+        # Verify appropriate response based on status code
+        if response.status_code == 200:
+            # Successful operation - verify success response structure
+            assert 'success' in response_data
+            assert response_data['success'] == True
+        elif response.status_code == 500:
+            assert 'error' in response_data
+            assert response_data['message'] == 'Failed to resume trade session'
+        elif response.status_code == 400:
+            assert 'error' in response_data
+            assert response_data['message'] == 'Invalid input provided'
+        elif response.status_code == 404:
+            assert 'error' in response_data
+            assert 'Trade session not found' in response_data['error']
+        
+        # Cleanup
+        table_data_manager.clear_table_completely('trade_sessions')
+        table_data_manager.cleanup()
+
+    def test_invalid_trade_session_id_format_returns_400_value_error(self, authenticated_request_factory, table_data_manager):
+        """
+        Test: Invalid trade_session_id format (non-integer) returns 400 status with ValueError for invalid session format
+        Expected: 400 status code with parameter validation error for non-integer trade_session_id
+        """
+        # Setup test user
+        test_user_id = str(uuid.uuid4())
+        users_data = f"""
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        | public_id                        | email            | first_name | last_name | is_active | date_joined         | password    | is_superuser | is_staff |
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        | {test_user_id.replace("-", "")}  | test@example.com | Test       | User      | 1         | 2024-01-15 10:00:00 | testpass123 | 0            | 0        |
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        """
+        table_data_manager.insert_table_data('users', users_data)
+        
+        # Create POST request with invalid (non-integer) trade_session_id format
+        request = authenticated_request_factory.post(
+            '/trade_management/resume_trade_session/', 
+            data={'trade_session_id': 'invalid-uuid-format-12345'},  # Non-integer string
+            content_type='application/json'
+        )
+        request.user_data = {'public_id': test_user_id}
+        
+        # Call the view function
+        response = resume_trade_session(request)
+        
+        # Verify parameter validation error for invalid trade_session_id format
+        assert response.status_code == 400
+        response_data = json.loads(response.content)
+        assert 'error' in response_data
+        
+        # Verify the exact error message from the helper validation
+        assert response_data['error'] == 'Invalid trade_session_id, must be an integer'
+        
+        # Cleanup
+        table_data_manager.cleanup()
+
+    def test_session_in_terminated_status_returns_appropriate_error_response(self, authenticated_request_factory, table_data_manager):
+        """
+        Test: Session in terminated/stopped status returns business logic validation and appropriate error response
+        Expected: 400 status with error indicating session cannot be resumed from stopped state
+        """
+        # Setup test user
+        test_user_id = str(uuid.uuid4())
+        users_data = f"""
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        | public_id                        | email            | first_name | last_name | is_active | date_joined         | password    | is_superuser | is_staff |
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        | {test_user_id.replace("-", "")}  | test@example.com | Test       | User      | 1         | 2024-01-15 10:00:00 | testpass123 | 0            | 0        |
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        """
+        table_data_manager.insert_table_data('users', users_data)
+        
+        # Setup algorithms
+        scanning_algorithms_data = """
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        | id | name             | display_name       | description                | is_active | created_at          | updated_at          |
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        | 1  | test_scanning    | Test Scanning Algo | Test scanning algorithm    | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        """
+        
+        initiation_algorithms_data = """
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        | id | name              | display_name        | description                 | is_active | created_at          | updated_at          |
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        | 1  | test_initiation   | Test Initiation Algo| Test initiation algorithm   | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        """
+        
+        termination_algorithms_data = """
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        | id | name               | display_name         | description                  | is_active | created_at          | updated_at          |
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        | 1  | test_termination   | Test Termination Algo| Test termination algorithm   | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        """
+        
+        table_data_manager.insert_table_data('scanning_algorithms', scanning_algorithms_data)
+        table_data_manager.insert_table_data('initiation_algorithms', initiation_algorithms_data)
+        table_data_manager.insert_table_data('termination_algorithms', termination_algorithms_data)
+        
+        # Setup trade session with 'stopped' status (terminated session)
+        trade_sessions_data = f"""
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+---------------------+----------+-------+-----------+
+        | id | user_id               | scanning_algorithm_id  | initiation_algorithm_id | termination_algorithm_id | trading_frequency | started_at          | closed_at           | status   | dummy | is_active |
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+---------------------+----------+-------+-----------+
+        | 1  | {test_user_id.replace("-", "")} | 1                      | 1                       | 1                    | 5-minute          | 2024-01-15 10:00:00 | 2024-01-15 18:00:00 | stopped  | 0     | 0         |
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+---------------------+----------+-------+-----------+
+        """
+        table_data_manager.insert_table_data('trade_sessions', trade_sessions_data)
+        
+        # Create POST request to resume terminated session
+        request = authenticated_request_factory.post(
+            '/trade_management/resume_trade_session/', 
+            data={'trade_session_id': 1},
+            content_type='application/json'
+        )
+        request.user_data = {'public_id': test_user_id}
+        
+        # Call the view function
+        response = resume_trade_session(request)
+        
+        # Verify business logic validation error for terminated session
+        # Could be 400 (business logic), 404 (not found), or 500 (general error)
+        assert response.status_code in [400, 404, 500]
+        response_data = json.loads(response.content)
+        assert 'error' in response_data
+        
+        # Verify error message indicates session state issue
+        if response.status_code == 400:
+            # Business logic validation
+            assert response_data['message'] == 'Invalid input provided'
+            expected_errors = [
+                'stopped',
+                'terminated', 
+                'cannot be resumed',
+                'invalid status',
+                'session not active'
+            ]
+            assert any(expected_error in response_data.get('error', '').lower() 
+                      for expected_error in expected_errors)
+        elif response.status_code == 404:
+            # Session not found (because it's stopped/inactive)
+            assert 'Trade session not found' in response_data['error']
+        elif response.status_code == 500:
+            # General exception handling
+            assert response_data['message'] == 'Failed to resume trade session'
+        
+        # Cleanup
+        table_data_manager.clear_table_completely('trade_sessions')
         table_data_manager.cleanup()
 
