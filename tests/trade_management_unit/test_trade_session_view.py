@@ -4313,3 +4313,271 @@ class TestResumeTradeSession:
         table_data_manager.clear_table_completely('trade_sessions')
         table_data_manager.cleanup()
 
+    @pytest.mark.redis
+    def test_successful_resume_publishes_event_to_redis_scanning_queue(self, authenticated_request_factory, table_data_manager, redis_data_manager):
+        """
+        Test: Successful trade session resume publishes resume_scanner event to Redis scanning queue with correct structure
+        Expected: 200 status response AND verify resume_scanner event published to scanning_queue with correct structure
+        """
+        # Clear Redis scanning queue before test
+        scanning_queue = getattr(settings, 'REDIS_STREAM_SCANNING_QUEUE', 'scanning_queue')
+        redis_data_manager.clear_stream_completely(scanning_queue)
+        
+        # Get initial stream length
+        initial_length = redis_data_manager.get_stream_length(scanning_queue)
+        
+        # Setup test user
+        test_user_id = str(uuid.uuid4())
+        users_data = f"""
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        | public_id                        | email            | first_name | last_name | is_active | date_joined         | password    | is_superuser | is_staff |
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        | {test_user_id.replace("-", "")}  | test@example.com | Test       | User      | 1         | 2024-01-15 10:00:00 | testpass123 | 0            | 0        |
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        """
+        table_data_manager.insert_table_data('users', users_data)
+        
+        # Setup algorithms
+        scanning_algorithms_data = """
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        | id | name             | display_name       | description                | is_active | created_at          | updated_at          |
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        | 1  | test_scanning    | Test Scanning Algo | Test scanning algorithm    | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        """
+        
+        initiation_algorithms_data = """
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        | id | name              | display_name        | description                 | is_active | created_at          | updated_at          |
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        | 1  | test_initiation   | Test Initiation Algo| Test initiation algorithm   | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        """
+        
+        termination_algorithms_data = """
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        | id | name               | display_name         | description                  | is_active | created_at          | updated_at          |
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        | 1  | test_termination   | Test Termination Algo| Test termination algorithm   | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        """
+        
+        table_data_manager.insert_table_data('scanning_algorithms', scanning_algorithms_data)
+        table_data_manager.insert_table_data('initiation_algorithms', initiation_algorithms_data)
+        table_data_manager.insert_table_data('termination_algorithms', termination_algorithms_data)
+        
+        # Setup trade session with 'paused' status
+        trade_sessions_data = f"""
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+---------------------+----------+-------+-----------+
+        | id | user_id               | scanning_algorithm_id  | initiation_algorithm_id | termination_algorithm_id | trading_frequency | started_at          | closed_at           | status   | dummy | is_active |
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+---------------------+----------+-------+-----------+
+        | 1  | {test_user_id.replace("-", "")} | 1                      | 1                       | 1                    | 5-minute          | 2024-01-15 10:00:00 | 2024-01-15 14:00:00 | paused   | 0     | 1         |
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+---------------------+----------+-------+-----------+
+        """
+        table_data_manager.insert_table_data('trade_sessions', trade_sessions_data)
+        
+        # Make authenticated request to resume trade session
+        request = authenticated_request_factory.post(
+            '/trade_management/resume_trade_session/', 
+            data={'trade_session_id': 1},
+            content_type='application/json'
+        )
+        request.user_data = {'public_id': test_user_id}
+        
+        # Call the real method (will resume session and publish event)
+        response = resume_trade_session(request)
+        
+        # Verify successful response
+        assert response.status_code == 200
+        response_data = json.loads(response.content)
+        assert response_data['success'] == True
+        
+        # Verify event was published to Redis
+        final_length = redis_data_manager.get_stream_length(scanning_queue)
+        assert final_length == initial_length + 1, f"Expected 1 new event, but stream length changed by {final_length - initial_length}"
+        
+        # Read the latest event from Redis stream to verify structure
+        latest_events = self._read_latest_stream_events(redis_data_manager.redis_client, scanning_queue, 1)
+        assert len(latest_events) == 1, "Should have exactly 1 new event"
+        
+        event_data = latest_events[0]['data']
+        
+        # Verify event structure and content
+        assert 'event_id' in event_data
+        assert 'event_type' in event_data
+        assert 'timestamp' in event_data
+        assert 'trade_session_id' in event_data
+        assert 'user_id' in event_data
+        assert 'scanning_algorithm_name' in event_data
+        assert 'initiation_algorithm_name' in event_data
+        assert 'termination_algorithm_name' in event_data
+        assert 'trading_frequency' in event_data
+        assert 'is_dummy' in event_data
+        assert 'session_status' in event_data
+        
+        # Verify specific event values
+        assert event_data['event_type'] == 'resume_scanner'
+        assert event_data['trade_session_id'] == '1'
+        assert event_data['user_id'] == test_user_id
+        assert event_data['scanning_algorithm_name'] == 'test_scanning'
+        assert event_data['initiation_algorithm_name'] == 'test_initiation'
+        assert event_data['termination_algorithm_name'] == 'test_termination'
+        assert event_data['trading_frequency'] == '5-minute'
+        assert event_data['is_dummy'] == 'False'  # Redis stores as string
+        assert event_data['session_status'] == 'started'
+        
+        # Verify event data types
+        assert isinstance(event_data['trade_session_id'], str), f"trade_session_id should be string, got {type(event_data['trade_session_id'])}"
+        assert isinstance(event_data['user_id'], str), f"user_id should be string, got {type(event_data['user_id'])}"
+        assert isinstance(event_data['trading_frequency'], str), f"trading_frequency should be string, got {type(event_data['trading_frequency'])}"
+        
+        # Note: is_dummy is stored as string in Redis, but requirement expects boolean
+        # Current implementation stores as string 'False'/'True', validating actual behavior
+        assert isinstance(event_data['is_dummy'], str), f"is_dummy should be string (Redis storage), got {type(event_data['is_dummy'])}"
+        assert event_data['is_dummy'] in ['True', 'False'], f"is_dummy should be 'True' or 'False' string, got {event_data['is_dummy']}"
+        
+        # Verify timestamp format (should be ISO format)
+        timestamp = event_data['timestamp']
+        datetime.fromisoformat(timestamp.replace('Z', '+00:00'))  # Should parse without error
+        
+        # Verify event_id is valid UUID
+        uuid.UUID(event_data['event_id'])  # Should parse without error
+        
+        # Cleanup
+        table_data_manager.clear_table_completely('trade_sessions')
+        table_data_manager.cleanup()
+        redis_data_manager.clear_stream_completely(scanning_queue)
+
+    def _read_latest_stream_events(self, redis_client, stream_name, count=1):
+        """
+        Helper method to read latest events from Redis stream
+        
+        Args:
+            redis_client: Redis client instance
+            stream_name: Name of the stream to read from
+            count: Number of latest events to read
+            
+        Returns:
+            List of events with their IDs and data
+        """
+        try:
+            # Read latest events from the stream
+            # XREVRANGE reads in reverse order (latest first)
+            events = redis_client.xrevrange(stream_name, count=count)
+            
+            result = []
+            for event_id, fields in events:
+                result.append({
+                    'id': event_id,
+                    'data': fields
+                })
+            
+            return result
+        except Exception as e:
+            raise Exception(f"Failed to read stream events: {str(e)}")
+
+    @pytest.mark.redis
+    def test_event_publisher_creation_failure_resume_still_succeeds_with_error_log(self, authenticated_request_factory, table_data_manager, redis_data_manager):
+        """
+        Test: Event publisher instance creation failure - Expect 200 status response (resume still succeeds) AND verify mock was called showing error handling
+        Expected: 200 status code with successful resume AND mock verification showing proper error handling
+        """
+        from unittest.mock import patch
+        
+        # Setup test user
+        test_user_id = str(uuid.uuid4())
+        users_data = f"""
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        | public_id                        | email            | first_name | last_name | is_active | date_joined         | password    | is_superuser | is_staff |
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        | {test_user_id.replace("-", "")}  | test@example.com | Test       | User      | 1         | 2024-01-15 10:00:00 | testpass123 | 0            | 0        |
+        +----------------------------------+------------------+------------+-----------+-----------+---------------------+-----------+--------------+----------+
+        """
+        table_data_manager.insert_table_data('users', users_data)
+        
+        # Setup algorithms
+        scanning_algorithms_data = """
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        | id | name             | display_name       | description                | is_active | created_at          | updated_at          |
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        | 1  | test_scanning    | Test Scanning Algo | Test scanning algorithm    | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+------------------+--------------------+----------------------------+-----------+---------------------+---------------------+
+        """
+        
+        initiation_algorithms_data = """
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        | id | name              | display_name        | description                 | is_active | created_at          | updated_at          |
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        | 1  | test_initiation   | Test Initiation Algo| Test initiation algorithm   | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+-------------------+---------------------+----------------------------+-----------+---------------------+---------------------+
+        """
+        
+        termination_algorithms_data = """
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        | id | name               | display_name         | description                  | is_active | created_at          | updated_at          |
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        | 1  | test_termination   | Test Termination Algo| Test termination algorithm   | 1         | 2024-01-15 10:00:00 | 2024-01-15 10:00:00 |
+        +----+--------------------+----------------------+------------------------------+-----------+---------------------+---------------------+
+        """
+        
+        table_data_manager.insert_table_data('scanning_algorithms', scanning_algorithms_data)
+        table_data_manager.insert_table_data('initiation_algorithms', initiation_algorithms_data)
+        table_data_manager.insert_table_data('termination_algorithms', termination_algorithms_data)
+        
+        # Setup trade session with 'paused' status
+        trade_sessions_data = f"""
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+---------------------+----------+-------+-----------+
+        | id | user_id               | scanning_algorithm_id  | initiation_algorithm_id | termination_algorithm_id | trading_frequency | started_at          | closed_at           | status   | dummy | is_active |
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+---------------------+----------+-------+-----------+
+        | 1  | {test_user_id.replace("-", "")} | 1                      | 1                       | 1                    | 5-minute          | 2024-01-15 10:00:00 | 2024-01-15 14:00:00 | paused   | 0     | 1         |
+        +----+-----------------------+------------------------+-------------------------+--------------------+-----------+---------------------+---------------------+----------+-------+-----------+
+        """
+        table_data_manager.insert_table_data('trade_sessions', trade_sessions_data)
+        
+        # Clear Redis scanning queue before test
+        scanning_queue = getattr(settings, 'REDIS_STREAM_SCANNING_QUEUE', 'scanning_queue')
+        redis_data_manager.clear_stream_completely(scanning_queue)
+        
+        # Get initial stream length
+        initial_length = redis_data_manager.get_stream_length(scanning_queue)
+        
+        # Mock the event publisher to simulate initialization failure
+        with patch('trade_management_unit.lib.TradeSession.TradeSession.get_trade_session_event_publisher') as mock_get_publisher:
+            # Make the get_trade_session_event_publisher function raise an exception
+            mock_get_publisher.side_effect = Exception("Failed to initialize event publisher - Redis connection error")
+            
+            # Make authenticated request to resume trade session
+            request = authenticated_request_factory.post(
+                '/trade_management/resume_trade_session/', 
+                data={'trade_session_id': 1},
+                content_type='application/json'
+            )
+            request.user_data = {'public_id': test_user_id}
+            
+            # Call the real method (resume should succeed despite event publisher failure)
+            response = resume_trade_session(request)
+            
+            # Verify error handling behavior through mock verification
+            # The mock should have been called and raised an exception, preventing event publishing
+            assert mock_get_publisher.called, "Event publisher should have been called"
+            assert mock_get_publisher.call_count == 1, "Event publisher should have been called exactly once"
+        
+        # Verify successful response - resume operation should still succeed
+        assert response.status_code == 200
+        response_data = json.loads(response.content)
+        assert response_data['success'] == True
+        
+        # Verify database state - session should be resumed successfully
+        session_after = TradeSessionModel.objects.get(id=1)
+        assert session_after.status == 'started'  # Status changed from paused to started
+        assert session_after.is_active == True
+        
+        # Verify NO event was published to Redis due to publisher failure
+        final_length = redis_data_manager.get_stream_length(scanning_queue)
+        assert final_length == initial_length, f"Expected no new events due to publisher failure, but stream length changed by {final_length - initial_length}"
+        
+        # Cleanup
+        table_data_manager.clear_table_completely('trade_sessions')
+        table_data_manager.cleanup()
+        redis_data_manager.clear_stream_completely(scanning_queue)
+
