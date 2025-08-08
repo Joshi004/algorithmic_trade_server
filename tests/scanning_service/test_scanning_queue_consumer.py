@@ -17,6 +17,8 @@ from scanning_service.consumers.scanning_queue_consumer import ScanningQueueCons
 from django.conf import settings
 from trade_management_unit.models.ScanningAlgorithm import ScanningAlgorithm
 from trade_management_unit.models.TradeSession import TradeSession
+from trade_management_unit.models.InitiationAlgorithm import InitiationAlgorithm
+from trade_management_unit.models.TerminationAlgorithm import TerminationAlgorithm
 
 
 @pytest.mark.integration
@@ -330,8 +332,18 @@ class TestEndToEndResumeEvent:
         # Insert data
         table_data_manager.insert_table_data('users', users_ascii)
         table_data_manager.insert_table_data('scanning_algorithms', scanning_algos_ascii)
-        table_data_manager.insert_table_data('initiation_algorithms', init_algos_ascii)
-        table_data_manager.insert_table_data('termination_algorithms', term_algos_ascii)
+        # Seed initiation and termination algorithms to satisfy FK constraints for trade_sessions (once)
+        table_data_manager.clear_table_completely('initiation_algorithms')
+        table_data_manager.clear_table_completely('termination_algorithms')
+        init_algos_ascii_once = """
+        +----+------------+-------------+-----------+----------------------+----------------------+
+        | id | name       | description | is_active | created_at           | updated_at           |
+        +----+------------+-------------+-----------+----------------------+----------------------+
+        | 1  | Udts_slto  | init algo   | 1         | 2024-01-01 00:00:00  | 2024-01-01 00:00:00  |
+        +----+------------+-------------+-----------+----------------------+----------------------+
+        """
+        table_data_manager.insert_table_data('initiation_algorithms', init_algos_ascii_once)
+        table_data_manager.insert_table_data('termination_algorithms', init_algos_ascii_once)
         table_data_manager.insert_table_data('trade_sessions', trade_sessions_ascii)
 
         consumer = ScanningQueueConsumer()
@@ -527,6 +539,604 @@ class TestEndToEndResumeEventNoActive:
 
             # Assert: no ack attempted since success was False
             assert len(acked) == 0
+
+            # Assert: DB unchanged (no sessions since we cleared table)
+            assert TradeSession.objects.count() == 0
+
+        finally:
+            try:
+                consumer.redis_consumer.close()
+            except Exception:
+                pass
+
+
+@pytest.mark.integration
+@pytest.mark.requires_db
+@pytest.mark.redis
+class TestEndToEndStartEventNoExistingSession:
+    """
+    3.1 Case A1 – Valid Start of trade session with no existing trade session row.
+    Asserts routing (is_resume=False), Redis lock creation, scanner configure args,
+    message acknowledgement, and that no trade_session row is created by the consumer.
+    """
+
+    def test_start_valid_no_existing_session_creates_lock_and_acks_without_creating_session(self, table_data_manager, redis_data_manager, test_user_id):
+        # Arrange: isolated stream
+        test_stream = f"scanning_queue_test_{uuid.uuid4().hex[:8]}"
+        setattr(settings, 'REDIS_STREAM_SCANNING_QUEUE', test_stream)
+        stream = getattr(settings, 'REDIS_STREAM_SCANNING_QUEUE', 'scanning_queue')
+        redis_data_manager.clear_stream_completely(stream)
+
+        # Seed required scanning algorithm
+        table_data_manager.clear_table_completely('scanning_algorithms')
+        scanning_algos_ascii = """
+        +----+------+-------------+-----------+----------------------+----------------------+
+        | id | name | description | is_active | created_at           | updated_at           |
+        +----+------+-------------+-----------+----------------------+----------------------+
+        | 1  | UDTS | test algo   | 1         | 2024-01-01 00:00:00  | 2024-01-01 00:00:00  |
+        +----+------+-------------+-----------+----------------------+----------------------+
+        """
+        table_data_manager.insert_table_data('scanning_algorithms', scanning_algos_ascii)
+
+        # Ensure no trade session row exists with this ID
+        start_session_id = 42
+        assert TradeSession.objects.filter(id=start_session_id).exists() is False
+
+        consumer = ScanningQueueConsumer()
+        assert consumer.redis_consumer.ensure_consumer_group(stream) is True
+
+        # Clear any stale lock key
+        try:
+            consumer.lock_manager.redis_client.delete("scanner_lock:1:10-minute")
+        except Exception:
+            pass
+
+        # Emit start event with valid fields
+        event = {
+            'event_id': 'evt-start-A1',
+            'event_type': 'trade_session_initiated',
+            'trade_session_id': str(start_session_id),
+            'user_id': str(test_user_id),
+            'trading_frequency': '10-minute',
+            'scanning_algorithm_name': 'UDTS',
+            'initiation_algorithm_name': 'Udts_slto',
+            'termination_algorithm_name': 'Udts_slto',
+            'is_dummy': '0'
+        }
+        redis_data_manager.insert_stream_data(stream, event)
+
+        # No-op scanner capturing configure args
+        class _CapturingScanner:
+            def __init__(self):
+                self.configure_called = False
+                self.configure_kwargs = None
+            def configure(self, **kwargs):
+                self.configure_called = True
+                self.configure_kwargs = kwargs
+            def fetch_instrument_tokens_and_start_tracking(self, user_id, trade_session_id, is_dummy):
+                return None
+            def is_running(self):
+                return False
+
+        class _Factory:
+            def __init__(self):
+                self.last_scanner = None
+            def get_scanner(self, name, freq):
+                self.last_scanner = _CapturingScanner()
+                return self.last_scanner
+
+        factory = _Factory()
+        consumer._scanner_factory = factory
+
+        # Wrap handler to capture routing flag
+        routed = {'called': False, 'is_resume': None}
+        _orig_handle = consumer._handle_scanner_event
+        def _wrapped_handle(event_data, is_resume=False):
+            routed['called'] = True
+            routed['is_resume'] = is_resume
+            return _orig_handle(event_data, is_resume=is_resume)
+        consumer._handle_scanner_event = _wrapped_handle
+
+        # Act
+        try:
+            with patch('scanning_service.consumers.scanning_queue_consumer.IntegrationServiceProvider', return_value=object()), \
+                 patch('scanning_service.consumers.scanning_queue_consumer.TMUServiceProvider', return_value=object()):
+                acked = []
+                messages = consumer.redis_consumer.read_from_stream(stream, count=10, block=500)
+                if messages:
+                    for _stream, stream_messages in messages:
+                        for message_id, fields in stream_messages:
+                            success = consumer._process_event(fields)
+                            if success:
+                                consumer.redis_consumer.acknowledge_message(stream, message_id)
+                                acked.append(message_id)
+
+            # Assert routing to start path
+            assert routed['called'] is True
+            assert routed['is_resume'] is False
+
+            # Assert lock acquired
+            exists, owner = consumer.lock_manager.check_lock(1, '10-minute')
+            assert exists is True
+            assert owner is not None and owner != ''
+
+            # Assert scanner configured with provided args
+            assert factory.last_scanner is not None and factory.last_scanner.configure_called is True
+            cfg = factory.last_scanner.configure_kwargs
+            assert cfg is not None
+            assert cfg.get('trade_freq') == '10-minute'
+            assert cfg.get('user_id') == str(test_user_id)
+            assert cfg.get('trade_session_id') == str(start_session_id)
+
+            # Assert event was acknowledged (acked list has this id)
+            assert len(acked) == 1
+
+            # DB invariants: consumer did NOT create the trade session row
+            assert TradeSession.objects.filter(id=start_session_id).exists() is False
+
+        finally:
+            try:
+                consumer.redis_consumer.close()
+            except Exception:
+                pass
+
+
+@pytest.mark.integration
+@pytest.mark.requires_db
+@pytest.mark.redis
+class TestEndToEndStartEventWithExistingSession:
+    """
+    3.1 Case A2 – Valid Start of trade session with an existing trade session row.
+    Asserts routing (is_resume=False), Redis lock creation, scanner configure args,
+    message acknowledgement, and that the pre-seeded trade_session row remains unchanged.
+    """
+
+    def test_start_valid_existing_session_lock_ack_db_unchanged(self, table_data_manager, redis_data_manager, test_user_id):
+        # Arrange: isolated stream
+        test_stream = f"scanning_queue_test_{uuid.uuid4().hex[:8]}"
+        setattr(settings, 'REDIS_STREAM_SCANNING_QUEUE', test_stream)
+        stream = getattr(settings, 'REDIS_STREAM_SCANNING_QUEUE', 'scanning_queue')
+        redis_data_manager.clear_stream_completely(stream)
+
+        # Seed users (needed for trade_sessions FK)
+        user_public_hex = test_user_id.hex
+        table_data_manager.clear_table_completely('users')
+        users_ascii = f"""
+        +------------------------+--------------------------------+-----------+-----------+-----------+----------------------+------------------------------------------+------------+--------------+
+        | email                  | public_id                      | first_name| last_name | is_active | date_joined          | password                                 | is_staff   | is_superuser |
+        +------------------------+--------------------------------+-----------+-----------+-----------+----------------------+------------------------------------------+------------+--------------+
+        | test_existing@example.com | {user_public_hex}          | Test      | User      | 1         | 2024-01-01 00:00:00  | pbkdf2_sha256$test$hash                  | 0          | 0            |
+        +------------------------+--------------------------------+-----------+-----------+-----------+----------------------+------------------------------------------+------------+--------------+
+        """
+        table_data_manager.insert_table_data('users', users_ascii)
+
+        # Seed required algorithms (scanning/initiation/termination)
+        table_data_manager.clear_table_completely('scanning_algorithms')
+        table_data_manager.clear_table_completely('initiation_algorithms')
+        table_data_manager.clear_table_completely('termination_algorithms')
+        scanning_algos_ascii = """
+        +----+------+-------------+-----------+----------------------+----------------------+
+        | id | name | description | is_active | created_at           | updated_at           |
+        +----+------+-------------+-----------+----------------------+----------------------+
+        | 1  | UDTS | test algo   | 1         | 2024-01-01 00:00:00  | 2024-01-01 00:00:00  |
+        +----+------+-------------+-----------+----------------------+----------------------+
+        """
+        init_algos_ascii = """
+        +----+------------+-------------+-----------+----------------------+----------------------+
+        | id | name       | description | is_active | created_at           | updated_at           |
+        +----+------------+-------------+-----------+----------------------+----------------------+
+        | 1  | Udts_slto  | init algo   | 1         | 2024-01-01 00:00:00  | 2024-01-01 00:00:00  |
+        +----+------------+-------------+-----------+----------------------+----------------------+
+        """
+        term_algos_ascii = init_algos_ascii
+        table_data_manager.insert_table_data('scanning_algorithms', scanning_algos_ascii)
+        table_data_manager.insert_table_data('initiation_algorithms', init_algos_ascii)
+        table_data_manager.insert_table_data('termination_algorithms', term_algos_ascii)
+
+        # Seed existing trade session row
+        table_data_manager.clear_table_completely('trade_sessions')
+        start_session_id = 77
+        trade_sessions_ascii = f"""
+        +----+--------------------------------+---------+----------------------+-------+-----------+------------------------+--------------------------+---------------------------+------------------+
+        | id | user_id                        | status  | started_at           | dummy | is_active | scanning_algorithm_id  | initiation_algorithm_id  | termination_algorithm_id  | trading_frequency |
+        +----+--------------------------------+---------+----------------------+-------+-----------+------------------------+--------------------------+---------------------------+------------------+
+        | {start_session_id} | {user_public_hex}      | started | 2024-01-01 00:00:00  | 0     | 1         | 1                      | 1                        | 1                         | 10-minute        |
+        +----+--------------------------------+---------+----------------------+-------+-----------+------------------------+--------------------------+---------------------------+------------------+
+        """
+        table_data_manager.insert_table_data('trade_sessions', trade_sessions_ascii)
+
+        # Consumer setup
+        consumer = ScanningQueueConsumer()
+        assert consumer.redis_consumer.ensure_consumer_group(stream) is True
+        try:
+            consumer.lock_manager.redis_client.delete("scanner_lock:1:10-minute")
+        except Exception:
+            pass
+
+        # Publish start event
+        event = {
+            'event_id': 'evt-start-A2',
+            'event_type': 'trade_session_initiated',
+            'trade_session_id': str(start_session_id),
+            'user_id': str(test_user_id),
+            'trading_frequency': '10-minute',
+            'scanning_algorithm_name': 'UDTS',
+            'initiation_algorithm_name': 'Udts_slto',
+            'termination_algorithm_name': 'Udts_slto',
+            'is_dummy': '0'
+        }
+        redis_data_manager.insert_stream_data(stream, event)
+
+        # No-op scanner factory
+        class _Scanner:
+            def __init__(self):
+                self.configure_called = False
+                self.configure_kwargs = None
+            def configure(self, **kwargs):
+                self.configure_called = True
+                self.configure_kwargs = kwargs
+            def fetch_instrument_tokens_and_start_tracking(self, user_id, trade_session_id, is_dummy):
+                return None
+            def is_running(self):
+                return False
+        class _Factory:
+            def __init__(self):
+                self.last_scanner = None
+            def get_scanner(self, name, freq):
+                self.last_scanner = _Scanner()
+                return self.last_scanner
+        factory = _Factory()
+        consumer._scanner_factory = factory
+
+        # Capture routing
+        routed = {'called': False, 'is_resume': None}
+        _orig = consumer._handle_scanner_event
+        def _wrap(ev, is_resume=False):
+            routed['called'] = True
+            routed['is_resume'] = is_resume
+            return _orig(ev, is_resume=is_resume)
+        consumer._handle_scanner_event = _wrap
+
+        # Act
+        try:
+            with patch('scanning_service.consumers.scanning_queue_consumer.IntegrationServiceProvider', return_value=object()), \
+                 patch('scanning_service.consumers.scanning_queue_consumer.TMUServiceProvider', return_value=object()):
+                acked = []
+                messages = consumer.redis_consumer.read_from_stream(stream, count=10, block=500)
+                if messages:
+                    for _s, msgs in messages:
+                        for message_id, fields in msgs:
+                            if consumer._process_event(fields):
+                                consumer.redis_consumer.acknowledge_message(stream, message_id)
+                                acked.append(message_id)
+
+            # Assert routing and lock
+            assert routed['called'] is True
+            assert routed['is_resume'] is False
+            exists, owner = consumer.lock_manager.check_lock(1, '10-minute')
+            assert exists is True and owner
+
+            # Assert scanner configured with provided args
+            assert factory.last_scanner is not None and factory.last_scanner.configure_called is True
+            cfg = factory.last_scanner.configure_kwargs
+            assert cfg is not None
+            assert cfg.get('trade_freq') == '10-minute'
+            assert cfg.get('user_id') == str(test_user_id)
+            assert cfg.get('trade_session_id') == str(start_session_id)
+
+            # Assert event acked
+            assert len(acked) == 1
+
+            # Assert DB invariants: pre-seeded row remains unchanged
+            ts = TradeSession.objects.get(id=start_session_id)
+            assert ts.user_id.public_id.hex == user_public_hex
+            assert ts.status == 'started'
+            assert ts.is_active is True
+
+        finally:
+            try:
+                consumer.redis_consumer.close()
+            except Exception:
+                pass
+
+
+@pytest.mark.integration
+@pytest.mark.requires_db
+@pytest.mark.redis
+class TestEndToEndStartEventInvalidAlgorithm:
+    """
+    3.1 Case B – Invalid Start (bad algorithm): no algorithm seeded or non-existent algorithm name.
+    Expect: routed to start path, returns False, no lock, no ack, no DB changes.
+    """
+
+    def test_start_invalid_algorithm_no_lock_no_ack_no_db_changes(self, table_data_manager, redis_data_manager, test_user_id):
+        # Arrange
+        test_stream = f"scanning_queue_test_{uuid.uuid4().hex[:8]}"
+        setattr(settings, 'REDIS_STREAM_SCANNING_QUEUE', test_stream)
+        stream = getattr(settings, 'REDIS_STREAM_SCANNING_QUEUE', 'scanning_queue')
+        redis_data_manager.clear_stream_completely(stream)
+
+        table_data_manager.clear_table_completely('scanning_algorithms')
+        table_data_manager.clear_table_completely('trade_sessions')
+
+        consumer = ScanningQueueConsumer()
+        assert consumer.redis_consumer.ensure_consumer_group(stream) is True
+        try:
+            consumer.lock_manager.redis_client.delete("scanner_lock:1:10-minute")
+        except Exception:
+            pass
+
+        start_session_id = 99
+        event = {
+            'event_id': 'evt-start-B',
+            'event_type': 'trade_session_initiated',
+            'trade_session_id': str(start_session_id),
+            'user_id': str(test_user_id),
+            'trading_frequency': '10-minute',
+            'scanning_algorithm_name': 'UDTS',  # not seeded
+            'initiation_algorithm_name': 'Udts_slto',
+            'termination_algorithm_name': 'Udts_slto',
+            'is_dummy': '0'
+        }
+        redis_data_manager.insert_stream_data(stream, event)
+
+        # Capture routing and ack attempts
+        routed = {'called': False, 'is_resume': None}
+        _orig = consumer._handle_scanner_event
+        def _wrap(ev, is_resume=False):
+            routed['called'] = True
+            routed['is_resume'] = is_resume
+            return _orig(ev, is_resume=is_resume)
+        consumer._handle_scanner_event = _wrap
+        acked = []
+
+        # Act
+        try:
+            messages = consumer.redis_consumer.read_from_stream(stream, count=10, block=500)
+            if messages:
+                for _s, msgs in messages:
+                    for message_id, fields in msgs:
+                        success = consumer._process_event(fields)
+                        if success:
+                            consumer.redis_consumer.acknowledge_message(stream, message_id)
+                            acked.append(message_id)
+
+            # Assert: routed to start path, returned False
+            assert routed['called'] is True
+            assert routed['is_resume'] is False
+
+            # No lock created
+            exists, owner = consumer.lock_manager.check_lock(1, '10-minute')
+            assert exists is False
+
+            # No ack happened
+            assert len(acked) == 0
+
+            # No DB changes for the session
+            assert TradeSession.objects.filter(id=start_session_id).exists() is False
+
+        finally:
+            try:
+                consumer.redis_consumer.close()
+            except Exception:
+                pass
+
+
+@pytest.mark.integration
+@pytest.mark.requires_db
+@pytest.mark.redis
+class TestEndToEndResumeEventMissingIDs:
+    """
+    3.2 Case A – Valid Resume with active sessions and missing IDs filled from first active session.
+    Asserts: routed is_resume=True, IDs filled, lock created, event acked, DB unchanged (still started & active).
+    """
+
+    def test_resume_missing_ids_filled_and_ack(self, table_data_manager, redis_data_manager, test_user_id):
+        # Arrange: isolated stream and seed active session
+        test_stream = f"scanning_queue_test_{uuid.uuid4().hex[:8]}"
+        setattr(settings, 'REDIS_STREAM_SCANNING_QUEUE', test_stream)
+        stream = getattr(settings, 'REDIS_STREAM_SCANNING_QUEUE', 'scanning_queue')
+        redis_data_manager.clear_stream_completely(stream)
+
+        # Seed user and algorithms
+        user_hex = test_user_id.hex
+        table_data_manager.clear_table_completely('users')
+        users_ascii = f"""
+        +------------------------+--------------------------------+-----------+-----------+-----------+----------------------+------------------------------------------+------------+--------------+
+        | email                  | public_id                      | first_name| last_name | is_active | date_joined          | password                                 | is_staff   | is_superuser |
+        +------------------------+--------------------------------+-----------+-----------+-----------+----------------------+------------------------------------------+------------+--------------+
+        | test_resume@example.com| {user_hex}                     | Test      | User      | 1         | 2024-01-01 00:00:00  | pbkdf2_sha256$test$hash                  | 0          | 0            |
+        +------------------------+--------------------------------+-----------+-----------+-----------+----------------------+------------------------------------------+------------+--------------+
+        """
+        table_data_manager.insert_table_data('users', users_ascii)
+
+        table_data_manager.clear_table_completely('scanning_algorithms')
+        scanning_algos_ascii = """
+        +----+------+-------------+-----------+----------------------+----------------------+
+        | id | name | description | is_active | created_at           | updated_at           |
+        +----+------+-------------+-----------+----------------------+----------------------+
+        | 1  | UDTS | test algo   | 1         | 2024-01-01 00:00:00  | 2024-01-01 00:00:00  |
+        +----+------+-------------+-----------+----------------------+----------------------+
+        """
+        table_data_manager.insert_table_data('scanning_algorithms', scanning_algos_ascii)
+
+        # Seed active trade session for (algo=1, freq=10-minute)
+        # Also seed initiation/termination algorithms to satisfy FK constraints
+        table_data_manager.clear_table_completely('initiation_algorithms')
+        table_data_manager.clear_table_completely('termination_algorithms')
+        init_algos_ascii = """
+        +----+------------+-------------+-----------+----------------------+----------------------+
+        | id | name       | description | is_active | created_at           | updated_at           |
+        +----+------------+-------------+-----------+----------------------+----------------------+
+        | 1  | Udts_slto  | init algo   | 1         | 2024-01-01 00:00:00  | 2024-01-01 00:00:00  |
+        +----+------------+-------------+-----------+----------------------+----------------------+
+        """
+        term_algos_ascii = init_algos_ascii
+        table_data_manager.insert_table_data('initiation_algorithms', init_algos_ascii)
+        table_data_manager.insert_table_data('termination_algorithms', term_algos_ascii)
+
+        table_data_manager.clear_table_completely('trade_sessions')
+        trade_sessions_ascii = f"""
+        +----+--------------------------------+---------+----------------------+-------+-----------+------------------------+--------------------------+---------------------------+------------------+
+        | id | user_id                        | status  | started_at           | dummy | is_active | scanning_algorithm_id  | initiation_algorithm_id  | termination_algorithm_id  | trading_frequency |
+        +----+--------------------------------+---------+----------------------+-------+-----------+------------------------+--------------------------+---------------------------+------------------+
+        | 10 | {user_hex}                     | started | 2024-01-01 00:00:00  | 0     | 1         | 1                      | 1                        | 1                         | 10-minute        |
+        +----+--------------------------------+---------+----------------------+-------+-----------+------------------------+--------------------------+---------------------------+------------------+
+        """
+        table_data_manager.insert_table_data('trade_sessions', trade_sessions_ascii)
+
+        consumer = ScanningQueueConsumer()
+        assert consumer.redis_consumer.ensure_consumer_group(stream) is True
+        try:
+            consumer.lock_manager.redis_client.delete("scanner_lock:1:10-minute")
+        except Exception:
+            pass
+
+        # Emit resume event with missing IDs (omit both user_id and trade_session_id)
+        event = {
+            'event_id': 'evt-resume-missing',
+            'event_type': 'resume_scanner',
+            'trading_frequency': '10-minute',
+            'scanning_algorithm_name': 'UDTS',
+            'initiation_algorithm_name': 'Udts_slto',
+            'termination_algorithm_name': 'Udts_slto',
+            'is_dummy': '0'
+        }
+        redis_data_manager.insert_stream_data(stream, event)
+
+        # Capturing scanner
+        class _CapScanner:
+            def __init__(self):
+                self.configure_called = False
+                self.configure_kwargs = None
+            def configure(self, **kwargs):
+                self.configure_called = True
+                self.configure_kwargs = kwargs
+            def fetch_instrument_tokens_and_start_tracking(self, user_id, trade_session_id, is_dummy):
+                return None
+            def is_running(self):
+                return False
+        class _CapFactory:
+            def __init__(self):
+                self.last_scanner = None
+            def get_scanner(self, name, freq):
+                self.last_scanner = _CapScanner()
+                return self.last_scanner
+        factory = _CapFactory()
+        consumer._scanner_factory = factory
+
+        # Capture routing and ack
+        routed = {'called': False, 'is_resume': None}
+        _orig = consumer._handle_scanner_event
+        def _wrap(ev, is_resume=False):
+            routed['called'] = True
+            routed['is_resume'] = is_resume
+            return _orig(ev, is_resume=is_resume)
+        consumer._handle_scanner_event = _wrap
+
+        acked = []
+
+        # Act
+        try:
+            with patch('scanning_service.consumers.scanning_queue_consumer.IntegrationServiceProvider', return_value=object()), \
+                 patch('scanning_service.consumers.scanning_queue_consumer.TMUServiceProvider', return_value=object()):
+                messages = consumer.redis_consumer.read_from_stream(stream, count=10, block=500)
+                if messages:
+                    for _s, msgs in messages:
+                        for message_id, fields in msgs:
+                            success = consumer._process_event(fields)
+                            if success:
+                                consumer.redis_consumer.acknowledge_message(stream, message_id)
+                                acked.append(message_id)
+
+            # Assert routed and filled IDs via scanner.configure
+            assert routed['called'] is True and routed['is_resume'] is True
+            assert factory.last_scanner and factory.last_scanner.configure_called is True
+            cfg = factory.last_scanner.configure_kwargs
+            assert cfg.get('trade_freq') == '10-minute'
+            assert cfg.get('trade_session_id') == 10 or str(cfg.get('trade_session_id')) == '10'
+            assert str(cfg.get('user_id')) == str(test_user_id)
+
+            # Lock created
+            exists, owner = consumer.lock_manager.check_lock(1, '10-minute')
+            assert exists is True and owner
+
+            # Event acknowledged
+            assert len(acked) == 1
+
+            # DB invariants
+            ts = TradeSession.objects.get(id=10)
+            assert ts.status == 'started' and ts.is_active is True
+
+        finally:
+            try:
+                consumer.redis_consumer.close()
+            except Exception:
+                pass
+
+
+@pytest.mark.integration
+@pytest.mark.requires_db
+@pytest.mark.redis
+class TestEndToEndResumeEventInvalidAlgorithm:
+    """
+    3.2 Case C – Invalid Resume (bad algorithm): non-existent scanning_algorithm_name.
+    Expect: routed is_resume=True, returns False, no lock, no ack, no DB changes.
+    """
+
+    def test_resume_invalid_algorithm_no_lock_no_ack_no_db_changes(self, table_data_manager, redis_data_manager, test_user_id):
+        # Arrange
+        test_stream = f"scanning_queue_test_{uuid.uuid4().hex[:8]}"
+        setattr(settings, 'REDIS_STREAM_SCANNING_QUEUE', test_stream)
+        stream = getattr(settings, 'REDIS_STREAM_SCANNING_QUEUE', 'scanning_queue')
+        redis_data_manager.clear_stream_completely(stream)
+
+        table_data_manager.clear_table_completely('scanning_algorithms')
+        table_data_manager.clear_table_completely('trade_sessions')
+
+        consumer = ScanningQueueConsumer()
+        assert consumer.redis_consumer.ensure_consumer_group(stream) is True
+        try:
+            consumer.lock_manager.redis_client.delete("scanner_lock:1:10-minute")
+        except Exception:
+            pass
+
+        event = {
+            'event_id': 'evt-resume-bad',
+            'event_type': 'resume_scanner',
+            'trading_frequency': '10-minute',
+            'scanning_algorithm_name': 'UDTS',  # not seeded
+            'is_dummy': '0'
+        }
+        redis_data_manager.insert_stream_data(stream, event)
+
+        # Capture routing and ack
+        routed = {'called': False, 'is_resume': None}
+        _orig = consumer._handle_scanner_event
+        def _wrap(ev, is_resume=False):
+            routed['called'] = True
+            routed['is_resume'] = is_resume
+            return _orig(ev, is_resume=is_resume)
+        consumer._handle_scanner_event = _wrap
+        acked = []
+
+        # Act
+        try:
+            messages = consumer.redis_consumer.read_from_stream(stream, count=10, block=500)
+            if messages:
+                for _s, msgs in messages:
+                    for message_id, fields in msgs:
+                        success = consumer._process_event(fields)
+                        if success:
+                            consumer.redis_consumer.acknowledge_message(stream, message_id)
+                            acked.append(message_id)
+
+            # Assert routing and failure
+            assert routed['called'] is True and routed['is_resume'] is True
+            exists, owner = consumer.lock_manager.check_lock(1, '10-minute')
+            assert exists is False
+            assert len(acked) == 0
+            assert TradeSession.objects.count() == 0
 
         finally:
             try:

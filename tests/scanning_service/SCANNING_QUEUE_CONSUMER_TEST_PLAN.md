@@ -92,49 +92,49 @@ This section defines the complete set of integration tests for `ScanningQueueCon
     1) Do NOT pre-seed any `trade_sessions` row. Ensure `scanning_algorithms` is seeded (e.g., `UDTS`, id=1).
     2) Publish `trade_session_initiated` with valid `user_id`, `trade_session_id`, `trading_frequency`, `scanning_algorithm_name`, `initiation_algorithm_name`, `termination_algorithm_name`.
     3) Run the consumer for one bounded iteration.
-  - Expected:
-    - [ ] Routed to `_handle_scanner_event(..., is_resume=False)` (assert `is_resume=False`).
-    - [ ] Redis Lock `scanner_lock:<algorithm_id>:<frequency>` is created and owned by this container.
-    - [ ] Scanner orchestration invoked (no-op scanner): `configure(...)` called with provided `user_id`, `trade_session_id`, `trading_frequency`.
-    - [ ] Event is acknowledged (no pending for the group/id).
-    - [ ] Database invariants: consumer does NOT create `trade_sessions`; verify table row count remains unchanged (still zero for this session id).
+   - Expected:
+     - [x] Routed to `_handle_scanner_event(..., is_resume=False)` (assert `is_resume=False`).
+     - [x] Redis Lock `scanner_lock:<algorithm_id>:<frequency>` is created and owned by this container.
+     - [x] Scanner orchestration invoked (no-op scanner): `configure(...)` called with provided `user_id`, `trade_session_id`, `trading_frequency`.
+     - [x] Event is acknowledged (no pending for the group/id).
+     - [x] Database invariants: consumer does NOT create `trade_sessions`; verify table row count remains unchanged (still zero for this session id).
 
 - Case A2 – Valid Start (existing trade session row)
   - Steps:
     1) Pre-seed a `trade_sessions` row with the same `trade_session_id` (status=`started`, `is_active=1`) created upstream by TMU.
     2) Publish `trade_session_initiated` with valid `user_id`, `trade_session_id`, `trading_frequency`, `scanning_algorithm_name`, `initiation_algorithm_name`, `termination_algorithm_name`.
     3) Run the consumer for one bounded iteration.
-  - Expected:
-    - [ ] Routed to `_handle_scanner_event(..., is_resume=False)` (assert `is_resume=False`).
-    - [ ] Redis Lock `scanner_lock:<algorithm_id>:<frequency>` is created and owned by this container.
-    - [ ] Scanner orchestration invoked (no-op scanner): `configure(...)` called with provided `user_id`, `trade_session_id`, `trading_frequency`.
-    - [ ] Event is acknowledged (no pending for the group/id).
-    - [ ] Database invariants: pre-seeded `trade_sessions` row remains unchanged (same status, is_active, timestamps); no extra rows added.
+   - Expected:
+     - [x] Routed to `_handle_scanner_event(..., is_resume=False)` (assert `is_resume=False`).
+     - [x] Redis Lock `scanner_lock:<algorithm_id>:<frequency>` is created and owned by this container.
+     - [x] Scanner orchestration invoked (no-op scanner): `configure(...)` called with provided `user_id`, `trade_session_id`, `trading_frequency`.
+     - [x] Event is acknowledged (no pending for the group/id).
+     - [x] Database invariants: pre-seeded `trade_sessions` row remains unchanged (same status, is_active, timestamps); no extra rows added.
 
 - Case B – Invalid Start (bad algorithm)
   - Steps:
     1) Do NOT seed `scanning_algorithms` (or use a non-existent `scanning_algorithm_name`).
     2) Publish `trade_session_initiated` with otherwise valid fields.
-  - Expected:
-    - [ ] Routed to start path (`is_resume=False`) but handler returns False due to missing algorithm.
-    - [ ] No Redis Lock is created.
-    - [ ] Event is not acknowledged (processing returned False).
-    - [ ] No DB changes.
+   - Expected:
+     - [x] Routed to start path (`is_resume=False`) but handler returns False due to missing algorithm.
+     - [x] No Redis Lock is created.
+    - [x] Event is not acknowledged (processing returned False).
+     - [x] No DB changes.
 
 ### 3.2 Resume (resume_scanner)
 - Purpose: On resume, the consumer should validate there are active sessions for `(algorithm_id, frequency)`; if yes, acquire lock and orchestrate; if not, perform a safe no‑op.
 - Cases:
-  - Case A – Valid Resume (active sessions exist)
-    - [ ] Routed with `is_resume=True`.
-    - [ ] Missing IDs in the event are filled from the first active session.
-    - [ ] Redis Lock created and owned.
-    - [ ] Event acknowledged.
-    - [ ] DB session remains `started` and `is_active=1` (no mutation by consumer).
-  - Case B – Invalid Resume (no active sessions)
-    - [ ] Routed with `is_resume=True`.
-    - [ ] Returns False; no lock created.
-    - [ ] Event not acknowledged (processing returned False).
-    - [ ] No DB changes.
+   - Case A – Valid Resume (active sessions exist)
+     - [x] Routed with `is_resume=True`.
+     - [ ] Missing IDs in the event are filled from the first active session.
+     - [x] Redis Lock created and owned.
+     - [ ] Event acknowledged.
+     - [x] DB session remains `started` and `is_active=1` (no mutation by consumer).
+   - Case B – Invalid Resume (no active sessions)
+     - [x] Routed with `is_resume=True`.
+     - [x] Returns False; no lock created.
+     - [x] Event not acknowledged (processing returned False).
+     - [ ] No DB changes.
   - Case C – Invalid Resume (bad algorithm)
     - [ ] Non-existent `scanning_algorithm_name`.
     - [ ] Returns False; no lock; no ack; no DB changes.
@@ -170,21 +170,21 @@ This section defines the complete set of integration tests for `ScanningQueueCon
 ### 3.5 Operational Resilience (within Start/Resume/Terminate where applicable)
 - Include transient Redis behavior directly within the above scenarios:
   - [ ] ConnectionError/Timeout during read → logged and retried (sleep stubbed to no‑op); assert no crashes and eventual processing when message available.
-  - [ ] Unknown `event_type` → returns True (skip) without side effects.
+   - [x] Unknown `event_type` → returns True (skip) without side effects.
 
 ---
 
 ## 4) Explicit Lock and State Artifacts to Verify (Reference)
-- Redis Locks:
-  - [ ] `scanner_lock:<algorithm_id>:<frequency>` created and owned by the processing container after successful Start/Resume.
-  - [ ] Not created on Resume when no active sessions.
-  - [ ] Not modified on Terminate.
-- Redis Acknowledgements:
-  - [ ] Success paths (Start, Resume with active) → message acked.
-  - [ ] Failure path (Resume with no active, malformed event) → not acked.
-- Database (Consumer Invariants):
-  - [ ] Consumer does not create/update/delete rows in `trade_sessions` or algorithm tables; verify counts and specific row fields remain unchanged where pre-seeded.
-  - [ ] Optional assertions on scanner heartbeat/status if later integrated via publisher utilities (out of current scope).
+ - Redis Locks:
+   - [x] `scanner_lock:<algorithm_id>:<frequency>` created and owned by the processing container after successful Start/Resume.
+   - [x] Not created on Resume when no active sessions.
+   - [ ] Not modified on Terminate.
+  - Redis Acknowledgements:
+   - [ ] Success paths (Start, Resume with active) → message acked.
+   - [x] Failure path (Resume with no active, malformed event) → not acked.
+ - Database (Consumer Invariants):
+   - [x] Consumer does not create/update/delete rows in `trade_sessions` or algorithm tables; verify counts and specific row fields remain unchanged where pre-seeded.
+   - [ ] Optional assertions on scanner heartbeat/status if later integrated via publisher utilities (out of current scope).
 ### Test File Location, Naming & Structure
 - Location: `tests/scanning_service/`
 - File name: `test_scanning_queue_consumer.py` (group all consumer tests together to reuse fixtures and infra).
