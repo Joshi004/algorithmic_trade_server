@@ -2,8 +2,6 @@
 
 This plan lists the tests we should add to gain high confidence in the consumer’s business logic. We will mock external dependencies (Redis clients, lock manager, scanner factory, DB lookups) and focus only on decision-making and control flow inside `ScanningQueueConsumer`.
 
-#### Purpose
-Define a precise, integration‑oriented test suite for `ScanningQueueConsumer` that validates its business logic (routing, decisions, locking, lifecycle, and cleanup) using real MySQL/Redis and minimal mocks. The goal is high confidence that the consumer behaves correctly under success and failure conditions without testing third‑party libraries.
 
 #### Scope & Principles
 - [x] Use real MySQL and Redis (via Docker) as in existing tests; do not mock DB/Redis.
@@ -27,7 +25,7 @@ Define a precise, integration‑oriented test suite for `ScanningQueueConsumer` 
 - Steps: Inspect attributes and perform a `health_check()`.
 - Expected:
   - [x] Attributes initialized (stream name, consumer group, consumer name prefix starting with `scanning_consumer_`).
-  - [ ] Redis consumer created with intended group/name (confirm via behavior and exposed attributes; avoid fragile call asserts).
+  - [x] Redis consumer created with intended group/name (confirm via behavior and exposed attributes; avoid fragile call asserts).
   - [x] `ScannerLockManager` instance is present.
   - [x] SIGTERM/SIGINT handlers are registered.
   - [x] `_running` is False; `_scanner_factory` exists.
@@ -39,11 +37,61 @@ Define a precise, integration‑oriented test suite for `ScanningQueueConsumer` 
 - Setup: Create a consumer; call `_process_event` with different payloads.
 - Steps: Pass events for `trade_session_initiated`, `resume_scanner`, `trade_session_terminated`, unknown type, and malformed payload.
 - Expected:
-  - [ ] Initiated → `_handle_scanner_event(..., is_resume=False)` and returns its result.
-  - [ ] Resumed → `_handle_scanner_event(..., is_resume=True)` and returns its result.
+  - [x] Initiated → `_handle_scanner_event(..., is_resume=False)` and returns its result.
+  - [x] Resumed → `_handle_scanner_event(..., is_resume=True)` and returns its result.
   - [ ] Terminated → returns True; does not call `_handle_scanner_event`.
-  - [ ] Unknown type → returns True (skips safely).
-  - [ ] Malformed payload/exception → returns False.
+  - [x] Unknown type → returns True (skips safely).
+  - [x] Malformed payload/exception → returns False.
+
+### 2.1) End‑to‑End Event Processing from Redis → Consumer → Effects (High‑Confidence Tests)
+- Goal: Prove that real events placed on the Redis stream are consumed, routed, and produce the correct observable side‑effects (locks, acks, scanner orchestration), while keeping DB/Redis real and mocks minimal.
+- Setup (common):
+  - Seed DB with `users`, `scanning_algorithms`, `initiation_algorithms`, `termination_algorithms`, and `trade_sessions` as needed (ASCII tables below).
+  - Clear stream `scanning_queue`.
+  - Insert event into stream using `redis_data_manager.insert_stream_data(...)`.
+  - Create `ScanningQueueConsumer`, set `_running=True`, and run `start_consuming()` for a bounded single pass (e.g., patch `time.sleep` to no‑op and set `_running=False` after first iteration).
+
+#### 2.1.a) Resume event with active sessions (fills missing IDs)
+- Steps:
+  1) Seed one active `trade_sessions` row with status `started`, matching `scanning_algorithms.name='UDTS'` and `trading_frequency='10-minute'`.
+  2) Emit `resume_scanner` event that omits `user_id` and/or `trade_session_id`.
+  3) Run consumer one iteration.
+- Expected:
+  - [ ] Consumer reads the event and routes to resume handler.
+  - [x] Lock key `scanner_lock:<algorithm_id>:<frequency>` is created in Redis and owned by this container (check via `ScannerLockManager.check_lock`).
+  - [x] DB session remains `started` and `is_active=True` (no unintended DB changes from consumer itself).
+
+#### 2.1.b) Resume event with no active sessions (safe no‑op)
+- Steps:
+  1) Ensure there are zero active `trade_sessions` for the given `(algorithm, frequency)`.
+  2) Emit `resume_scanner` event (with or without IDs).
+  3) Run consumer one iteration.
+- Expected:
+  - [ ] Consumer routes to resume handler and returns False.
+  - [ ] No lock is created (or lock remains absent for that `(algorithm, frequency)`).
+  - [ ] Message is acknowledged or safely handled (configure expectation based on handler return and current logic; default: not acked when processing returns False).
+  - [ ] No DB changes occur.
+
+#### 2.1.c) Initiated event (new session path)
+- Steps:
+  1) Seed `scanning_algorithms` with `UDTS` (id=1). A matching trade session may or may not exist; handler does not depend on session for start path.
+  2) Emit `trade_session_initiated` event with valid fields (`user_id`, `trade_session_id`, `trading_frequency`).
+  3) Run consumer one iteration.
+- Expected:
+  - [ ] Lock key for `(algorithm_id, frequency)` is created.
+  - [ ] Scanner is orchestrated (minimally mock scanner start to avoid threads, but assert `configure(...)` arguments).
+  - [ ] Message is acknowledged.
+  - [ ] No unintended DB changes are made by the consumer.
+
+#### 2.1.d) Terminated event (ack and skip scanner orchestration)
+- Steps:
+  1) Emit `trade_session_terminated` with fields for an existing session.
+  2) Run consumer one iteration.
+- Expected:
+  - [ ] Consumer routes to termination handler and returns True.
+  - [ ] No lock operations are performed.
+  - [ ] Message is acknowledged.
+  - [ ] DB remains unchanged by the consumer.
 
 ## 3) _handle_trade_session_terminated logs and returns success without side‑effects
 - Goal: Confirm termination events are acknowledged without unintended actions.
@@ -142,6 +190,79 @@ table_data_manager.clear_table_completely('scanning_algorithms')
 table_data_manager.insert_table_data('scanning_algorithms', algos)
 ```
 
+Example (ASCII tables to seed a minimal Trade Session for resume tests):
+```python
+# 1) Users (must match ForeignKey in trade_sessions.user_id)
+users = f"""
++----------------------+----------------------+
+| public_id            | email                |
++----------------------+----------------------+
+| {user_id}            | test@example.com     |
++----------------------+----------------------+
+"""
+table_data_manager.clear_table_completely('users')
+table_data_manager.insert_table_data('users', users)
+
+# 2) Algorithms (scanning/initiation/termination)
+scanning_algos = """
++----+------+
+| id | name |
++----+------+
+| 1  | UDTS |
++----+------+
+"""
+init_algos = """
++----+------+
+| id | name |
++----+------+
+| 1  | Udts_slto |
++----+------+
+"""
+term_algos = init_algos
+table_data_manager.clear_table_completely('scanning_algorithms')
+table_data_manager.clear_table_completely('initiation_algorithms')
+table_data_manager.clear_table_completely('termination_algorithms')
+table_data_manager.insert_table_data('scanning_algorithms', scanning_algos)
+table_data_manager.insert_table_data('initiation_algorithms', init_algos)
+table_data_manager.insert_table_data('termination_algorithms', term_algos)
+
+# 3) Trade session (status started, is_active=1)
+trade_sessions = f"""
++----+--------------------------------------+---------------+----------------------+-------------------------+------------------+----------+-----------+------------------+-----------------------+------------------+
+| id | user_id                              | status        | started_at           | closed_at               | dummy            | is_active| scanning_algorithm_id | initiation_algorithm_id | termination_algorithm_id | trading_frequency |
++----+--------------------------------------+---------------+----------------------+-------------------------+------------------+----------+-----------+------------------+-----------------------+------------------+
+| 10 | {user_id}                            | started       | 2024-01-01 00:00:00  |                         | 0                | 1        | 1         | 1                | 1                     | 10-minute         |
++----+--------------------------------------+---------------+----------------------+-------------------------+------------------+----------+-----------+------------------+-----------------------+------------------+
+"""
+table_data_manager.clear_table_completely('trade_sessions')
+table_data_manager.insert_table_data('trade_sessions', trade_sessions)
+```
+
+Example (Emit a real Redis resume event and run consumer one iteration):
+```python
+stream = getattr(settings, 'REDIS_STREAM_SCANNING_QUEUE', 'scanning_queue')
+redis_data_manager.clear_stream_completely(stream)
+event = {
+  'event_id': 'evt-1',
+  'event_type': 'resume_scanner',
+  'trade_session_id': '10',
+  'user_id': str(user_id),
+  'trading_frequency': '10-minute',
+  'scanning_algorithm_name': 'UDTS',
+  'initiation_algorithm_name': 'Udts_slto',
+  'termination_algorithm_name': 'Udts_slto',
+  'is_dummy': '0'
+}
+redis_data_manager.insert_stream_data(stream, event)
+
+consumer = ScanningQueueConsumer()
+consumer._running = True
+# Let consumer read once then stop (e.g., patch time.sleep to set _running False) or call stop_consuming after asserting first pass.
+consumer.start_consuming()
+
+# Assert DB/Redis side-effects (e.g., lock key created, session remains started, acked entry count)
+```
+
 ### Minimal Mocking Policy
 - Do not mock: database access, Redis clients/streams, consumer group creation.
 - Allowed to mock (to keep tests fast and deterministic):
@@ -149,6 +270,7 @@ table_data_manager.insert_table_data('scanning_algorithms', algos)
   - `time.sleep` during retry paths (stub to no‑op).
   - Rarely, `ScannerAlgoFactory.get_scanner` to inject a lightweight fake scanner for configuration/start assertions.
 - Prefer asserting observable state changes (DB rows, Redis locks/acks) over internal call counts.
+ - For routing tests, keep minimal patching to target only the handler being routed to. For end‑to‑end consumer behavior tests, emit real Redis stream events and assert DB/lock outcomes without mocking handlers.
 
 ### Running Tests (container mode)
 - Start infra: `docker-compose up -d`
