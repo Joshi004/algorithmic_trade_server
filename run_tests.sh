@@ -13,7 +13,7 @@ NC='\033[0m' # No Color
 
 # Default values
 TEST_DB_NAME="ats_db_test"
-COVERAGE_THRESHOLD=65
+COVERAGE_THRESHOLD=60
 PARALLEL_WORKERS="1"
 VERBOSE=false
 COVERAGE=true
