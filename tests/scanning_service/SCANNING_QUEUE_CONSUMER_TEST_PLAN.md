@@ -57,7 +57,7 @@ This plan lists the tests we should add to gain high confidence in the consumer�
   2) Emit `resume_scanner` event that omits `user_id` and/or `trade_session_id`.
   3) Run consumer one iteration.
 - Expected:
-  - [ ] Consumer reads the event and routes to resume handler.
+  - [x] Consumer reads the event and routes to resume handler.
   - [x] Lock key `scanner_lock:<algorithm_id>:<frequency>` is created in Redis and owned by this container (check via `ScannerLockManager.check_lock`).
   - [x] DB session remains `started` and `is_active=True` (no unintended DB changes from consumer itself).
 
@@ -67,102 +67,124 @@ This plan lists the tests we should add to gain high confidence in the consumer�
   2) Emit `resume_scanner` event (with or without IDs).
   3) Run consumer one iteration.
 - Expected:
-  - [ ] Consumer routes to resume handler and returns False.
-  - [ ] No lock is created (or lock remains absent for that `(algorithm, frequency)`).
-  - [ ] Message is acknowledged or safely handled (configure expectation based on handler return and current logic; default: not acked when processing returns False).
-  - [ ] No DB changes occur.
+  - [x] Consumer routes to resume handler and returns False.
+  - [x] No lock is created (or lock remains absent for that `(algorithm, frequency)`).
+  - [x] Message is acknowledged or safely handled (configure expectation based on handler return and current logic; default: not acked when processing returns False).
 
-#### 2.1.c) Initiated event (new session path)
-- Steps:
-  1) Seed `scanning_algorithms` with `UDTS` (id=1). A matching trade session may or may not exist; handler does not depend on session for start path.
-  2) Emit `trade_session_initiated` event with valid fields (`user_id`, `trade_session_id`, `trading_frequency`).
-  3) Run consumer one iteration.
-- Expected:
-  - [ ] Lock key for `(algorithm_id, frequency)` is created.
-  - [ ] Scanner is orchestrated (minimally mock scanner start to avoid threads, but assert `configure(...)` arguments).
-  - [ ] Message is acknowledged.
-  - [ ] No unintended DB changes are made by the consumer.
 
-#### 2.1.d) Terminated event (ack and skip scanner orchestration)
-- Steps:
-  1) Emit `trade_session_terminated` with fields for an existing session.
-  2) Run consumer one iteration.
-- Expected:
-  - [ ] Consumer routes to termination handler and returns True.
-  - [ ] No lock operations are performed.
-  - [ ] Message is acknowledged.
-  - [ ] DB remains unchanged by the consumer.
-
-## 3) _handle_trade_session_terminated logs and returns success without side‑effects
-- Goal: Confirm termination events are acknowledged without unintended actions.
-- Expected:
-  - [ ] Returns True and does not touch locks, factory, or scanners.
-
-## 4) _handle_scanner_event handles database/locking edge cases deterministically
-- Goal: Ensure robust behavior when inputs/state are missing or conflicting.
-- Setup: Use real DB rows for `ScanningAlgorithm`/`TradeSession` where applicable (via ASCII tables). Keep Redis real; lock manager used as is.
-- Expected per branch:
-  - [ ] Algorithm not found (`DoesNotExist`) → returns False; no lock attempts.
-  - [ ] Resume with zero active sessions → returns False; no lock attempts.
-  - [ ] Resume with active sessions and existing lock → returns True without starting scanner.
-  - [ ] Lock acquisition fails → returns True (someone else owns it).
-  - [ ] Factory returns None → releases any held lock and returns False.
-  - [ ] Scanner start raises → releases lock and returns False.
-
-## 5) _handle_scanner_event starts scanners with correct configuration in success paths
-- Goal: Validate happy paths for both new and resume flows.
-- Setup: Seed DB with `ScanningAlgorithm` and, for resume, active `TradeSession` rows. Keep Redis real.
-- Expected:
-  - [ ] New session: acquires lock; builds providers; obtains scanner; calls `configure(...)` with provided user/session/frequency; invokes start; returns True.
-  - [ ] Resume with missing IDs: fills `user_id`/`trade_session_id` from first active session; configures and starts; returns True.
-
-Assertions for 4 & 5 (Business Outcomes):
-- [ ] Locking outcomes are correct per branch (held/not held/released) and reflected in Redis lock keys.
-- [ ] Factory is asked for the expected `(algorithm_name, frequency)`.
-- [ ] Scanner receives correct config args; start is invoked exactly once on success.
-
-## 6) start_consuming performs health checks and consumer‑group setup before looping
-- Goal: Avoid entering the loop when prerequisites fail.
-- Expected:
-  - [ ] `health_check()` False → function returns early; `_running` remains False.
-  - [ ] `ensure_consumer_group()` False → function returns early; no loop executed.
-
-## 7) start_consuming processes messages and acks appropriately (success/failure paths)
-- Goal: Validate message handling decisions and ack behavior.
-- Setup: Feed `read_from_stream` one batch (then empty) using Redis. Toggle `_running` False after the first pass.
-- Expected:
-  - [ ] Success: `_process_event` True and `acknowledge_message` True → message is acked.
-  - [ ] Ack failure: `_process_event` True but ack False → failure logged; continue.
-  - [ ] Processing failure: `_process_event` False → not acked.
-  - [ ] Exception while processing one message → caught/logged; other messages continue.
-
-Technique: set `_running=True`, mock `read_from_stream` to return one batch then an empty list, and call `stop_consuming()` (or set `_running=False`) to exit.
-
-## 8) start_consuming is resilient to Redis and generic exceptions inside the loop
-- Goal: Ensure transient failures are handled without crashing the consumer.
-- Expected:
-  - [ ] On `redis.ConnectionError`, error is logged, `sleep` is invoked (mock to no‑op), then processing continues.
-  - [ ] On `redis.TimeoutError`, timeout is logged and loop continues.
-  - [ ] On generic Exception, error is logged and loop continues.
-
-## 9) Cleanup closes Redis resources and resets state on any exit path
-- Goal: Guarantee resource hygiene regardless of how the loop exits.
-- Expected:
-  - [ ] `finally` closes `redis_consumer` and `lock_manager.redis_client` when present.
-  - [ ] `_running` is False after `start_consuming` returns.
-
-## 10) stop_consuming flips the run flag and logs a clean stop
-- Goal: Confirm the explicit stop pathway is safe and idempotent.
-- Expected:
-  - [x] Sets `_running=False` and logs stop without exceptions.
-
-## 11) health_check accurately reflects underlying Redis health
-- Goal: Provide a trustworthy readiness check.
-- Expected:
-  - [ ] Returns True/False exactly as `redis_consumer.health_check()` does.
 
 ---
 
+## 3) Full Integration Test Suite – Event Types and Distributed Safety (Checklist)
+
+This section defines the complete set of integration tests for `ScanningQueueConsumer` covering all three event types and distributed locking behavior. Each case uses real MySQL and Redis, an isolated Redis stream per test, and minimal stubs only at system boundaries (scanner start, external providers).
+
+### 3.1 Start (trade_session_initiated) – New Session Path
+- Purpose: When a Start event arrives, the consumer acquires the scanner lock for `(algorithm_id, frequency)`, orchestrates scanner startup, and acknowledges the event. Consumer does NOT create trade sessions (they are created by TMU).
+
+- Preconditions (common):
+  - [ ] `scanning_algorithms` seeded (e.g., `UDTS`, id=1)
+  - [ ] Isolated Redis stream; consumer group created before publishing.
+  - [ ] (Optional) Pre-seed a `trade_sessions` row (status=`started`, is_active=1) to verify DB remains unchanged by consumer.
+
+- Case A1 – Valid Start (no existing trade session row)
+  - Steps:
+    1) Do NOT pre-seed any `trade_sessions` row. Ensure `scanning_algorithms` is seeded (e.g., `UDTS`, id=1).
+    2) Publish `trade_session_initiated` with valid `user_id`, `trade_session_id`, `trading_frequency`, `scanning_algorithm_name`, `initiation_algorithm_name`, `termination_algorithm_name`.
+    3) Run the consumer for one bounded iteration.
+  - Expected:
+    - [ ] Routed to `_handle_scanner_event(..., is_resume=False)` (assert `is_resume=False`).
+    - [ ] Redis Lock `scanner_lock:<algorithm_id>:<frequency>` is created and owned by this container.
+    - [ ] Scanner orchestration invoked (no-op scanner): `configure(...)` called with provided `user_id`, `trade_session_id`, `trading_frequency`.
+    - [ ] Event is acknowledged (no pending for the group/id).
+    - [ ] Database invariants: consumer does NOT create `trade_sessions`; verify table row count remains unchanged (still zero for this session id).
+
+- Case A2 – Valid Start (existing trade session row)
+  - Steps:
+    1) Pre-seed a `trade_sessions` row with the same `trade_session_id` (status=`started`, `is_active=1`) created upstream by TMU.
+    2) Publish `trade_session_initiated` with valid `user_id`, `trade_session_id`, `trading_frequency`, `scanning_algorithm_name`, `initiation_algorithm_name`, `termination_algorithm_name`.
+    3) Run the consumer for one bounded iteration.
+  - Expected:
+    - [ ] Routed to `_handle_scanner_event(..., is_resume=False)` (assert `is_resume=False`).
+    - [ ] Redis Lock `scanner_lock:<algorithm_id>:<frequency>` is created and owned by this container.
+    - [ ] Scanner orchestration invoked (no-op scanner): `configure(...)` called with provided `user_id`, `trade_session_id`, `trading_frequency`.
+    - [ ] Event is acknowledged (no pending for the group/id).
+    - [ ] Database invariants: pre-seeded `trade_sessions` row remains unchanged (same status, is_active, timestamps); no extra rows added.
+
+- Case B – Invalid Start (bad algorithm)
+  - Steps:
+    1) Do NOT seed `scanning_algorithms` (or use a non-existent `scanning_algorithm_name`).
+    2) Publish `trade_session_initiated` with otherwise valid fields.
+  - Expected:
+    - [ ] Routed to start path (`is_resume=False`) but handler returns False due to missing algorithm.
+    - [ ] No Redis Lock is created.
+    - [ ] Event is not acknowledged (processing returned False).
+    - [ ] No DB changes.
+
+### 3.2 Resume (resume_scanner)
+- Purpose: On resume, the consumer should validate there are active sessions for `(algorithm_id, frequency)`; if yes, acquire lock and orchestrate; if not, perform a safe no‑op.
+- Cases:
+  - Case A – Valid Resume (active sessions exist)
+    - [ ] Routed with `is_resume=True`.
+    - [ ] Missing IDs in the event are filled from the first active session.
+    - [ ] Redis Lock created and owned.
+    - [ ] Event acknowledged.
+    - [ ] DB session remains `started` and `is_active=1` (no mutation by consumer).
+  - Case B – Invalid Resume (no active sessions)
+    - [ ] Routed with `is_resume=True`.
+    - [ ] Returns False; no lock created.
+    - [ ] Event not acknowledged (processing returned False).
+    - [ ] No DB changes.
+  - Case C – Invalid Resume (bad algorithm)
+    - [ ] Non-existent `scanning_algorithm_name`.
+    - [ ] Returns False; no lock; no ack; no DB changes.
+
+### 3.3 Terminate (trade_session_terminated)
+- Purpose: On terminate, the consumer acknowledges the event and logs; it does not stop scanners directly (scanners are frequency-based singletons managed separately) and does not release locks (unknown ownership across containers).
+- Preconditions:
+  - [ ] Optional: pre-seed a session to represent the terminated one.
+  - [ ] Isolated stream; group created before publishing.
+- Steps:
+  1) Publish `trade_session_terminated` with relevant `trade_session_id`, `user_id` (optional).
+  2) Run consumer one iteration.
+- Expected (Checklist):
+  - [ ] Routed to termination handler; returns True.
+  - [ ] No attempt to acquire or release scanner locks.
+  - [ ] Event acknowledged.
+  - [ ] No DB changes by consumer.
+
+### 3.4 Distributed Safety and Lock Ownership (Multi‑Consumer Cases)
+- Purpose: Validate that locks prevent multiple containers from processing the same scanner concurrently and that events are safely handled when locks already exist.
+- Cases:
+  - Existing Lock Owned by Another Container on Resume/Start:
+    - [ ] Consumer detects existing lock for `(algorithm_id, frequency)`.
+    - [ ] Returns True with no further action (no scanner start in this consumer).
+    - [ ] Event acknowledged (or safely handled per current logic).
+    - [ ] Lock owner remains unchanged (still the other container).
+  - Lock Owned by This Container (Re-entrant):
+    - [ ] Consumer recognizes ownership and may renew lock (heartbeat/TTL refresh where applicable).
+    - [ ] Event acknowledged; no duplicate scanner start.
+  - Cross‑Stream Isolation:
+    - [ ] Events on test-specific stream are not consumed by background services (use isolated stream name and group).
+
+### 3.5 Operational Resilience (within Start/Resume/Terminate where applicable)
+- Include transient Redis behavior directly within the above scenarios:
+  - [ ] ConnectionError/Timeout during read → logged and retried (sleep stubbed to no‑op); assert no crashes and eventual processing when message available.
+  - [ ] Unknown `event_type` → returns True (skip) without side effects.
+
+---
+
+## 4) Explicit Lock and State Artifacts to Verify (Reference)
+- Redis Locks:
+  - [ ] `scanner_lock:<algorithm_id>:<frequency>` created and owned by the processing container after successful Start/Resume.
+  - [ ] Not created on Resume when no active sessions.
+  - [ ] Not modified on Terminate.
+- Redis Acknowledgements:
+  - [ ] Success paths (Start, Resume with active) → message acked.
+  - [ ] Failure path (Resume with no active, malformed event) → not acked.
+- Database (Consumer Invariants):
+  - [ ] Consumer does not create/update/delete rows in `trade_sessions` or algorithm tables; verify counts and specific row fields remain unchanged where pre-seeded.
+  - [ ] Optional assertions on scanner heartbeat/status if later integrated via publisher utilities (out of current scope).
 ### Test File Location, Naming & Structure
 - Location: `tests/scanning_service/`
 - File name: `test_scanning_queue_consumer.py` (group all consumer tests together to reuse fixtures and infra).

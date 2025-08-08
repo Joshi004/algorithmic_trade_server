@@ -430,3 +430,106 @@ class TestEndToEndResumeEvent:
                 consumer.redis_consumer.close()
             except Exception:
                 pass
+
+
+@pytest.mark.integration
+@pytest.mark.requires_db
+@pytest.mark.redis
+class TestEndToEndResumeEventNoActive:
+    """
+    End-to-end test for 2.1.b: Resume event with no active sessions (safe no-op).
+    Uses real DB/Redis, isolated stream, and minimal stubs for external providers.
+    """
+
+    def test_resume_with_no_active_session_does_not_create_lock(self, table_data_manager, redis_data_manager):
+        # Arrange: isolated stream, no trade_sessions, but algorithm exists
+        test_stream = f"scanning_queue_test_{uuid.uuid4().hex[:8]}"
+        setattr(settings, 'REDIS_STREAM_SCANNING_QUEUE', test_stream)
+        stream = getattr(settings, 'REDIS_STREAM_SCANNING_QUEUE', 'scanning_queue')
+        redis_data_manager.clear_stream_completely(stream)
+
+        table_data_manager.clear_table_completely('trade_sessions')
+        table_data_manager.clear_table_completely('scanning_algorithms')
+
+        scanning_algos_ascii = """
+        +----+------+-------------+-----------+----------------------+----------------------+
+        | id | name | description | is_active | created_at           | updated_at           |
+        +----+------+-------------+-----------+----------------------+----------------------+
+        | 1  | UDTS | test algo   | 1         | 2024-01-01 00:00:00  | 2024-01-01 00:00:00  |
+        +----+------+-------------+-----------+----------------------+----------------------+
+        """
+        table_data_manager.insert_table_data('scanning_algorithms', scanning_algos_ascii)
+
+        consumer = ScanningQueueConsumer()
+        assert consumer.redis_consumer.ensure_consumer_group(stream) is True
+
+        # Ensure no stale lock exists
+        try:
+            consumer.lock_manager.redis_client.delete("scanner_lock:1:10-minute")
+        except Exception:
+            pass
+
+        # Emit resume event (no active sessions exist for this algo/frequency)
+        event = {
+            'event_id': 'evt-no-active',
+            'event_type': 'resume_scanner',
+            'trading_frequency': '10-minute',
+            'scanning_algorithm_name': 'UDTS',
+            'initiation_algorithm_name': 'Udts_slto',
+            'termination_algorithm_name': 'Udts_slto',
+            'is_dummy': '0'
+        }
+        redis_data_manager.insert_stream_data(stream, event)
+
+        # Minimal factory and provider stubs
+        class _FakeScanner:
+            def configure(self, **kwargs):
+                return None
+            def fetch_instrument_tokens_and_start_tracking(self, user_id, trade_session_id, is_dummy):
+                return None
+            def is_running(self):
+                return False
+        class _FakeFactory:
+            def get_scanner(self, name, freq):
+                return _FakeScanner()
+
+        consumer._scanner_factory = _FakeFactory()
+
+        # Track routing and ack behavior
+        routed = {'called': False, 'is_resume': None}
+        _orig_handle = consumer._handle_scanner_event
+        def _wrapped_handle(event_data, is_resume=False):
+            routed['called'] = True
+            routed['is_resume'] = is_resume
+            return _orig_handle(event_data, is_resume=is_resume)
+        consumer._handle_scanner_event = _wrapped_handle
+
+        acked = []
+
+        try:
+            messages = consumer.redis_consumer.read_from_stream(stream, count=10, block=500)
+            if messages:
+                for _stream, stream_messages in messages:
+                    for message_id, fields in stream_messages:
+                        success = consumer._process_event(fields)
+                        # Expect False -> do not acknowledge
+                        if success:
+                            consumer.redis_consumer.acknowledge_message(stream, message_id)
+                            acked.append(message_id)
+
+            # Assert: routed to resume and returned False (no active sessions)
+            assert routed['called'] is True
+            assert routed['is_resume'] is True
+
+            # Assert: no lock created for (1, '10-minute')
+            exists, owner = consumer.lock_manager.check_lock(1, '10-minute')
+            assert exists is False
+
+            # Assert: no ack attempted since success was False
+            assert len(acked) == 0
+
+        finally:
+            try:
+                consumer.redis_consumer.close()
+            except Exception:
+                pass
