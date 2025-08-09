@@ -218,7 +218,7 @@ class ScanningQueueConsumer:
             # Lock acquired, proceed with starting the scanner
             log(f"Acquired lock for scanner {scanning_algo_name}:{trading_frequency}, proceeding to start scanner")
             
-            # For resume operations, use first active session if event data is incomplete
+            # # For resume operations, use first active session if event data is incomplete
             if is_resume and (not user_id or not trade_session_id):
                 first_session = active_sessions.first()
                 if not user_id:

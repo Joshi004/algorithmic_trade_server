@@ -83,9 +83,9 @@ This section defines the complete set of integration tests for `ScanningQueueCon
 - Purpose: When a Start event arrives, the consumer acquires the scanner lock for `(algorithm_id, frequency)`, orchestrates scanner startup, and acknowledges the event. Consumer does NOT create trade sessions (they are created by TMU).
 
 - Preconditions (common):
-  - [ ] `scanning_algorithms` seeded (e.g., `UDTS`, id=1)
-  - [ ] Isolated Redis stream; consumer group created before publishing.
-  - [ ] (Optional) Pre-seed a `trade_sessions` row (status=`started`, is_active=1) to verify DB remains unchanged by consumer.
+  - [x] `scanning_algorithms` seeded (e.g., `UDTS`, id=1)
+  - [x] Isolated Redis stream; consumer group created before publishing.
+  - [x] (Optional) Pre-seed a `trade_sessions` row (status=`started`, is_active=1) to verify DB remains unchanged by consumer.
 
 - Case A1 – Valid Start (no existing trade session row)
   - Steps:
@@ -137,13 +137,13 @@ This section defines the complete set of integration tests for `ScanningQueueCon
       - [x] No DB changes.
   - Case C – Invalid Resume (bad algorithm)
     - [x] Non-existent `scanning_algorithm_name`.
-    - [ ] Returns False; no lock; no ack; no DB changes.
+     - [x] Returns False; no lock; no ack; no DB changes.
 
 ### 3.3 Terminate (trade_session_terminated)
 - Purpose: On terminate, the consumer acknowledges the event and logs; it does not stop scanners directly (scanners are frequency-based singletons managed separately) and does not release locks (unknown ownership across containers).
 - Preconditions:
-  - [ ] Optional: pre-seed a session to represent the terminated one.
-  - [ ] Isolated stream; group created before publishing.
+  - [x] Optional: pre-seed a session to represent the terminated one.
+  - [x] Isolated stream; group created before publishing.
 - Steps:
   1) Publish `trade_session_terminated` with relevant `trade_session_id`, `user_id` (optional).
   2) Run consumer one iteration.
@@ -157,15 +157,15 @@ This section defines the complete set of integration tests for `ScanningQueueCon
 - Purpose: Validate that locks prevent multiple containers from processing the same scanner concurrently and that events are safely handled when locks already exist.
 - Cases:
   - Existing Lock Owned by Another Container on Resume/Start:
-    - [ ] Consumer detects existing lock for `(algorithm_id, frequency)`.
-    - [ ] Returns True with no further action (no scanner start in this consumer).
-    - [ ] Event acknowledged (or safely handled per current logic).
-    - [ ] Lock owner remains unchanged (still the other container).
+    - [x] Consumer detects existing lock for `(algorithm_id, frequency)`.
+    - [x] Returns True with no further action (no scanner start in this consumer).
+    - [x] Event acknowledged (or safely handled per current logic).
+    - [x] Lock owner remains unchanged (still the other container).
   - Lock Owned by This Container (Re-entrant):
-    - [ ] Consumer recognizes ownership and may renew lock (heartbeat/TTL refresh where applicable).
-    - [ ] Event acknowledged; no duplicate scanner start.
+    - [x] Consumer recognizes ownership and may renew lock (heartbeat/TTL refresh where applicable).
+    - [x] Event acknowledged; no duplicate scanner start.
   - Cross‑Stream Isolation:
-    - [ ] Events on test-specific stream are not consumed by background services (use isolated stream name and group).
+    - [x] Events on test-specific stream are not consumed by background services (use isolated stream name and group).
 
 ### 3.5 Operational Resilience (within Start/Resume/Terminate where applicable)
 - Include transient Redis behavior directly within the above scenarios:
