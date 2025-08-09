@@ -169,7 +169,7 @@ This section defines the complete set of integration tests for `ScanningQueueCon
 
 ### 3.5 Operational Resilience (within Start/Resume/Terminate where applicable)
 - Include transient Redis behavior directly within the above scenarios:
-  - [ ] ConnectionError/Timeout during read → logged and retried (sleep stubbed to no‑op); assert no crashes and eventual processing when message available.
+  - [x] ConnectionError/Timeout during read → logged and retried (sleep stubbed to no‑op); assert no crashes and eventual processing when message available.
    - [x] Unknown `event_type` → returns True (skip) without side effects.
 
 ---
@@ -184,7 +184,7 @@ This section defines the complete set of integration tests for `ScanningQueueCon
     - [ ] Failure path (Resume with no active, malformed event) → not acked.
  - Database (Consumer Invariants):
    - [x] Consumer does not create/update/delete rows in `trade_sessions` or algorithm tables; verify counts and specific row fields remain unchanged where pre-seeded.
-   - [ ] Optional assertions on scanner heartbeat/status if later integrated via publisher utilities (out of current scope).
+    - [x] Optional assertions on scanner heartbeat/status if later integrated via publisher utilities (out of current scope).
 ### Test File Location, Naming & Structure
 - Location: `tests/scanning_service/`
 - File name: `test_scanning_queue_consumer.py` (group all consumer tests together to reuse fixtures and infra).

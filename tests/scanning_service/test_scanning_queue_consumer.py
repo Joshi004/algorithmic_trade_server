@@ -7,6 +7,8 @@ initialization, signal handling, and Redis connection validation.
 """
 
 import pytest
+import redis
+import threading
 import signal
 import time
 import uuid
@@ -1855,6 +1857,113 @@ class TestEndToEndTerminateEvent:
             except Exception:
                 pass
 
+
+@pytest.mark.integration
+@pytest.mark.redis
+class TestStartConsuming_Resilience:
+    """
+    3.5 Operational Resilience – ConnectionError/Timeout during read
+    - Simulate a Redis ConnectionError on first read, then a successful read on retry
+    - Stub time.sleep to no-op to keep test fast
+    - Assert no crash, eventual processing of a message, and acknowledgement
+    """
+
+    def test_retry_after_connection_error_then_processes_and_acks(self):
+        # Arrange
+        consumer = ScanningQueueConsumer()
+        stream = getattr(settings, 'REDIS_STREAM_SCANNING_QUEUE', 'scanning_queue')
+
+        # Stub the redis_consumer methods
+        mock_client = MagicMock()
+        mock_client.health_check.return_value = True
+        mock_client.ensure_consumer_group.return_value = True
+
+        # First call raises ConnectionError, second returns one message
+        message_id = '1-1'
+        fields = {
+            'event_id': 'evt-retry-1',
+            'event_type': 'resume_scanner',
+            'trading_frequency': '10-minute',
+            'scanning_algorithm_name': 'UDTS'
+        }
+
+        def side_effect_read(*args, **kwargs):
+            if not hasattr(side_effect_read, 'called'):
+                side_effect_read.called = True
+                raise redis.ConnectionError('simulated connection drop')
+            return [(stream, [(message_id, fields)])]
+
+        mock_client.read_from_stream.side_effect = side_effect_read
+        mock_client.acknowledge_message.return_value = True
+
+        consumer.redis_consumer = mock_client
+
+        # Make _process_event return True and stop the loop after first success
+        orig_process = consumer._process_event
+        def _wrap_process(ev):
+            try:
+                return True
+            finally:
+                consumer._running = False
+        consumer._process_event = _wrap_process
+
+        # Act: run start_consuming in a thread with sleep stubbed
+        with patch('scanning_service.consumers.scanning_queue_consumer.time.sleep', return_value=None):
+            t = threading.Thread(target=consumer.start_consuming, daemon=True)
+            t.start()
+            t.join(timeout=3)
+
+        # Assert: health/group checked, read retried, event processed and acked
+        assert mock_client.health_check.called is True
+        assert mock_client.ensure_consumer_group.called is True
+        assert mock_client.read_from_stream.call_count >= 2
+        mock_client.acknowledge_message.assert_called_with(stream, message_id)
+
+
+@pytest.mark.integration
+@pytest.mark.redis
+class TestScannerStatusPublisher:
+    """
+    4) Explicit Lock and State Artifacts – Optional heartbeat/status assertions
+    Verify that scanner status updates are published to the configured Redis stream.
+    """
+
+    def test_publish_scanner_status_writes_entry_with_expected_fields(self, redis_data_manager):
+        # Arrange: use configured scanner status stream and clear it
+        from scanning_service.lib.utils.redis.publisher.event_publisher import get_scanning_event_publisher
+        scanner_status_stream = getattr(settings, 'REDIS_STREAM_SCANNER_STATUS', 'scanner_status_stream')
+        redis_data_manager.clear_stream_completely(scanner_status_stream)
+
+        publisher = get_scanning_event_publisher()
+        user_id = 'ffffffffffffffffffffffffffffffff'
+        trade_session_id = '12345'
+        scanner_type = 'UDTS'
+        status = 'running'
+
+        # Act: publish a status update
+        msg_id = publisher.publish_scanner_status(
+            user_id=user_id,
+            trade_session_id=trade_session_id,
+            scanner_type=scanner_type,
+            status=status,
+            details={'note': 'heartbeat'}
+        )
+
+        # Assert: stream has at least one entry and last entry contains expected fields
+        assert msg_id is not None
+        length = redis_data_manager.get_stream_length(scanner_status_stream)
+        assert length >= 1
+
+        # Fetch latest entry and verify fields
+        client = redis_data_manager.redis_client
+        entries = client.xrevrange(scanner_status_stream, count=1)
+        assert entries, 'No entries found in scanner status stream'
+        last_id, last_fields = entries[0]
+        # Fields are strings; verify key markers
+        assert last_fields.get('event_type') == 'scanner_status_update'
+        assert last_fields.get('trade_session_id') == str(trade_session_id)
+        assert last_fields.get('scanner_type') == scanner_type
+        assert last_fields.get('status') == status
     def test_terminate_event_without_session_routes_ack_no_lock(self, table_data_manager, redis_data_manager):
         # Arrange: isolated stream; do not seed any trade_sessions
         test_stream = f"scanning_queue_test_{uuid.uuid4().hex[:8]}"
