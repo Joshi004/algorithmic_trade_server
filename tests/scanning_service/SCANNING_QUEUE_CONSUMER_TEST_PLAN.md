@@ -126,17 +126,17 @@ This section defines the complete set of integration tests for `ScanningQueueCon
 - Cases:
    - Case A – Valid Resume (active sessions exist)
      - [x] Routed with `is_resume=True`.
-     - [ ] Missing IDs in the event are filled from the first active session.
+      - [x] Missing IDs in the event are filled from the first active session.
      - [x] Redis Lock created and owned.
-     - [ ] Event acknowledged.
+      - [x] Event acknowledged.
      - [x] DB session remains `started` and `is_active=1` (no mutation by consumer).
    - Case B – Invalid Resume (no active sessions)
      - [x] Routed with `is_resume=True`.
      - [x] Returns False; no lock created.
      - [x] Event not acknowledged (processing returned False).
-     - [ ] No DB changes.
+      - [x] No DB changes.
   - Case C – Invalid Resume (bad algorithm)
-    - [ ] Non-existent `scanning_algorithm_name`.
+    - [x] Non-existent `scanning_algorithm_name`.
     - [ ] Returns False; no lock; no ack; no DB changes.
 
 ### 3.3 Terminate (trade_session_terminated)
@@ -148,10 +148,10 @@ This section defines the complete set of integration tests for `ScanningQueueCon
   1) Publish `trade_session_terminated` with relevant `trade_session_id`, `user_id` (optional).
   2) Run consumer one iteration.
 - Expected (Checklist):
-  - [ ] Routed to termination handler; returns True.
-  - [ ] No attempt to acquire or release scanner locks.
-  - [ ] Event acknowledged.
-  - [ ] No DB changes by consumer.
+  - [x] Routed to termination handler; returns True.
+  - [x] No attempt to acquire or release scanner locks.
+  - [x] Event acknowledged.
+  - [x] No DB changes by consumer.
 
 ### 3.4 Distributed Safety and Lock Ownership (Multi‑Consumer Cases)
 - Purpose: Validate that locks prevent multiple containers from processing the same scanner concurrently and that events are safely handled when locks already exist.
@@ -180,8 +180,8 @@ This section defines the complete set of integration tests for `ScanningQueueCon
    - [x] Not created on Resume when no active sessions.
    - [ ] Not modified on Terminate.
   - Redis Acknowledgements:
-   - [ ] Success paths (Start, Resume with active) → message acked.
-   - [x] Failure path (Resume with no active, malformed event) → not acked.
+    - [x] Success paths (Start, Resume with active) → message acked.
+    - [ ] Failure path (Resume with no active, malformed event) → not acked.
  - Database (Consumer Invariants):
    - [x] Consumer does not create/update/delete rows in `trade_sessions` or algorithm tables; verify counts and specific row fields remain unchanged where pre-seeded.
    - [ ] Optional assertions on scanner heartbeat/status if later integrated via publisher utilities (out of current scope).
