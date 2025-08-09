@@ -667,6 +667,353 @@ class TestEndToEndResumeEventMissingIDs:
 @pytest.mark.integration
 @pytest.mark.requires_db
 @pytest.mark.redis
+class TestDistributedSafetyLockOwnership:
+    """
+    3.4 Distributed Safety and Lock Ownership (Multi‑Consumer Cases)
+
+    - Existing Lock Owned by Another Container on Resume/Start:
+      * Consumer returns True with no scanner start and event acked
+      * Lock owner remains unchanged
+    - Lock Owned by This Container (Re-entrant):
+      * Consumer recognizes ownership (no duplicate start), event acked
+    - Cross‑Stream Isolation:
+      * Using isolated stream/group ensures no background consumption
+    """
+
+    def test_existing_lock_other_container_resume_ack_no_start_owner_unchanged(
+        self, table_data_manager, redis_data_manager, test_user_id
+    ):
+        # Arrange: isolated stream and active session so resume path validates
+        test_stream = f"scanning_queue_test_{uuid.uuid4().hex[:8]}"
+        setattr(settings, 'REDIS_STREAM_SCANNING_QUEUE', test_stream)
+        stream = getattr(settings, 'REDIS_STREAM_SCANNING_QUEUE', 'scanning_queue')
+        redis_data_manager.clear_stream_completely(stream)
+
+        # Seed user and algorithms
+        user_hex = test_user_id.hex
+        table_data_manager.clear_table_completely('users')
+        users_ascii = f"""
+        +------------------------+--------------------------------+-----------+-----------+-----------+----------------------+------------------------------------------+------------+--------------+
+        | email                  | public_id                      | first_name| last_name | is_active | date_joined          | password                                 | is_staff   | is_superuser |
+        +------------------------+--------------------------------+-----------+-----------+-----------+----------------------+------------------------------------------+------------+--------------+
+        | test_resume_lock@example.com| {user_hex}               | Test      | User      | 1         | 2024-01-01 00:00:00  | pbkdf2_sha256$test$hash                  | 0          | 0            |
+        +------------------------+--------------------------------+-----------+-----------+-----------+----------------------+------------------------------------------+------------+--------------+
+        """
+        table_data_manager.insert_table_data('users', users_ascii)
+
+        table_data_manager.clear_table_completely('scanning_algorithms')
+        table_data_manager.clear_table_completely('initiation_algorithms')
+        table_data_manager.clear_table_completely('termination_algorithms')
+        scanning_algos_ascii = """
+        +----+------+-------------+-----------+----------------------+----------------------+
+        | id | name | description | is_active | created_at           | updated_at           |
+        +----+------+-------------+-----------+----------------------+----------------------+
+        | 1  | UDTS | test algo   | 1         | 2024-01-01 00:00:00  | 2024-01-01 00:00:00  |
+        +----+------+-------------+-----------+----------------------+----------------------+
+        """
+        init_algos_ascii = """
+        +----+------------+-------------+-----------+----------------------+----------------------+
+        | id | name       | description | is_active | created_at           | updated_at           |
+        +----+------------+-------------+-----------+----------------------+----------------------+
+        | 1  | Udts_slto  | init algo   | 1         | 2024-01-01 00:00:00  | 2024-01-01 00:00:00  |
+        +----+------------+-------------+-----------+----------------------+----------------------+
+        """
+        table_data_manager.insert_table_data('scanning_algorithms', scanning_algos_ascii)
+        table_data_manager.insert_table_data('initiation_algorithms', init_algos_ascii)
+        table_data_manager.insert_table_data('termination_algorithms', init_algos_ascii)
+
+        # Active session for (algo=1, freq=10-minute)
+        table_data_manager.clear_table_completely('trade_sessions')
+        trade_sessions_ascii = f"""
+        +----+--------------------------------+---------+----------------------+-------+-----------+------------------------+--------------------------+---------------------------+------------------+
+        | id | user_id                        | status  | started_at           | dummy | is_active | scanning_algorithm_id  | initiation_algorithm_id  | termination_algorithm_id  | trading_frequency |
+        +----+--------------------------------+---------+----------------------+-------+-----------+------------------------+--------------------------+---------------------------+------------------+
+        | 10 | {user_hex}                     | started | 2024-01-01 00:00:00  | 0     | 1         | 1                      | 1                        | 1                         | 10-minute        |
+        +----+--------------------------------+---------+----------------------+-------+-----------+------------------------+--------------------------+---------------------------+------------------+
+        """
+        table_data_manager.insert_table_data('trade_sessions', trade_sessions_ascii)
+
+        consumer = ScanningQueueConsumer()
+        assert consumer.redis_consumer.ensure_consumer_group(stream) is True
+
+        # Pre-create lock owned by another container
+        other_owner = 'other_container_abc'
+        consumer.lock_manager.redis_client.set('scanner_lock:1:10-minute', other_owner, ex=900)
+
+        # Capturing scanner to ensure no start happens
+        class _CapScanner:
+            def __init__(self):
+                self.configure_called = False
+            def configure(self, **kwargs):
+                self.configure_called = True
+            def fetch_instrument_tokens_and_start_tracking(self, user_id, trade_session_id, is_dummy):
+                return None
+            def is_running(self):
+                return False
+        class _CapFactory:
+            def __init__(self):
+                self.called = False
+            def get_scanner(self, name, freq):
+                self.called = True
+                return _CapScanner()
+        factory = _CapFactory()
+        consumer._scanner_factory = factory
+
+        # Emit resume event (should early-return True, not starting scanner)
+        event = {
+            'event_id': 'evt-resume-existing-other',
+            'event_type': 'resume_scanner',
+            'trading_frequency': '10-minute',
+            'scanning_algorithm_name': 'UDTS',
+            'initiation_algorithm_name': 'Udts_slto',
+            'termination_algorithm_name': 'Udts_slto',
+            'is_dummy': '0'
+        }
+        redis_data_manager.insert_stream_data(stream, event)
+
+        # Act: process and ack
+        acked = []
+        try:
+            messages = consumer.redis_consumer.read_from_stream(stream, count=10, block=500)
+            if messages:
+                for _s, msgs in messages:
+                    for message_id, fields in msgs:
+                        success = consumer._process_event(fields)
+                        assert success is True  # early True
+                        if success:
+                            consumer.redis_consumer.acknowledge_message(stream, message_id)
+                            acked.append(message_id)
+
+            # Assert: event acked and lock owner unchanged, no scanner start
+            assert len(acked) == 1
+            exists, owner = consumer.lock_manager.check_lock(1, '10-minute')
+            assert exists is True and owner == other_owner
+            assert factory.called is False
+        finally:
+            try:
+                consumer.redis_consumer.close()
+            except Exception:
+                pass
+
+    def test_existing_lock_other_container_start_ack_no_start_owner_unchanged(
+        self, table_data_manager, redis_data_manager, test_user_id
+    ):
+        # Arrange: isolated stream and algorithm seeded
+        test_stream = f"scanning_queue_test_{uuid.uuid4().hex[:8]}"
+        setattr(settings, 'REDIS_STREAM_SCANNING_QUEUE', test_stream)
+        stream = getattr(settings, 'REDIS_STREAM_SCANNING_QUEUE', 'scanning_queue')
+        redis_data_manager.clear_stream_completely(stream)
+
+        table_data_manager.clear_table_completely('scanning_algorithms')
+        scanning_algos_ascii = """
+        +----+------+-------------+-----------+----------------------+----------------------+
+        | id | name | description | is_active | created_at           | updated_at           |
+        +----+------+-------------+-----------+----------------------+----------------------+
+        | 1  | UDTS | test algo   | 1         | 2024-01-01 00:00:00  | 2024-01-01 00:00:00  |
+        +----+------+-------------+-----------+----------------------+----------------------+
+        """
+        table_data_manager.insert_table_data('scanning_algorithms', scanning_algos_ascii)
+
+        consumer = ScanningQueueConsumer()
+        assert consumer.redis_consumer.ensure_consumer_group(stream) is True
+
+        # Pre-create lock owned by another container
+        other_owner = 'other_container_xyz'
+        consumer.lock_manager.redis_client.set('scanner_lock:1:10-minute', other_owner, ex=900)
+
+        # Capturing scanner to ensure no start happens
+        class _CapScanner:
+            def __init__(self):
+                self.configure_called = False
+            def configure(self, **kwargs):
+                self.configure_called = True
+            def fetch_instrument_tokens_and_start_tracking(self, user_id, trade_session_id, is_dummy):
+                return None
+            def is_running(self):
+                return False
+        class _CapFactory:
+            def __init__(self):
+                self.called = False
+            def get_scanner(self, name, freq):
+                self.called = True
+                return _CapScanner()
+        factory = _CapFactory()
+        consumer._scanner_factory = factory
+
+        # Emit start event
+        event = {
+            'event_id': 'evt-start-existing-other',
+            'event_type': 'trade_session_initiated',
+            'trade_session_id': '123',
+            'user_id': str(test_user_id),
+            'trading_frequency': '10-minute',
+            'scanning_algorithm_name': 'UDTS',
+            'initiation_algorithm_name': 'Udts_slto',
+            'termination_algorithm_name': 'Udts_slto',
+            'is_dummy': '0'
+        }
+        redis_data_manager.insert_stream_data(stream, event)
+
+        # Act: process and ack; acquire_lock should fail and return True
+        acked = []
+        try:
+            messages = consumer.redis_consumer.read_from_stream(stream, count=10, block=500)
+            if messages:
+                for _s, msgs in messages:
+                    for message_id, fields in msgs:
+                        success = consumer._process_event(fields)
+                        assert success is True
+                        if success:
+                            consumer.redis_consumer.acknowledge_message(stream, message_id)
+                            acked.append(message_id)
+
+            # Assert: event acked and lock owner unchanged, no scanner start
+            assert len(acked) == 1
+            exists, owner = consumer.lock_manager.check_lock(1, '10-minute')
+            assert exists is True and owner == other_owner
+            assert factory.called is False
+        finally:
+            try:
+                consumer.redis_consumer.close()
+            except Exception:
+                pass
+
+    def test_lock_owned_by_this_container_resume_ack_no_duplicate_start(
+        self, table_data_manager, redis_data_manager, test_user_id
+    ):
+        # Arrange: isolated stream and active session
+        test_stream = f"scanning_queue_test_{uuid.uuid4().hex[:8]}"
+        setattr(settings, 'REDIS_STREAM_SCANNING_QUEUE', test_stream)
+        stream = getattr(settings, 'REDIS_STREAM_SCANNING_QUEUE', 'scanning_queue')
+        redis_data_manager.clear_stream_completely(stream)
+
+        # Seed user and algorithms
+        user_hex = test_user_id.hex
+        table_data_manager.clear_table_completely('users')
+        users_ascii = f"""
+        +------------------------+--------------------------------+-----------+-----------+-----------+----------------------+------------------------------------------+------------+--------------+
+        | email                  | public_id                      | first_name| last_name | is_active | date_joined          | password                                 | is_staff   | is_superuser |
+        +------------------------+--------------------------------+-----------+-----------+-----------+----------------------+------------------------------------------+------------+--------------+
+        | test_reentrant@example.com| {user_hex}                 | Test      | User      | 1         | 2024-01-01 00:00:00  | pbkdf2_sha256$test$hash                  | 0          | 0            |
+        +------------------------+--------------------------------+-----------+-----------+-----------+----------------------+------------------------------------------+------------+--------------+
+        """
+        table_data_manager.insert_table_data('users', users_ascii)
+
+        table_data_manager.clear_table_completely('scanning_algorithms')
+        table_data_manager.clear_table_completely('initiation_algorithms')
+        table_data_manager.clear_table_completely('termination_algorithms')
+        scanning_algos_ascii = """
+        +----+------+-------------+-----------+----------------------+----------------------+
+        | id | name | description | is_active | created_at           | updated_at           |
+        +----+------+-------------+-----------+----------------------+----------------------+
+        | 1  | UDTS | test algo   | 1         | 2024-01-01 00:00:00  | 2024-01-01 00:00:00  |
+        +----+------+-------------+-----------+----------------------+----------------------+
+        """
+        init_algos_ascii = """
+        +----+------------+-------------+-----------+----------------------+----------------------+
+        | id | name       | description | is_active | created_at           | updated_at           |
+        +----+------------+-------------+-----------+----------------------+
+        | 1  | Udts_slto  | init algo   | 1         | 2024-01-01 00:00:00  | 2024-01-01 00:00:00  |
+        +----+------------+-------------+-----------+----------------------+
+        """
+        table_data_manager.insert_table_data('scanning_algorithms', scanning_algos_ascii)
+        table_data_manager.insert_table_data('initiation_algorithms', init_algos_ascii)
+        table_data_manager.insert_table_data('termination_algorithms', init_algos_ascii)
+
+        table_data_manager.clear_table_completely('trade_sessions')
+        trade_sessions_ascii = f"""
+        +----+--------------------------------+---------+----------------------+-------+-----------+------------------------+--------------------------+---------------------------+------------------+
+        | id | user_id                        | status  | started_at           | dummy | is_active | scanning_algorithm_id  | initiation_algorithm_id  | termination_algorithm_id  | trading_frequency |
+        +----+--------------------------------+---------+----------------------+-------+-----------+------------------------+--------------------------+---------------------------+------------------+
+        | 10 | {user_hex}                     | started | 2024-01-01 00:00:00  | 0     | 1         | 1                      | 1                        | 1                         | 10-minute        |
+        +----+--------------------------------+---------+----------------------+-------+-----------+------------------------+--------------------------+---------------------------+------------------+
+        """
+        table_data_manager.insert_table_data('trade_sessions', trade_sessions_ascii)
+
+        consumer = ScanningQueueConsumer()
+        assert consumer.redis_consumer.ensure_consumer_group(stream) is True
+
+        # Create lock owned by this consumer's container
+        my_owner = consumer.lock_manager.container_id
+        consumer.lock_manager.redis_client.set('scanner_lock:1:10-minute', my_owner, ex=900)
+
+        # Capturing scanner to ensure no start happens
+        class _CapScanner:
+            def __init__(self):
+                self.configure_called = False
+            def configure(self, **kwargs):
+                self.configure_called = True
+            def fetch_instrument_tokens_and_start_tracking(self, user_id, trade_session_id, is_dummy):
+                return None
+            def is_running(self):
+                return False
+        class _CapFactory:
+            def __init__(self):
+                self.called = False
+            def get_scanner(self, name, freq):
+                self.called = True
+                return _CapScanner()
+        factory = _CapFactory()
+        consumer._scanner_factory = factory
+
+        # Emit resume event; since we already own the lock, this should be a no-op True
+        event = {
+            'event_id': 'evt-resume-owned-by-us',
+            'event_type': 'resume_scanner',
+            'trading_frequency': '10-minute',
+            'scanning_algorithm_name': 'UDTS',
+            'initiation_algorithm_name': 'Udts_slto',
+            'termination_algorithm_name': 'Udts_slto',
+            'is_dummy': '0'
+        }
+        redis_data_manager.insert_stream_data(stream, event)
+
+        # Act
+        acked = []
+        try:
+            messages = consumer.redis_consumer.read_from_stream(stream, count=10, block=500)
+            if messages:
+                for _s, msgs in messages:
+                    for message_id, fields in msgs:
+                        success = consumer._process_event(fields)
+                        assert success is True
+                        if success:
+                            consumer.redis_consumer.acknowledge_message(stream, message_id)
+                            acked.append(message_id)
+
+            # Assert: acked, no duplicate start, and lock still owned by us
+            assert len(acked) == 1
+            exists, owner = consumer.lock_manager.check_lock(1, '10-minute')
+            assert exists is True and owner == my_owner
+            assert factory.called is False
+        finally:
+            try:
+                consumer.redis_consumer.close()
+            except Exception:
+                pass
+
+    def test_cross_stream_isolation_with_isolated_stream(self, redis_data_manager):
+        # Arrange: publish to a unique stream and ensure group creation but do not run consumer
+        test_stream = f"scanning_queue_test_{uuid.uuid4().hex[:8]}"
+        setattr(settings, 'REDIS_STREAM_SCANNING_QUEUE', test_stream)
+        stream = getattr(settings, 'REDIS_STREAM_SCANNING_QUEUE', 'scanning_queue')
+        redis_data_manager.clear_stream_completely(stream)
+
+        # Publish a simple event
+        event = {
+            'event_id': 'evt-isolation',
+            'event_type': 'resume_scanner'
+        }
+        redis_data_manager.insert_stream_data(stream, event)
+
+        # Sleep briefly; assert event remains (not consumed by background services)
+        time.sleep(0.2)
+        remaining = redis_data_manager.get_stream_length(stream)
+        assert remaining >= 1
+
+@pytest.mark.integration
+@pytest.mark.requires_db
+@pytest.mark.redis
 class TestEndToEndResumeEventNoActive:
     """
     End-to-end test for 2.1.b: Resume event with no active sessions (safe no-op).

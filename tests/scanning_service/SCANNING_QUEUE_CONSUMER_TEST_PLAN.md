@@ -178,7 +178,7 @@ This section defines the complete set of integration tests for `ScanningQueueCon
  - Redis Locks:
    - [x] `scanner_lock:<algorithm_id>:<frequency>` created and owned by the processing container after successful Start/Resume.
    - [x] Not created on Resume when no active sessions.
-   - [ ] Not modified on Terminate.
+    - [x] Not modified on Terminate.
   - Redis Acknowledgements:
     - [x] Success paths (Start, Resume with active) → message acked.
     - [ ] Failure path (Resume with no active, malformed event) → not acked.
